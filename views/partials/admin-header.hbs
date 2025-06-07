@@ -1,0 +1,160 @@
+{{#if login}}
+<header>
+     <link rel="icon" href="/favicon.ico" type="image/x-icon">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <a class="navbar-brand" href="/admin/AePetWorld/"><b>Zoophies</b></a>
+        
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarSupportedContent">
+            <ul class="navbar-nav mr-auto">
+
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Servicers
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-newServicers">New Servicers</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-activeServicers">Active Servicers</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-blockServicers">Blocked Servicers</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-deletedServicers">Deleted Servicers</a>
+                          <a class="dropdown-item" href="/admin/AePetWorld/view_servicer_orders"> Servicer Order</a>
+                        {{!-- <a class="dropdown-item" href="/admin/AePetWorld/church-report">Report</a> --}}
+
+                    </div>
+                </div>
+                  <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Partners
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-newPartners">New Partners</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-activePartners">Active Partners</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-blockpartners">Blocked Partners</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-deletedPartners">Deleted Partners</a>
+                          <a class="dropdown-item" href="/admin/AePetWorld/view_servicer_orders"> Servicer Order</a>
+                        {{!-- <a class="dropdown-item" href="/admin/AePetWorld/church-report">Report</a> --}}
+
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Shopping Products
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                         <a class="dropdown-item" href="/admin/AePetWorld/shopping/insert">Insert Shopping
+                            Products</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_created_shopping_product">New Shopping
+                            Products</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_active_shopping_product">Active Shopping
+                            Products</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_paused_shopping_product">Paused Shopping
+                            Products</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_blocked_shopping_product">Blocked Shopping
+                            Products</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_orders">Orders</a>
+                        {{!-- <a class="dropdown-item" href="/admin/AePetWorld/servicer/view-inactiveChurch">Cancelled
+                            Orders</a> --}}
+                    </div>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Fresh Food
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_active_freshFoods">Fresh Food Active List
+                        </a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_inActive_freshFoods">Fresh Food InActive List
+                        </a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_paused_freshFoods">Fresh Food Paused List
+                        </a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/freshFood/insert"> Fresh Food Insert</a>
+                         <a class="dropdown-item" href="/admin/AePetWorld/view_freshfood_orders"> Fresh Food Orders</a>
+
+                    </div>
+                </div>
+
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        Payments
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-activePayment">New payment requests</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-closedPayments">closed payments
+                        </a>
+                        {{!-- <a class="dropdown-item" href="/admin/AePetWorld/view-recentPayments">Recent Payments</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-churchRecentPayment">Church Recent
+                            Payments</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld//view-churchOldPayment">Church Old Payments</a>
+                        --}}
+
+                    </div>
+                </div>
+                
+
+
+                <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        user
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-newUsers">InActive User</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-activeUsers">Active User</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-blockUsers">Blocked User</a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view-deletedUsers">Deleted User</a>
+                    </div>
+                </div>
+
+
+                  <div class="dropdown">
+                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                        data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                       WholeSale
+                    </button>
+                    <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_active_WholeSales">WholeSale Active List
+                        </a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/view_paused_WholeSales">WholeSale Paused List
+                        </a>
+                        <a class="dropdown-item" href="/admin/AePetWorld/WholeSale/insert">WholeSale Insert</a>
+                         <a class="dropdown-item" href="/admin/AePetWorld/view_WholeSale_orders"> WholeSale Orders</a>
+
+                    </div>
+                </div>
+
+
+            </ul>
+            {{!-- <div>
+                <a href="/admin/AePetWorld/getChurch" class="btn btn-danger">Search</a>
+            </div> --}}
+        </div>
+        <span style="padding-left:30px"></span>
+        <form class="form-inline my-2 my-lg-0">
+            <div class="dropdown">
+                <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton"
+                    data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                    Account
+                </button>
+                <div class="dropdown-menu" aria-labelledby="dropdownMenuButton">
+                    <a class="dropdown-item" href="/admin/AePetWorld/logout">LogOut</a>
+                    {{!-- <a class="dropdown-item" href="/admin/AePetWorld/reset-password">pilasa</a> --}}
+                </div>
+            </div>
+        </form>
+    </nav>
+</header>
+
+{{/if}}
