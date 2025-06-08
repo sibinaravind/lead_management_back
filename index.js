@@ -61,8 +61,10 @@ app.set('view engine', 'hbs');
 // Route imports
 const routes = [
   { path: '/officersAuth', route: require("./routes/officers/user_auth") },
-  { path: '/officer', route: require("./routes/officers/officers_list") },
-  { path: '/config', route: require("./routes/officers/configs") },
+  { path: '/officer', route: require("./routes/officers/officers_router") },
+  { path: '/config', route: require("./routes/officers/configs_router") },
+  { path: '/project', route: require("./routes/officers/project_router") },
+  { path: '/customers', route: require("./routes/officers/customer_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -71,7 +73,7 @@ routes.forEach(({ path, route }) => app.use(path, route));
 
 // Handle unmatched routes (404)
 app.use((req, res, next) => {
-  res.status(404).json({ msg: "not found error" });
+  res.status(404).json({ msg: "url not found error" });
 });
 
 // Terms and Conditions route
@@ -114,5 +116,5 @@ cron.schedule('0 0 */8 * *', async () => {
 });
 
 
-// active ,inactive,deleted,blocked
+// active ,inactive,deleted,blocked,unassigned
 

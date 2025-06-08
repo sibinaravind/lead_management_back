@@ -1,20 +1,12 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-const sharp = require('sharp');
-const path = require('path');
 
 const fileUploader = require('../utils/fileUploader');
-// Make sure processAndStoreBase64File is exported in fileUploader.js
-
 
 var fs = require('fs');
 const bcrypt = require('bcrypt');
-const ensureDirectoryExists = (directory) => {
-  if (!fs.existsSync(directory)) {
-    fs.mkdirSync(directory, { recursive: true });
-  }
-};
+
 
 const SALT_ROUNDS = 10;
 module.exports = {
@@ -85,6 +77,7 @@ module.exports = {
         designation: details.designation,
         branch: details.branch,
         password: hashedPassword,
+        round_robin: details.round_robin || false,
         document_path: details.document_path || null,
         created_at: new Date()
       };
