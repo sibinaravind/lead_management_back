@@ -1,4 +1,6 @@
 
+
+
 const express = require("express");
 const session = require('express-session');
 const bodyParser = require('body-parser');
@@ -65,6 +67,7 @@ const routes = [
   { path: '/config', route: require("./routes/officers/configs_router") },
   { path: '/project', route: require("./routes/officers/project_router") },
   { path: '/customers', route: require("./routes/officers/customer_router") },
+  { path: '/lead', route: require("./routes/officers/lead_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -116,5 +119,7 @@ cron.schedule('0 0 */8 * *', async () => {
 });
 
 
-// active ,inactive,deleted,blocked,unassigned
+
+// // active ,inactive,deleted,blocked,unassigned
+
 

@@ -119,7 +119,59 @@ module.exports = {
             }
         });
     },
+    // Webhook to handle Meta lead and WhatsApp message
+    handleMetaWebhook: async (payload) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // Example: payload contains { type: 'lead' | 'whatsapp', data: {...} }
+                if (!payload || !payload.type || !payload.data) {
+                    return reject("Invalid webhook payload");
+                }
 
+                if (payload.type === 'lead') {
+                    // Extract lead details from Meta payload
+                    const leadDetails = {
+                        name: payload.data.full_name || '',
+                        email: payload.data.email || '',
+                        phone: payload.data.phone || '',
+                        lead_source: 'meta',
+                        notes: payload.data.notes || '',
+                        // Add other mappings as needed
+                    };
+                    // Create customer/lead in DB
+                    const customerId = await module.exports.createCustomer(leadDetails);
+                    resolve({ status: 'lead_created', customerId });
+                } else if (payload.type === 'whatsapp') {
+                    // Extract WhatsApp message details
+                    const message = payload.data.message || '';
+                    const phone = payload.data.phone || '';
+                    // Find customer by phone
+                    const collection = db.get().collection(COLLECTION.CUSTOMERS);
+                    const customer = await collection.findOne({ phone: phone });
+                    if (!customer) {
+                        return reject("Customer not found for WhatsApp message");
+                    }
+                    // Add WhatsApp message to interaction history
+                    const interaction = {
+                        type: 'whatsapp',
+                        message: message,
+                        from: payload.data.from || '',
+                        received_at: new Date()
+                    };
+                    await collection.updateOne(
+                        { _id: customer._id },
+                        { $push: { interaction_history: interaction }, $set: { updated_at: new Date() } }
+                    );
+                    resolve({ status: 'whatsapp_message_logged', customerId: customer._id });
+                } else {
+                    reject("Unknown webhook type");
+                }
+            } catch (err) {
+                console.error(err);
+                reject("Error handling Meta webhook");
+            }
+        });
+    },
     // Get all leads/clients with flexible filtering
     getAllLeads: async (filters = {}) => {
         return new Promise(async (resolve, reject) => {
