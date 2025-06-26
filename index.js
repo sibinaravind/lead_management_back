@@ -1,450 +1,378 @@
+// WhatsApp Business API - Receive Messages in Node.js
 const express = require('express');
-const axios = require('axios');
-require('dotenv').config();
-
+const crypto = require('crypto');
 const app = express();
-app.use(express.json());
 
 // Configuration
-const config = {
-  ACCESS_TOKEN: process.env.META_ACCESS_TOKEN, // System User Token
-  BUSINESS_ID: process.env.META_BUSINESS_ID,   // Your Business Manager ID
-  API_VERSION: 'v18.0'
-};
+const VERIFY_TOKEN = 'your_verify_token_here';  // "2177092386053668"
+const APP_SECRET = 'your_app_secret_here';
+const PHONE_NUMBER_ID= "623688297501791";  
+const ACCESS_TOKEN = 'EAAZAZCDFS5ZC2sBOyYtCJNTZA4H9MRJPNfWriYFrHWOy2HtP1XWTrX1da2B5os2uRdupZCOiIYt4QrPPWMVeVMrS3mXJPfvORJ5ZAzW5ZBZC5M1YmPCQpahOc3QdPYF9ZBmE0ZBoZBZCMbeXkYf5WI9lMOAesXnNBJZAHRU02WrFwlwDdRr0fqtfZCKprrPyU2TlB4JjZCnjiGeAM9I8FUhemHlOfxyYgujIF4G49X5pfDaZCxyhAgZDZD';
+const WEBHOOK_PORT = process.env.PORT || 3000;
 
-// Base URL for Meta Graph API
-const GRAPH_API_BASE = `https://graph.facebook.com/${config.API_VERSION}`;
+// Middleware
+app.use(express.json());
 
-// === BUSINESS MANAGER & CAMPAIGN FUNCTIONS ===
+// =============================================================================
+// WEBHOOK VERIFICATION (Required by WhatsApp)
+// =============================================================================
+app.get('/webhook', (req, res) => {
+  const mode = req.query['hub.mode'];
+  const token = req.query['hub.verify_token'];
+  const challenge = req.query['hub.challenge'];
 
-// Get Business Manager Ad Accounts
-async function getBusinessAdAccounts() {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/${config.BUSINESS_ID}/client_ad_accounts`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'id,name,account_status,currency,timezone_name,created_time',
-        limit: 100
-      }
-    });
-    
-    return response.data.data;
-  } catch (error) {
-    console.error('Error fetching ad accounts:', error.response?.data || error.message);
-    throw error;
+  console.log('Webhook verification request received');
+  console.log('Mode:', mode);
+  console.log('Token:', token);
+
+  if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+    console.log('✅ Webhook verified successfully!');
+    res.status(200).send(challenge);
+  } else {
+    console.log('❌ Webhook verification failed');
+    res.status(403).send('Forbidden');
   }
-}
+});
 
-// Get latest campaigns from an ad account
-async function getLatestCampaigns(adAccountId, limit = 5) {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/act_${adAccountId}/campaigns`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'id,name,status,objective,created_time,updated_time,start_time,stop_time,daily_budget,lifetime_budget',
-        sort: 'created_time_descending',
-        limit: limit
-      }
-    });
-    
-    return response.data.data;
-  } catch (error) {
-    console.error(`Error fetching campaigns for account ${adAccountId}:`, error.response?.data || error.message);
-    throw error;
+
+// =============================================================================
+// WEBHOOK TO RECEIVE MESSAGES
+// =============================================================================
+app.post('/webhook', (req, res) => {
+  const body = req.body;
+
+  console.log('📨 Incoming webhook:', JSON.stringify(body, null, 2));
+
+  // Verify the webhook signature (recommended for security)
+  if (!verifyWebhookSignature(req, body)) {
+    console.log('❌ Invalid webhook signature');
+    return res.status(401).send('Unauthorized');
   }
-}
 
-// Get all latest campaigns across all ad accounts
-async function getAllLatestCampaigns(limit = 5) {
-  try {
-    const adAccounts = await getBusinessAdAccounts();
-    let allCampaigns = [];
-    
-    for (const account of adAccounts) {
-      try {
-        const campaigns = await getLatestCampaigns(account.id.replace('act_', ''), limit);
-        const campaignsWithAccount = campaigns.map(campaign => ({
-          ...campaign,
-          ad_account_id: account.id,
-          ad_account_name: account.name
-        }));
-        allCampaigns = allCampaigns.concat(campaignsWithAccount);
-      } catch (error) {
-        console.error(`Error fetching campaigns for account ${account.name}:`, error.message);
-      }
-    }
-    
-    // Sort all campaigns by created_time and get top 5
-    allCampaigns.sort((a, b) => new Date(b.created_time) - new Date(a.created_time));
-    return allCampaigns.slice(0, limit);
-  } catch (error) {
-    console.error('Error fetching all latest campaigns:', error);
-    throw error;
-  }
-}
-
-// Get lead ads for a specific campaign
-async function getCampaignLeadAds(campaignId) {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/${campaignId}/ads`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'id,name,status,creative{object_type,object_id},adset_id,campaign_id,created_time',
-        filtering: JSON.stringify([{
-          field: 'ad.creative.object_type',
-          operator: 'EQUAL',
-          value: 'LEAD_FORM'
-        }])
-      }
-    });
-    
-    return response.data.data;
-  } catch (error) {
-    console.error(`Error fetching lead ads for campaign ${campaignId}:`, error.response?.data || error.message);
-    return [];
-  }
-}
-
-// Get lead form ID from creative
-async function getLeadFormFromCreative(creativeId) {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/${creativeId}`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'object_id,object_type'
-      }
-    });
-    
-    if (response.data.object_type === 'LEAD_FORM') {
-      return response.data.object_id;
-    }
-    return null;
-  } catch (error) {
-    console.error(`Error fetching creative ${creativeId}:`, error.response?.data || error.message);
-    return null;
-  }
-}
-
-// Get leads for a specific form
-async function getLeadsForForm(formId, limit = 50) {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/${formId}/leads`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'id,created_time,ad_id,form_id,field_data,is_organic,campaign_id,adset_id',
-        limit: limit,
-        sort: 'created_time_descending'
-      }
-    });
-    
-    return response.data.data || [];
-  } catch (error) {
-    console.error(`Error fetching leads for form ${formId}:`, error.response?.data || error.message);
-    return [];
-  }
-}
-
-// Get lead form details
-async function getLeadFormDetails(formId) {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/${formId}`, {
-      params: {
-        access_token: config.ACCESS_TOKEN,
-        fields: 'id,name,status,leads_count,created_time,page_id'
-      }
-    });
-    
-    return response.data;
-  } catch (error) {
-    console.error(`Error fetching form details for ${formId}:`, error.response?.data || error.message);
-    return null;
-  }
-}
-
-// Main function to get latest campaigns with their leads
-async function getLatestCampaignsWithLeads(campaignLimit = 5) {
-  try {
-    console.log('Fetching latest campaigns...');
-    const campaigns = await getAllLatestCampaigns(campaignLimit);
-    
-    const campaignsWithLeads = [];
-    
-    for (const campaign of campaigns) {
-      console.log(`Processing campaign: ${campaign.name}`);
-      
-      const campaignData = {
-        campaign: campaign,
-        lead_ads: [],
-        total_leads: 0,
-        leads: []
-      };
-      
-      // Get lead ads for this campaign
-      const leadAds = await getCampaignLeadAds(campaign.id);
-      campaignData.lead_ads = leadAds;
-      
-      // For each lead ad, get the form and leads
-      for (const ad of leadAds) {
-        if (ad.creative && ad.creative.object_id) {
-          const formId = ad.creative.object_id;
-          
-          // Get form details
-          const formDetails = await getLeadFormDetails(formId);
-          if (formDetails) {
-            // Get leads for this form
-            const leads = await getLeadsForForm(formId, 20);
-            
-            // Format leads with additional info
-            const formattedLeads = leads.map(lead => ({
-              ...formatLeadData(lead),
-              ad_id: ad.id,
-              ad_name: ad.name,
-              form_id: formId,
-              form_name: formDetails.name,
-              campaign_id: campaign.id,
-              campaign_name: campaign.name
-            }));
-            
-            campaignData.leads = campaignData.leads.concat(formattedLeads);
-            campaignData.total_leads += formattedLeads.length;
-          }
+  // Process WhatsApp webhook
+  if (body.object === 'whatsapp_business_account') {
+    body.entry?.forEach(entry => {
+      entry.changes?.forEach(change => {
+        if (change.field === 'messages') {
+          processIncomingMessage(change.value);
         }
-      }
-      
-      // Sort leads by created_time (newest first)
-      campaignData.leads.sort((a, b) => new Date(b.created_time) - new Date(a.created_time));
-      
-      campaignsWithLeads.push(campaignData);
-    }
-    
-    return campaignsWithLeads;
-  } catch (error) {
-    console.error('Error getting campaigns with leads:', error);
-    throw error;
-  }
-}
-
-// Format lead data for better readability
-function formatLeadData(lead) {
-  const formatted = {
-    id: lead.id,
-    created_time: lead.created_time,
-    ad_id: lead.ad_id,
-    campaign_id: lead.campaign_id,
-    adset_id: lead.adset_id,
-    is_organic: lead.is_organic,
-    fields: {}
-  };
-  
-  // Parse field data
-  if (lead.field_data) {
-    lead.field_data.forEach(field => {
-      formatted.fields[field.name] = field.values ? field.values.join(', ') : '';
-    });
-  }
-  
-  return formatted;
-}
-
-// Check token validity
-async function checkTokenStatus() {
-  try {
-    const response = await axios.get(`${GRAPH_API_BASE}/me`, {
-      params: {
-        access_token: config.ACCESS_TOKEN
-      }
-    });
-    
-    return {
-      valid: true,
-      user: response.data
-    };
-  } catch (error) {
-    return {
-      valid: false,
-      error: error.response?.data?.error?.message || error.message
-    };
-  }
-}
-
-// === API ENDPOINTS ===
-
-// Test endpoint
-app.get('/api/test', async (req, res) => {
-  try {
-    const tokenStatus = await checkTokenStatus();
-    res.json({
-      success: tokenStatus.valid,
-      message: tokenStatus.valid ? 'Token is valid' : 'Token is invalid',
-      data: tokenStatus.valid ? tokenStatus.user : tokenStatus.error
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// Get business ad accounts
-app.get('/api/accounts', async (req, res) => {
-  try {
-    const accounts = await getBusinessAdAccounts();
-    res.json({
-      success: true,
-      count: accounts.length,
-      accounts
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
-  }
-});
-
-// Get latest campaigns
-app.get('/api/campaigns/latest', async (req, res) => {
-  try {
-    const { limit = 5 } = req.query;
-    const campaigns = await getAllLatestCampaigns(parseInt(limit));
-    
-    res.json({
-      success: true,
-      count: campaigns.length,
-      campaigns
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
-  }
-});
-
-// Get latest campaigns with their leads - MAIN ENDPOINT
-app.get('/api/campaigns/with-leads', async (req, res) => {
-  try {
-    const { limit = 5 } = req.query;
-    console.log(`Fetching latest ${limit} campaigns with leads...`);
-    
-    const campaignsWithLeads = await getLatestCampaignsWithLeads(parseInt(limit));
-    
-    // Summary statistics
-    const summary = {
-      total_campaigns: campaignsWithLeads.length,
-      total_leads: campaignsWithLeads.reduce((sum, campaign) => sum + campaign.total_leads, 0),
-      campaigns_with_leads: campaignsWithLeads.filter(c => c.total_leads > 0).length
-    };
-    
-    res.json({
-      success: true,
-      summary,
-      data: campaignsWithLeads
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
-  }
-});
-
-// Get leads for a specific campaign
-app.get('/api/campaign/:campaignId/leads', async (req, res) => {
-  try {
-    const { campaignId } = req.params;
-    
-    // Get lead ads for this campaign
-    const leadAds = await getCampaignLeadAds(campaignId);
-    let allLeads = [];
-    
-    for (const ad of leadAds) {
-      if (ad.creative && ad.creative.object_id) {
-        const leads = await getLeadsForForm(ad.creative.object_id, 50);
-        const formattedLeads = leads.map(lead => ({
-          ...formatLeadData(lead),
-          ad_id: ad.id,
-          ad_name: ad.name
-        }));
-        allLeads = allLeads.concat(formattedLeads);
-      }
-    }
-    
-    res.json({
-      success: true,
-      campaign_id: campaignId,
-      count: allLeads.length,
-      leads: allLeads
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
-  }
-});
-
-// Export all data as CSV-like format
-app.get('/api/export/leads', async (req, res) => {
-  try {
-    const { limit = 5 } = req.query;
-    const campaignsWithLeads = await getLatestCampaignsWithLeads(parseInt(limit));
-    
-    // Flatten all leads into a single array
-    const allLeads = [];
-    campaignsWithLeads.forEach(campaign => {
-      campaign.leads.forEach(lead => {
-        allLeads.push({
-          lead_id: lead.id,
-          created_time: lead.created_time,
-          campaign_name: lead.campaign_name,
-          ad_name: lead.ad_name,
-          form_name: lead.form_name,
-          ...lead.fields
-        });
       });
     });
-    
-    res.json({
-      success: true,
-      total_leads: allLeads.length,
-      leads: allLeads
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.response?.data?.error?.message || error.message
-    });
+
+    res.status(200).send('OK');
+  } else {
+    res.status(404).send('Not Found');
   }
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    api_version: config.API_VERSION
+
+// Send a WhatsApp text message via HTTP POST
+app.post('/send-message', async (req, res) => {
+  const { to, text } = req.body;
+  if (!to || !text) {
+    return res.status(400).json({ error: 'Missing "to" or "text" in request body' });
+  }
+  try {
+    await sendTextMessage(PHONE_NUMBER_ID, to, text);
+    res.status(200).json({ message: 'Message sent successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+
+// =============================================================================
+// MESSAGE PROCESSING FUNCTIONS
+// =============================================================================
+function processIncomingMessage(value) {
+  console.log('📱 Processing WhatsApp message:', JSON.stringify(value, null, 2));
+
+  // Handle incoming messages
+  if (value.messages) {
+    value.messages.forEach(message => {
+      handleIncomingMessage(message, value.metadata);
+    });
+  }
+
+  // Handle message status updates (delivered, read, etc.)
+  if (value.statuses) {
+    value.statuses.forEach(status => {
+      handleMessageStatus(status);
+    });
+  }
+}
+
+function handleIncomingMessage(message, metadata) {
+  const phoneNumberId = metadata.phone_number_id;
+  const fromNumber = message.from;
+  const messageId = message.id;
+  const timestamp = message.timestamp;
+
+  console.log(`📞 Message from: ${fromNumber}`);
+  console.log(`📋 Message ID: ${messageId}`);
+  console.log(`⏰ Timestamp: ${new Date(timestamp * 1000).toISOString()}`);
+
+  // Handle different message types
+  switch (message.type) {
+    case 'text':
+      handleTextMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'image':
+      handleImageMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'document':
+      handleDocumentMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'audio':
+      handleAudioMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'video':
+      handleVideoMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'location':
+      handleLocationMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'contacts':
+      handleContactMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    case 'interactive':
+      handleInteractiveMessage(message, phoneNumberId, fromNumber);
+      break;
+    
+    default:
+      console.log(`❓ Unknown message type: ${message.type}`);
+  }
+}
+
+// =============================================================================
+// MESSAGE TYPE HANDLERS
+// =============================================================================
+function handleTextMessage(message, phoneNumberId, fromNumber) {
+  const text = message.text.body;
+  console.log(`💬 Text message: "${text}"`);
+  
+  // Example: Echo the message back
+  sendTextMessage(phoneNumberId, fromNumber, `You said: ${text}`);
+  
+  // Example: Handle specific commands
+  if (text.toLowerCase().includes('hello')) {
+    sendTextMessage(phoneNumberId, fromNumber, 'Hello! How can I help you today?');
+  } else if (text.toLowerCase().includes('help')) {
+    sendHelpMessage(phoneNumberId, fromNumber);
+  }
+}
+
+function handleImageMessage(message, phoneNumberId, fromNumber) {
+  const image = message.image;
+  console.log(`🖼️ Image received:`);
+  console.log(`- ID: ${image.id}`);
+  console.log(`- MIME type: ${image.mime_type}`);
+  console.log(`- Caption: ${image.caption || 'No caption'}`);
+  
+  // Download the image if needed
+  downloadMedia(image.id, image.mime_type);
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Thanks for the image! 📸');
+}
+
+function handleDocumentMessage(message, phoneNumberId, fromNumber) {
+  const document = message.document;
+  console.log(`📄 Document received:`);
+  console.log(`- ID: ${document.id}`);
+  console.log(`- Filename: ${document.filename}`);
+  console.log(`- MIME type: ${document.mime_type}`);
+  
+  sendTextMessage(phoneNumberId, fromNumber, `Document "${document.filename}" received! 📎`);
+}
+
+function handleAudioMessage(message, phoneNumberId, fromNumber) {
+  const audio = message.audio;
+  console.log(`🎵 Audio received: ${audio.id}`);
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Voice message received! 🎤');
+}
+
+function handleVideoMessage(message, phoneNumberId, fromNumber) {
+  const video = message.video;
+  console.log(`🎥 Video received: ${video.id}`);
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Video received! 🎬');
+}
+
+function handleLocationMessage(message, phoneNumberId, fromNumber) {
+  const location = message.location;
+  console.log(`📍 Location received:`);
+  console.log(`- Latitude: ${location.latitude}`);
+  console.log(`- Longitude: ${location.longitude}`);
+  console.log(`- Name: ${location.name || 'Unknown'}`);
+  console.log(`- Address: ${location.address || 'No address'}`);
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Location received! 📍');
+}
+
+function handleContactMessage(message, phoneNumberId, fromNumber) {
+  const contacts = message.contacts;
+  console.log(`👤 Contact(s) received: ${contacts.length}`);
+  
+  contacts.forEach(contact => {
+    console.log(`- Name: ${contact.name.formatted_name}`);
+    console.log(`- Phone: ${contact.phones?.[0]?.phone || 'No phone'}`);
   });
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Contact information received! 👤');
+}
+
+function handleInteractiveMessage(message, phoneNumberId, fromNumber) {
+  const interactive = message.interactive;
+  console.log(`🔘 Interactive message:`);
+  console.log(`- Type: ${interactive.type}`);
+  
+  if (interactive.type === 'button_reply') {
+    console.log(`- Button ID: ${interactive.button_reply.id}`);
+    console.log(`- Button Title: ${interactive.button_reply.title}`);
+  } else if (interactive.type === 'list_reply') {
+    console.log(`- List ID: ${interactive.list_reply.id}`);
+    console.log(`- List Title: ${interactive.list_reply.title}`);
+  }
+  
+  sendTextMessage(phoneNumberId, fromNumber, 'Button/List selection received! ✅');
+}
+
+function handleMessageStatus(status) {
+  console.log(`📊 Message status update:`);
+  console.log(`- Message ID: ${status.id}`);
+  console.log(`- Status: ${status.status}`);
+  console.log(`- Timestamp: ${new Date(status.timestamp * 1000).toISOString()}`);
+  console.log(`- Recipient: ${status.recipient_id}`);
+}
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+function verifyWebhookSignature(req, body) {
+  const signature = req.headers['x-hub-signature-256'];
+  
+  if (!signature) {
+    return false;
+  }
+
+  const expectedSignature = crypto
+    .createHmac('sha256', APP_SECRET)
+    .update(JSON.stringify(body))
+    .digest('hex');
+
+  const receivedSignature = signature.replace('sha256=', '');
+  
+  return crypto.timingSafeEqual(
+    Buffer.from(expectedSignature, 'hex'),
+    Buffer.from(receivedSignature, 'hex')
+  );
+}
+
+async function downloadMedia(mediaId, mimeType) {
+  try {
+    const response = await fetch(`https://graph.facebook.com/v18.0/${mediaId}`, {
+      headers: {
+        'Authorization': `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+    
+    const mediaData = await response.json();
+    console.log('📥 Media download URL:', mediaData.url);
+    
+    // Download the actual file
+    const fileResponse = await fetch(mediaData.url, {
+      headers: {
+        'Authorization': `Bearer ${ACCESS_TOKEN}`
+      }
+    });
+    
+    const fileBuffer = await fileResponse.buffer();
+    console.log(`📁 File downloaded: ${fileBuffer.length} bytes`);
+    
+    // Save to file system or cloud storage as needed
+    // fs.writeFileSync(`./downloads/${mediaId}`, fileBuffer);
+    
+  } catch (error) {
+    console.error('❌ Error downloading media:', error);
+  }
+}
+
+
+
+async function sendTextMessage(phoneNumberId, to, text) {
+  try {
+    const response = await fetch(`https://graph.facebook.com/v18.0/${phoneNumberId}/messages`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'text',
+        text: {
+          preview_url: false,  // Add this if you're not using links
+          body: text
+        }
+      })
+    });
+
+    const result = await response.json();
+    
+    if (!response.ok) {
+      console.error('❌ Error sending message:', result.error);
+      return { success: false, error: result.error };
+    }
+
+    console.log('✅ Message sent:', result);
+    return { success: true, data: result };
+  } catch (error) {
+    console.error('❌ Network error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+async function sendHelpMessage(phoneNumberId, fromNumber) {
+  const helpText = `🤖 Available Commands:
+  
+• Send "hello" - Get a greeting
+• Send "help" - Show this help message  
+• Send any image - I'll acknowledge it
+• Send any document - I'll tell you I received it
+• Send your location - I'll confirm I got it
+
+What would you like to do?`;
+
+  await sendTextMessage(phoneNumberId, fromNumber, helpText);
+}
+
+// =============================================================================
+// SERVER STARTUP
+// =============================================================================
+app.listen(WEBHOOK_PORT, () => {
+  console.log('🚀 WhatsApp webhook server started!');
+  console.log(`📡 Listening on port ${WEBHOOK_PORT}`);
+  console.log(`🔗 Webhook URL: http://localhost:${WEBHOOK_PORT}/webhook`);
+  console.log('');
+  console.log('Setup checklist:');
+  console.log('✅ 1. Update your tokens in the configuration');
+  console.log('✅ 2. Set up ngrok or deploy to get public URL');
+  console.log('✅ 3. Configure webhook URL in Meta Developer Console');
+  console.log('✅ 4. Test by sending messages to your WhatsApp Business number');
 });
 
-// Start server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Meta Business Manager Lead API running on port ${PORT}`);
-  console.log(`\nAvailable endpoints:`);
-  console.log(`- GET /api/test - Test access token`);
-  console.log(`- GET /api/accounts - Get business ad accounts`);
-  console.log(`- GET /api/campaigns/latest?limit=5 - Get latest campaigns`);
-  console.log(`- GET /api/campaigns/with-leads?limit=5 - Get latest campaigns with leads (MAIN)`);
-  console.log(`- GET /api/campaign/:campaignId/leads - Get leads for specific campaign`);
-  console.log(`- GET /api/export/leads?limit=5 - Export all leads as flat data`);
-  console.log(`- GET /health - Health check`);
-  console.log(`\nMake sure to set these environment variables:`);
-  console.log(`- META_ACCESS_TOKEN=your_system_user_token`);
-  console.log(`- META_BUSINESS_ID=your_business_manager_id`);
-});
-
+// Export for testing
+module.exports = { app };
 
 // const express = require("express");
 // const session = require('express-session');
