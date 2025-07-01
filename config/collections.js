@@ -8,6 +8,7 @@ module.exports={
     COUNTER: 'counter',
     PROJECTS: 'projects',
     CUSTOMERS:'customers',
+    LEADS: 'leads',
    
 
 }

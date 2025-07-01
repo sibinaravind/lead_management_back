@@ -12,8 +12,8 @@ module.exports = {
             try {
                 const collection = db.get().collection(COLLECTION.CLIENTS);
 
-                // Ensure unique index on client_id (run once in your setup/migration scripts)
-                await collection.createIndex({ client_id: 1 }, { unique: true });
+                // // Ensure unique index on client_id (run once in your setup/migration scripts)
+                // await collection.createIndex({ client_id: 1 }, { unique: true });
 
                 // Check for duplicate client (by email or phone)
                 const existingClient = await collection.findOne({

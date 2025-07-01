@@ -8,6 +8,7 @@ module.exports = {
         return res.status(500).json({ success: false, message: "Unexpected error" });
       }
     } catch (error) {
+    
       return res.status(500).json({
         success: false,
         message: typeof error === "string" ? error : error.message || "Unexpected error"
