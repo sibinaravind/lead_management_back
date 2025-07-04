@@ -3,67 +3,128 @@ const axios = require('axios');
 var db = require('../config/connection');
 require('dotenv').config();
 let COLLECTION = require('../config/collections')
+
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const SYSTEM_USER_TOKEN = process.env.USER_ACCSS_TOKEN; // system user token
 const PAGE_ID = process.env.PAGE_ID;
-module.exports = {
- fetchFormsAndLeadsInsert :async () => {
-  
-  const collection = db.get().collection(COLLECTION.LEADS);
-  await collection.createIndex({ leadId: 1 }, { unique: true });
-  const summary = [];
-  // Fetch forms
-  const formRes = await axios.get(`${GRAPH_API_BASE}/${PAGE_ID}/leadgen_forms`, {
-    params: { access_token: ACCESS_TOKEN },
-  });
 
-  const forms = formRes.data.data;
+function parseMetaError(error) {
+  if (error.response && error.response.data && error.response.data.error) {
+    const e = error.response.data.error;
+    return `Meta API Error - ${e.message} (Type: ${e.type}, Code: ${e.code}, Trace: ${e.fbtrace_id})`;
+  }
+  return error.message || 'Unknown error';
+}
 
-  for (const form of forms) {
-    const formId = form.id;
-    const formName = form.name;
-
-    // Fetch leads for the form
-    const leadRes = await axios.get(`${GRAPH_API_BASE}/${formId}/leads`, {
-      params: { access_token: ACCESS_TOKEN },
+async function getPageAccessToken() {
+  try {
+    const response = await axios.get(`${GRAPH_API_BASE}/${PAGE_ID}`, {
+      params: {
+        fields: 'access_token',
+        access_token: SYSTEM_USER_TOKEN,
+      },
     });
 
-    const leads = leadRes.data.data;
+    return response.data.access_token;
+  } catch (err) {
+    throw new Error('Failed to get Page Access Token: ' + parseMetaError(err));
+  }
+}
 
-    let inserted = 0;
-    let skipped = 0;
+module.exports = {
+  fetchFormsAndLeadsInsert: async () => {
+    const collection = db.get().collection(COLLECTION.LEADS);
+    await collection.createIndex({ leadId: 1 }, { unique: true });
 
-    for (const lead of leads) {
-      const exists = await collection.findOne({ leadId: lead.id });
-      if (exists) {
-        skipped++;
-        continue;
-      }
+    const summary = [];
 
-      const formattedLead = {
-        leadId: lead.id,
-        formId,
-        createdAt: new Date(lead.created_time),
-        fields: Object.fromEntries(
-          lead.field_data.map(f => [f.name, f.values[0]])
-        ),
-      };
+    let PAGE_ACCESS_TOKEN;
 
-      await collection.insertOne(formattedLead);
-      inserted++;
+    try {
+      PAGE_ACCESS_TOKEN = await getPageAccessToken();
+      console.log(`✅ Page Access Token fetched`);
+    } catch (err) {
+      console.error(err.message);
+      return [{ error: err.message }];
     }
 
-    summary.push({
-      formId,
-      formName,
-      totalFetched: leads.length,
-      inserted,
-      skipped,
-    });
-  }
+    try {
+      console.log(`📄 Fetching leadgen forms for page ID: ${PAGE_ID}`);
+      const formRes = await axios.get(`${GRAPH_API_BASE}/${PAGE_ID}/leadgen_forms`, {
+        params: { access_token: PAGE_ACCESS_TOKEN },
+      });
 
-  return summary;
+      const forms = formRes.data.data;
+
+      for (const form of forms) {
+        const formId = form.id;
+        const formName = form.name;
+
+        let leads = [];
+
+        try {
+          const leadRes = await axios.get(`${GRAPH_API_BASE}/${formId}/leads`, {
+            params: { access_token: PAGE_ACCESS_TOKEN },
+          });
+
+          leads = leadRes.data.data || [];
+        } catch (leadError) {
+          const errMsg = parseMetaError(leadError);
+          console.error(`❌ Error fetching leads for form ${formId} (${formName}):`, errMsg);
+          summary.push({
+            formId,
+            formName,
+            error: errMsg,
+          });
+          continue;
+        }
+
+        let inserted = 0;
+        let skipped = 0;
+
+        for (const lead of leads) {
+          try {
+            const exists = await collection.findOne({ leadId: lead.id });
+            if (exists) {
+              skipped++;
+              continue;
+            }
+
+            const formattedLead = {
+              leadId: lead.id,
+              formId,
+              createdAt: new Date(lead.created_time),
+              fields: Object.fromEntries(
+                lead.field_data.map(f => [f.name, f.values[0]])
+              ),
+            };
+
+            await collection.insertOne(formattedLead);
+            inserted++;
+          } catch (insertError) {
+            console.error(`❌ Error inserting lead ${lead.id}:`, insertError.message);
+            skipped++;
+          }
+        }
+
+        summary.push({
+          formId,
+          formName,
+          totalFetched: leads.length,
+          inserted,
+          skipped,
+        });
+      }
+    } catch (formError) {
+      const errMsg = parseMetaError(formError);
+      console.error('❌ Error fetching forms:', errMsg);
+      return [{ error: errMsg }];
+    }
+
+    return summary;
   },
+ 
+
 
   createLead: async (details) => {
         return new Promise(async (resolve, reject) => {
@@ -125,6 +186,66 @@ module.exports = {
     
 },
 }
+
+//sucessful
+// module.exports = {
+//  fetchFormsAndLeadsInsert :async () => {
+//   const collection = db.get().collection(COLLECTION.LEADS);
+//   await collection.createIndex({ leadId: 1 }, { unique: true });
+//   const summary = [];
+//   // Fetch forms
+//   console.log(`Fetching leadgen forms for page ID: ${PAGE_ID}`);
+//   const formRes = await axios.get(`${GRAPH_API_BASE}/${PAGE_ID}/leadgen_forms`, {
+//     params: { access_token: ACCESS_TOKEN },
+//   });
+
+//   const forms = formRes.data.data;
+
+//   for (const form of forms) {
+//     const formId = form.id;
+//     const formName = form.name;
+
+//     // Fetch leads for the form
+//     const leadRes = await axios.get(`${GRAPH_API_BASE}/${formId}/leads`, {
+//       params: { access_token: ACCESS_TOKEN },
+//     });
+
+//     const leads = leadRes.data.data;
+
+//     let inserted = 0;
+//     let skipped = 0;
+
+//     for (const lead of leads) {
+//       const exists = await collection.findOne({ leadId: lead.id });
+//       if (exists) {
+//         skipped++;
+//         continue;
+//       }
+
+//       const formattedLead = {
+//         leadId: lead.id,
+//         formId,
+//         createdAt: new Date(lead.created_time),
+//         fields: Object.fromEntries(
+//           lead.field_data.map(f => [f.name, f.values[0]])
+//         ),
+//       };
+
+//       await collection.insertOne(formattedLead);
+//       inserted++;
+//     }
+
+//     summary.push({
+//       formId,
+//       formName,
+//       totalFetched: leads.length,
+//       inserted,
+//       skipped,
+//     });
+//   }
+
+//   return summary;
+//   },
 
 
 
