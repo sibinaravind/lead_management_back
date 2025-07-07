@@ -60,12 +60,12 @@ app.set('view engine', 'hbs');
 
 // Route imports
 const routes = [
-  { path: '/officersAuth', route: require("./routes/officers/user_auth") },
   { path: '/officer', route: require("./routes/officers/officers_router") },
   { path: '/config', route: require("./routes/officers/configs_router") },
   { path: '/project', route: require("./routes/officers/project_router") },
   { path: '/customers', route: require("./routes/officers/customer_router") },
   { path: '/lead', route: require("./routes/officers/lead_router") },
+  {path: '/campaign', route: require("./routes/officers/campaign_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -90,32 +90,6 @@ app.use((req, res, next) => {
 server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
 
 // Cron job for token refresh
-cron.schedule('0 0 */8 * *', async () => {
-  const TOKEN_FILE_PATH = path.join(__dirname, '.env');
-  try {
-    const response = await fetch('https://apiv2.shiprocket.in/v1/external/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        "email": "sibinjames.sibin@gmail.com",
-        "password": "Unni@001"
-      })
-    });
-
-    if (!response.ok) throw new Error('Failed to refresh token');
-
-    const data = await response.json();
-    const newToken = data.token;
-
-    fs.writeFileSync(TOKEN_FILE_PATH, `
-      API_KEY=${process.env.API_KEY}
-      SHIPROCKETAPI=${newToken}`);
-    process.env.SHIPROCKETAPI = newToken;
-  } catch (error) {
-    console.error('Error refreshing token:', error);
-  }
-});
-
 
 
 // // active ,inactive,deleted,blocked,unassigned

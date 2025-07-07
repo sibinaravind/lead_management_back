@@ -17,26 +17,43 @@ app.patch("/updateOfficer/:id", (req, res) => {
     officersHelper.editOfficer(req.params.id,req.body)
   );
 });
-app.patch("/updatePassword/:id", (req, res) => {
-  return response.handle(res, () =>
-    officersHelper.updateOfficerPassword(req.params.id,req.body)
-  );
-});
-app.patch("/updateStatus/:id", (req, res) => {
-  return response.handle(res, () =>
-    officersHelper.updateOfficerStatus(req.params.id,req.body.status)
-  );
-});
 app.get("/list", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     officersHelper.listOfficers()
   );
-});   
-  app.get("/details/:id", middleware.checkToken, (req, res) => {
+});  
+app.post("/login", (req, res) => {
   return response.handle(res, () =>
-    officersHelper.getOfficer(req.params.id)
+    officersHelper.loginOfficer(req.body.officer_id, req.body.password)
   );
-});
+});    
+app.delete("/delete/:id", (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.deleteOfficer(req.params.id)
+  );
+});  
+
+app.get("/listLeadOfficers", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.listLeadOfficers()
+  );
+});  
+app.patch("/addOfficerToLead", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.addOfficerUnderOfficer(
+      req.body.lead_officer_id,
+      req.body.officer_id
+    )
+  );
+});  
+app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.removeOfficerUnderOfficer(
+      req.body.lead_officer_id,
+      req.body.officer_id
+    )
+  );
+});  
 
 
 module.exports = app;

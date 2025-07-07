@@ -29,11 +29,4 @@ app.patch("/edit_accessList", middleware.checkToken, (req, res) => {
   );
 });
 
-
-app.patch("/upload_media/:_id", (req, res) => {
-  return response.handle(res, () =>
-    freshFoodHelper.uploadFreshFoodImage(req.files.media, req.params._id)
-  );
-});
-
 module.exports = app;

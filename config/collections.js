@@ -9,6 +9,7 @@ module.exports={
     PROJECTS: 'projects',
     CUSTOMERS:'customers',
     LEADS: 'leads',
+    CAMPAIGNS: 'campaigns',
    
 
 }

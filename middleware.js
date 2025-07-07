@@ -1,5 +1,4 @@
 const jwt = require("jsonwebtoken");
-const config = require("./jwtconfig");
 
 let checkToken = (req, res, next) => {
   next(); // Temporarily allowing all requests, remove this line to enforce token checks
