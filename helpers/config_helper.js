@@ -37,6 +37,7 @@ module.exports = {
                 if (!doc || !doc[field]) return reject("Field not found");
 
                 let updateResult;
+                let insertedId = null;
 
                 if (action === "insert") {
                     // Only allow if status is 'ACTIVE' or 'INACTIVE'
@@ -44,6 +45,7 @@ module.exports = {
                         return reject("Status must be 'ACTIVE' or 'INACTIVE'");
                     }
                     const newItem = { _id: new ObjectId(), ...value };
+                    insertedId = newItem._id;
                     updateResult = await collection.updateOne(
                         { _id: docId },
                         { $push: { [field]: newItem } }
@@ -85,9 +87,12 @@ module.exports = {
                         { $pull: { [field]: { _id: ObjectId(value._id) } } }
                     );
                 }
-
                 if (updateResult?.modifiedCount > 0) {
-                    resolve({ status: true });
+                    if (action === "insert") {
+                        resolve({ status: true, insertedId });
+                    } else {
+                        resolve({ status: true });
+                    }
                 } else {
                     reject("No changes made");
                 }
@@ -97,6 +102,77 @@ module.exports = {
             }
         });
     },
+    // editConfig: async (data) => {
+    //     return new Promise(async (resolve, reject) => {
+    //         try {
+    //             const collection = db.get().collection(COLLECTION.CONFIG);
+    //             const docId = ObjectId("6829fcbf3deca8f5b103613b");
+    //             const { field, action, value } = data;
+
+    //             const doc = await collection.findOne({ _id: docId });
+    //             if (!doc || !doc[field]) return reject("Field not found");
+
+    //             let updateResult;
+
+    //             if (action === "insert") {
+    //                 // Only allow if status is 'ACTIVE' or 'INACTIVE'
+    //                 if (value.status !== "ACTIVE" && value.status !== "INACTIVE") {
+    //                     return reject("Status must be 'ACTIVE' or 'INACTIVE'");
+    //                 }
+    //                 const newItem = { _id: new ObjectId(), ...value };
+    //                 updateResult = await collection.updateOne(
+    //                     { _id: docId },
+    //                     { $push: { [field]: newItem } }
+    //                 );
+    //             }
+
+    //             else if (action === "update") {
+    //                 if (!value._id) return reject("Missing _id for update");
+
+    //                 // Only allow if status is 'ACTIVE' or 'INACTIVE'
+    //                 if (value.status !== undefined && value.status !== "ACTIVE" && value.status !== "INACTIVE") {
+    //                     return reject("Status must be 'ACTIVE' or 'INACTIVE'");
+    //                 }
+
+    //                 // Prevent updating the _id field
+    //                 const { _id, ...rest } = value;
+    //                 const updateFields = {};
+    //                 for (const key in rest) {
+    //                     if (rest[key] !== "" && rest[key] !== null && rest[key] !== undefined) {
+    //                         updateFields[`${field}.$.${key}`] = rest[key];
+    //                     }
+    //                 }
+
+    //                 if (Object.keys(updateFields).length === 0) {
+    //                     return reject("No valid fields to update");
+    //                 }
+
+    //                 updateResult = await collection.updateOne(
+    //                     { _id: docId, [`${field}._id`]: ObjectId(_id) },
+    //                     { $set: updateFields }
+    //                 );
+    //             }
+
+    //             else if (action === "delete") {
+    //                 if (!value._id) return reject("Missing _id for delete");
+
+    //                 updateResult = await collection.updateOne(
+    //                     { _id: docId },
+    //                     { $pull: { [field]: { _id: ObjectId(value._id) } } }
+    //                 );
+    //             }
+    //             console.log(updateResult);
+    //             if (updateResult?.modifiedCount > 0) {
+    //                 resolve({ status: true });
+    //             } else {
+    //                 reject("No changes made");
+    //             }
+
+    //         } catch (error) {
+    //             reject(error);
+    //         }
+    //     });
+    // },
 
 
     accessPermissionList: async () => {

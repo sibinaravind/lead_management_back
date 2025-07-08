@@ -12,6 +12,34 @@ const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 10;
 module.exports = {
 // Create Officer
+loginOfficer: async (officer_id, password) => {
+  const JWT_SECRET = process.env.JWT_SECRET ;
+
+  return new Promise(async (resolve, reject) => {
+    try {
+      const collection = db.get().collection(COLLECTION.OFFICERS);
+      const officer = await collection.findOne({ officer_id: officer_id });
+      if (!officer) return reject("Officer not found");
+
+      const isMatch = await bcrypt.compare(password.toString(), officer.password);
+      if (!isMatch) return reject("Invalid credentials");
+
+      // Prepare JWT payload
+      const payload = {
+        officer_id: officer.officer_id,
+        department: officer.department,
+        branch: officer.branch
+      };
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });
+      // Exclude password from response
+      const { password: pwd, ...officerData } = officer;
+      resolve({ officer: officerData, token });
+    } catch (error) {
+      reject("Error processing request");
+    }
+  });
+},
+
 createOfficer : async (details) => {
   return new Promise(async (resolve, reject) => {
     let documentPath = null;
@@ -66,36 +94,172 @@ createOfficer : async (details) => {
   });
 },
 
-// List Officers
-listOfficers: () => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      console.log("Fetching officers list");
-      resolve(await db.get().collection(COLLECTION.OFFICERS)
-        .find(
-        {},
-          {
-            projection: {
-              officer_id: 1,
-              name: 1,
-              status: 1,
-              gender: 1,
-              phone: 1,
-              company_phone_number: 1,
-              designation: 1,
-              department: 1,
-              branch: 1,
-              officers:1,
-              created_at: 1,
+ listOfficers : async () => {
+  try {
+    const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
+      {
+        $lookup: {
+          from: "config", // ensure this matches your actual collection name
+          let: { designationCodes: "$designation" },
+          pipeline: [
+            { $match: { name: "constants" } },
+            {
+              $project: {
+                designation: {
+                  $filter: {
+                    input: "$designation",
+                    as: "d",
+                    cond: { $in: ["$$d.code", "$$designationCodes"] }
+                  }
+                }
+              }
+            }
+          ],
+          as: "designationData"
+        }
+      },
+       {
+        $addFields: {
+          designation: {
+            $cond: {
+              if: { $gt: [{ $size: "$designationData" }, 0] },
+              then: {
+                $map: {
+                  input: {
+                    $reduce: {
+                      input: "$designationData.designation",
+                      initialValue: [],
+                      in: { $concatArrays: ["$$value", "$$this"] }
+                    }
+                  },
+                  as: "d",
+                  in: "$$d.name"
+                }
+              },
+              else: []
             }
           }
-        )
-        .toArray());
-    } catch (error) {
-      reject("Error processing request");
-    }
-  });
+        }
+      },
+      {
+        $project: {
+          officer_id: 1,
+          name: 1,
+          status: 1,
+          gender: 1,
+          phone: 1,
+          company_phone_number: 1,
+          designation: 1, // now contains designation objects
+          department: 1,
+          branch: 1,
+          officers: 1,
+          created_at: 1
+        }
+      }
+    ]).toArray();
+
+    return officers;
+  } catch (error) {
+    console.error("Aggregation Error:", error);
+    throw new Error("Error processing request");
+  }
 },
+
+
+
+// listOfficers:async () => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
+//         // Join configs collection
+//         {
+//       $lookup: {
+//         from: "config",
+//         let: { designationCodes: "$designation" }, // assuming [2, 3, ...]
+//         pipeline: [
+//           { $match: { name: "constants" } },
+//           {
+//             $project: {
+//               designation: {
+//                 $filter: {
+//                   input: "$designation",
+//                   as: "d",
+//                   cond: { $in: ["$$d.code", "$$designationCodes"] }
+//                 }
+//               }
+//             }
+//           }
+//         ],
+//         as: "designationData"
+//       }
+//     },
+//         // Flatten designationData.matchedDesignations directly into designation
+//         // {
+//         //   $addFields: {
+//         //     designation: {
+//         //       $cond: [
+//         //         { $gt: [{ $size: "$designationData" }, 0] },
+//         //         { $arrayElemAt: ["$designationData.matchedDesignations", 0] },
+//         //         []
+//         //       ]
+//         //     }
+//         //   }
+//         // },
+//         // {
+//         //   $project: {
+//         //     officer_id: 1,
+//         //     name: 1,
+//         //     status: 1,
+//         //     gender: 1,
+//         //     phone: 1,
+//         //     company_phone_number: 1,
+//         //     designation: 1, // enriched designation list
+//         //     department: 1,
+//         //     branch: 1,
+//         //     officers: 1,
+//         //     created_at: 1
+//         //   }
+//         // }
+//       ]).toArray();
+
+//       resolve(officers);
+//     } catch (error) {
+//       console.error("Aggregation Error:", error);
+//       reject("Error processing request");
+//     }
+//   });
+// },
+
+// List Officers
+// listOfficers: () => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       console.log("Fetching officers list");
+//       resolve(await db.get().collection(COLLECTION.OFFICERS)
+//         .find(
+//         {},
+//           {
+//             projection: {
+//               officer_id: 1,
+//               name: 1,
+//               status: 1,
+//               gender: 1,
+//               phone: 1,
+//               company_phone_number: 1,
+//               designation: 1,
+//               department: 1,
+//               branch: 1,
+//               officers:1,
+//               created_at: 1,
+//             }
+//           }
+//         )
+//         .toArray());
+//     } catch (error) {
+//       reject("Error processing request");
+//     }
+//   });
+// },
 
 // Edit Officer
 editOfficer : async (id, details) => {
@@ -130,33 +294,6 @@ editOfficer : async (id, details) => {
   });
 },
 
-loginOfficer: async (officer_id, password) => {
-  const JWT_SECRET = process.env.JWT_SECRET ;
-
-  return new Promise(async (resolve, reject) => {
-    try {
-      const collection = db.get().collection(COLLECTION.OFFICERS);
-      const officer = await collection.findOne({ officer_id: officer_id });
-      if (!officer) return reject("Officer not found");
-
-      const isMatch = await bcrypt.compare(password.toString(), officer.password);
-      if (!isMatch) return reject("Invalid credentials");
-
-      // Prepare JWT payload
-      const payload = {
-        officer_id: officer.officer_id,
-        department: officer.department,
-        branch: officer.branch
-      };
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });
-      // Exclude password from response
-      const { password: pwd, ...officerData } = officer;
-      resolve({ officer: officerData, token });
-    } catch (error) {
-      reject("Error processing request");
-    }
-  });
-},
 
 deleteOfficer: async (id) => {
   return new Promise(async (resolve, reject) => {
@@ -231,9 +368,9 @@ listLeadOfficers: () => {
   return new Promise(async (resolve, reject) => {
     try {
       const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
-        {
+       {
           $match: {
-            designation: { $elemMatch: { $regex: '^team lead$', $options: 'i' } }
+            designation: { $in: [3] }
           }
         },
         {
