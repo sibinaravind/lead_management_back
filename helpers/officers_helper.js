@@ -160,7 +160,7 @@ createOfficer : async (details) => {
 
     return officers;
   } catch (error) {
-    console.error("Aggregation Error:", error);
+   
     throw new Error("Error processing request");
   }
 },
