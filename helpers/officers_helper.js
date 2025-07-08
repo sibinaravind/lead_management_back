@@ -26,8 +26,9 @@ loginOfficer: async (officer_id, password) => {
 
       // Prepare JWT payload
       const payload = {
+        _id: officer._id,
         officer_id: officer.officer_id,
-        department: officer.department,
+        designation: officer.designation,
         branch: officer.branch
       };
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });

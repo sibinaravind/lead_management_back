@@ -63,7 +63,6 @@ const routes = [
   { path: '/officer', route: require("./routes/officers/officers_router") },
   { path: '/config', route: require("./routes/officers/configs_router") },
   { path: '/project', route: require("./routes/officers/project_router") },
-  { path: '/customers', route: require("./routes/officers/customer_router") },
   { path: '/lead', route: require("./routes/officers/lead_router") },
   {path: '/campaign', route: require("./routes/officers/campaign_router") },
   { path: '/', route: require("./routes/webiste/website") }
@@ -92,6 +91,12 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 // Cron job for token refresh
 
 
-// // active ,inactive,deleted,blocked,unassigned
+// // ACTIVE ,INACTIVE,DELETED,BLOCKED,UNASSIGNED
+
+//  HOT, DEAD, UNASSIGNED,
 
 
+// thinsg to do
+/*** 
+ check dead lead while insert lead
+ *    ***/

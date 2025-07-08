@@ -10,6 +10,8 @@ module.exports={
     CUSTOMERS:'customers',
     LEADS: 'leads',
     CAMPAIGNS: 'campaigns',
+    CUSTOMER_ACTIVITY: 'customer_activity',
+    DEAD_CUSTOMERS: 'dead_customers',
    
 
 }
