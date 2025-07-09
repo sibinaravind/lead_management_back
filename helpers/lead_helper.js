@@ -9,7 +9,6 @@ const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 module.exports = {
     // Create Client/Lead
     createLead: async (details) => {
-        
         return new Promise(async (resolve, reject) => {
             try {
                 const collection = db.get().collection(COLLECTION.CUSTOMERS);
@@ -17,14 +16,23 @@ module.exports = {
                 // await collection.createIndex({ client_id: 1 }, { unique: true }); //req
 
                 // Check for duplicate client (by email or phone)
-                const existingClient = await collection.findOne({
+                var  existingClient = await collection.findOne({
                     $or: [
                         { email: details.email },
                         { phone: details.phone }
                     ]
                 });
-            
-                if (existingClient) return reject("Client already exists with this email or phone");
+                if(!existingClient)
+                {
+                    existingClient = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).findOne({
+                        $or: [
+                            { email: details.email },       
+                            { phone: details.phone }
+                        ]
+                    });
+                }
+               
+            if (existingClient) return reject("Client already exists with this email or phone");
                 // Get next client number atomically
                 const newNumber = await getNextSequence('customer_id');
                 const client_id = `AECID${String(newNumber).padStart(5, '0')}`;
@@ -149,6 +157,8 @@ module.exports = {
             }
         });
     },
+
+
     assignOfficerToLead: async (clientId, officerId) => {
         return new Promise(async (resolve, reject) => {
             try {
@@ -208,10 +218,8 @@ module.exports = {
 
             if (data.client_status && (data.client_status != null || data.client_status !== '')) {
                 if (data.client_status === 'DEAD') {
-                    console.log("Moving client to DEAD_CUSTOMERS collection:", data.client_id);
                     // Move to DEAD_CUSTOMERS
                     const clientDoc = await customersCollection.findOne({ _id: new ObjectId(data.client_id) });
-                    console.log("Client document found:", clientDoc);
                     if (clientDoc) {
                         clientDoc.status = 'DEAD';
                     }
@@ -276,27 +284,209 @@ module.exports = {
     });
     },
 
+    updateCustomerStatus: async (data, officerId) => {
+    return new Promise(async (resolve, reject) => {
+    try {
+      const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+      const customerActivityCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
+
+      if (data.client_status && data.client_status !== 'null' && data.client_status !== '') {
+        const clientId = new ObjectId(data.client_id);
+
+        if (data.client_status === 'DEAD') {
+          const clientDoc = await customersCollection.findOne({ _id: clientId });
+
+          if (!clientDoc) return reject("Client not found");
+
+          const insertResult = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).insertOne({
+            ...clientDoc,
+            status: 'DEAD',
+            moved_to_dead_at: new Date(),
+            dead_reason: data.comment || '',
+            moved_by: officerId
+          });
+
+          if (!insertResult.acknowledged) {
+            return reject("Failed  to do action");
+          }
+
+          await customersCollection.deleteOne({ _id: clientId });
+
+          // Log activity
+          await customerActivityCollection.insertOne({
+            type: 'status_update',
+            client_id: clientId,
+            officer_id: officerId,
+            new_status: 'DEAD',
+            comment: data.comment || '',
+            created_at: new Date()
+          });
+
+          return resolve("sucessfull");
+        } else {
+          // Update client status
+          const existingClient = await customersCollection.findOne({ _id: clientId });
+          if (!existingClient) return reject("Client not found");
+
+          const updateResult = await customersCollection.updateOne(
+            { _id: clientId },
+            { $set: { status: data.client_status } }
+          );
+
+          if (updateResult.modifiedCount > 0) {
+            // Log activity
+            await customerActivityCollection.insertOne({
+              type: 'status_update',
+              client_id: clientId,
+              officer_id: officerId,
+              client_status: data.client_status,
+              comment: data.comment,
+              created_at: new Date()
+            });
+
+            return resolve("Client status updated and logged");
+          } else {
+            return reject("No changes made or client not found");
+          }
+        }
+      } else {
+        return reject("Invalid or empty client status");
+      }
+    } catch (err) {
+      return reject("Error updating client status");
+    }
+  });
+  },    
+
+   restoreClientFromDeadAndAssignOfficer: async (deadClientId, officerId = null,comment) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const dbConn = db.get();
+            const deadCustomersCollection = dbConn.collection(COLLECTION.DEAD_CUSTOMERS);
+            const customersCollection = dbConn.collection(COLLECTION.CUSTOMERS);
+            const activityCollection = dbConn.collection(COLLECTION.CUSTOMER_ACTIVITY);
+            const officersCollection = dbConn.collection(COLLECTION.OFFICERS);
+
+            // 1. Fetch the dead client
+            const deadClient = await deadCustomersCollection.findOne({ _id: new ObjectId(deadClientId) });
+            if (!deadClient) return reject("Dead client not found");
+
+            // 2. Prepare client for restoration
+            deadClient.status = 'FOLLOWUP';
+            deadClient.updated_at = new Date();
+            // 3. Optional: Assign officer info if officerId is provided
+            let officerObjectId = null;
+            if (officerId) {
+                const officer = await officersCollection.findOne(
+                    { _id: new ObjectId(officerId) },
+                    { projection: { _id: 1, designation: 1 } }
+                );
+
+                if (officer) {
+                    officerObjectId = new ObjectId(officer._id);
+                    deadClient.assigned_to = officerObjectId;
+
+                    if (
+                        Array.isArray(officer.designation) &&
+                        (officer.designation.includes(4) || officer.designation.includes(5))
+                    ) {
+                        deadClient.recruiter_id = officerObjectId;
+                    }
+                }
+            }
+
+            // 4. Insert back to CUSTOMERS
+            const insertResult = await customersCollection.insertOne(deadClient);
+            if (!insertResult.acknowledged) return reject("Failed to restore client");
+
+            // 5. Delete from DEAD_CUSTOMERS
+            await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
+
+            // 6. Log activity
+            await activityCollection.insertOne({
+                type: 'client_restored',
+                client_id:ObjectId( deadClient._id),
+                officer_id: officerObjectId, // Can be null
+                created_at: new Date(),
+                note: comment
+            });
+
+            resolve("Client restored successfully");
+
+        } catch (err) {
+            console.error(err);
+            reject("Error restoring client");
+        }
+    });
+    },
+
+
+    updateLead: async (id, details) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const collection = db.get().collection(COLLECTION.CUSTOMERS);
+                const customerId = new ObjectId(id);
+
+                const updateFields = {};
+                const allowedFields = [
+                    "name", "email", "phone", "alternate_phone", "whatsapp",
+                    "gender", "dob", "matrial_status", "address", "city", "state", "country",
+                    "job_interests", "country_interested", "expected_salary", "qualification",
+                    "university", "passing_year", "experience", "skills", "profession", "specialized_in",
+                   "service_type",
+                    "on_call_communication", "on_whatsapp_communication", "on_email_communication"
+                ];
+
+                allowedFields.forEach(field => {
+                    const value = details[field];
+                    if (value !== undefined && value !== null && value !== '') {
+                        updateFields[field] = value;
+                    }
+                });
+
+                if (Object.keys(updateFields).length === 0) {
+                    return reject("No valid fields to update");
+                }
+                updateFields.updated_at = new Date();
+                const result = await collection.updateOne(
+                    { _id: customerId },
+                    { $set: updateFields }
+                );
+                if (result.matchedCount === 0) {
+                    return reject("Customer not found");
+                } else if (result.modifiedCount === 0) {
+                    return reject("No changes were made");
+                }
+
+                return resolve("Customer updated successfully");
+
+            } catch (err) {
+                console.error(err);
+                return reject("Error updating customer");
+            }
+        });
+    } ,
 
 
 
     // Get all leads/clients with flexible filtering
-    getAllLeads: async (filters = {}) => {
+    getAllLeads: async (filters) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const collection = db.get().collection(COLLECTION.CUSTOMERS);
-                const query = {};
-                Object.keys(filters).forEach(key => {
-                    if (Array.isArray(filters[key]) && filters[key].length > 0) {
-                        // If the filter value is an array, use $in operator
-                        query[key] = { $in: filters[key] };
-                    } else if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-                        // For single value filters
-                        query[key] = filters[key];
-                    }
-                });
+                
+                // const query = {};
+                // Object.keys(filters).forEach(key => {
+                //     if (Array.isArray(filters[key]) && filters[key].length > 0) {
+                //         // If the filter value is an array, use $in operator
+                //         query[key] = { $in: filters[key] };
+                //     } else if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+                //         // For single value filters
+                //         query[key] = filters[key];
+                //     }
+                // });
 
                 // Project only basic information
-                const projection = {
+                const customers = await db.get().collection(COLLECTION.CUSTOMERS).find().project( {
                     _id: 1,
                     client_id: 1,
                     name: 1,
@@ -306,9 +496,30 @@ module.exports = {
                     lead_source: 1,
                     assigned_to: 1,
                     created_at: 1
-                };
+                }).toArray();
+                resolve(customers);
+            } catch (err) {
+                console.error(err);
+                reject("Error fetching customers");
+            }
+        });
+    },
 
-                const customers = await collection.find(query).project(projection).toArray();
+     getDeadLeads: async (filters) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+
+                const customers = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).find().project( {
+                    _id: 1,
+                    client_id: 1,
+                    name: 1,
+                    email: 1,
+                    phone: 1,
+                    status: 1,
+                    lead_source: 1,
+                    assigned_to: 1,
+                    created_at: 1
+                }).toArray();
                 resolve(customers);
             } catch (err) {
                 console.error(err);
@@ -317,175 +528,95 @@ module.exports = {
         });
     },
     
+    
 
     // Get lead/client by ID
     getClient: async (id) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
-                const lead = await collection.findOne({ _id: new ObjectId(id) });
+                var  lead = await db.get().collection(COLLECTION.CUSTOMERS).findOne({ _id: new ObjectId(id) });
+                if (!lead) {
+                    lead = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).findOne({ _id: new ObjectId(id) });
+                }
                 if (lead) {
                     resolve(lead);
                 } else {
-                    reject("Lead not found");
+                    reject("Customer not found");
                 }
             } catch (err) {
-                console.error(err);
+
                 reject("Error fetching lead");
             }
         });
     },
+    
 
-    // Update lead/client
-    updateLead: async (id, updates) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
+    // // Update lead/client
+    // updateLead: async (id, updates) => {
+    //     return new Promise(async (resolve, reject) => {
+    //         try {
+    //             const collection = db.get().collection(COLLECTION.CLIENTS);
 
-                // If updating email or phone, check for duplicates
-                if (updates.email || updates.phone) {
-                    const query = { _id: { $ne: new ObjectId(id) }, $or: [] };
-                    if (updates.email) query.$or.push({ email: updates.email });
-                    if (updates.phone) query.$or.push({ phone: updates.phone });
+    //             // If updating email or phone, check for duplicates
+    //             if (updates.email || updates.phone) {
+    //                 const query = { _id: { $ne: new ObjectId(id) }, $or: [] };
+    //                 if (updates.email) query.$or.push({ email: updates.email });
+    //                 if (updates.phone) query.$or.push({ phone: updates.phone });
 
-                    if (query.$or.length > 0) {
-                        const duplicate = await collection.findOne(query);
-                        if (duplicate) return reject("Email or phone already in use by another client");
-                    }
-                }
+    //                 if (query.$or.length > 0) {
+    //                     const duplicate = await collection.findOne(query);
+    //                     if (duplicate) return reject("Email or phone already in use by another client");
+    //                 }
+    //             }
 
-                updates.updated_at = new Date();
+    //             updates.updated_at = new Date();
 
-                // Handle reassignment if needed
-                if (updates.assigned_to === 'auto_assign') {
-                    const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-                    const officers = await officersCollection.find({ status: 'active' }).toArray();
+    //             // Handle reassignment if needed
+    //             if (updates.assigned_to === 'auto_assign') {
+    //                 const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+    //                 const officers = await officersCollection.find({ status: 'active' }).toArray();
 
-                    if (officers.length > 0) {
-                        const counterCollection = db.get().collection(COLLECTION.COUNTERS);
-                        const assignmentCounter = await counterCollection.findOne({ _id: 'officer_assignment' });
+    //                 if (officers.length > 0) {
+    //                     const counterCollection = db.get().collection(COLLECTION.COUNTERS);
+    //                     const assignmentCounter = await counterCollection.findOne({ _id: 'officer_assignment' });
 
-                        let lastIndex = 0;
-                        if (assignmentCounter) {
-                            lastIndex = assignmentCounter.sequence % officers.length;
-                        }
+    //                     let lastIndex = 0;
+    //                     if (assignmentCounter) {
+    //                         lastIndex = assignmentCounter.sequence % officers.length;
+    //                     }
 
-                        updates.assigned_to = officers[lastIndex]._id.toString();
+    //                     updates.assigned_to = officers[lastIndex]._id.toString();
 
-                        await counterCollection.updateOne(
-                            { _id: 'officer_assignment' },
-                            { $inc: { sequence: 1 } },
-                            { upsert: true }
-                        );
-                    } else {
-                        updates.assigned_to = null;
-                    }
-                }
+    //                     await counterCollection.updateOne(
+    //                         { _id: 'officer_assignment' },
+    //                         { $inc: { sequence: 1 } },
+    //                         { upsert: true }
+    //                     );
+    //                 } else {
+    //                     updates.assigned_to = null;
+    //                 }
+    //             }
 
-                const result = await collection.updateOne(
-                    { _id: new ObjectId(id) },
-                    { $set: updates }
-                );
+    //             const result = await collection.updateOne(
+    //                 { _id: new ObjectId(id) },
+    //                 { $set: updates }
+    //             );
 
-                if (result.matchedCount === 0) {
-                    reject("Lead not found");
-                } else if (result.modifiedCount === 0) {
-                    resolve("No changes made");
-                } else {
-                    resolve("Lead updated successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error updating lead");
-            }
-        });
-    },
+    //             if (result.matchedCount === 0) {
+    //                 reject("Lead not found");
+    //             } else if (result.modifiedCount === 0) {
+    //                 resolve("No changes made");
+    //             } else {
+    //                 resolve("Lead updated successfully");
+    //             }
+    //         } catch (err) {
+    //             console.error(err);
+    //             reject("Error updating lead");
+    //         }
+    //     });
+    // },
 
-    // Add interaction/note to lead
-    addLeadInteraction: async (leadId, interaction) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
-                const interactionObj = {
-                    ...interaction,
-                    created_at: new Date(),
-                    id: new ObjectId()
-                };
-
-                const result = await collection.updateOne(
-                    { _id: new ObjectId(leadId) },
-                    {
-                        $push: { interaction_history: interactionObj },
-                        $set: { updated_at: new Date() }
-                    }
-                );
-
-                if (result.matchedCount === 0) {
-                    reject("Lead not found");
-                } else {
-                    resolve("Interaction added successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error adding interaction");
-            }
-        });
-    },
-
-    // Update lead status
-    updateLeadStatus: async (leadId, status) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
-                const result = await collection.updateOne(
-                    { _id: new ObjectId(leadId) },
-                    {
-                        $set: {
-                            lead_status: status,
-                            updated_at: new Date()
-                        }
-                    }
-                );
-
-                if (result.matchedCount === 0) {
-                    reject("Lead not found");
-                } else {
-                    resolve("Lead status updated successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error updating lead status");
-            }
-        });
-    },
-
-    // Update lead stage (lead → qualified lead → opportunity → customer)
-    updateLeadStage: async (leadId, stage) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
-                const result = await collection.updateOne(
-                    { _id: new ObjectId(leadId) },
-                    {
-                        $set: {
-                            stage: stage,
-                            updated_at: new Date()
-                        }
-                    }
-                );
-
-                if (result.matchedCount === 0) {
-                    reject("Lead not found");
-                } else {
-                    resolve("Lead stage updated successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error updating lead stage");
-            }
-        });
-    },
-
+  
     // Add additional information to lead
     addAdditionalInfo: async (leadId, additionalInfo) => {
         return new Promise(async (resolve, reject) => {

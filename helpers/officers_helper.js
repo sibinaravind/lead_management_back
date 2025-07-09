@@ -166,102 +166,6 @@ createOfficer : async (details) => {
   }
 },
 
-
-
-// listOfficers:async () => {
-//   return new Promise(async (resolve, reject) => {
-//     try {
-//       const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
-//         // Join configs collection
-//         {
-//       $lookup: {
-//         from: "config",
-//         let: { designationCodes: "$designation" }, // assuming [2, 3, ...]
-//         pipeline: [
-//           { $match: { name: "constants" } },
-//           {
-//             $project: {
-//               designation: {
-//                 $filter: {
-//                   input: "$designation",
-//                   as: "d",
-//                   cond: { $in: ["$$d.code", "$$designationCodes"] }
-//                 }
-//               }
-//             }
-//           }
-//         ],
-//         as: "designationData"
-//       }
-//     },
-//         // Flatten designationData.matchedDesignations directly into designation
-//         // {
-//         //   $addFields: {
-//         //     designation: {
-//         //       $cond: [
-//         //         { $gt: [{ $size: "$designationData" }, 0] },
-//         //         { $arrayElemAt: ["$designationData.matchedDesignations", 0] },
-//         //         []
-//         //       ]
-//         //     }
-//         //   }
-//         // },
-//         // {
-//         //   $project: {
-//         //     officer_id: 1,
-//         //     name: 1,
-//         //     status: 1,
-//         //     gender: 1,
-//         //     phone: 1,
-//         //     company_phone_number: 1,
-//         //     designation: 1, // enriched designation list
-//         //     department: 1,
-//         //     branch: 1,
-//         //     officers: 1,
-//         //     created_at: 1
-//         //   }
-//         // }
-//       ]).toArray();
-
-//       resolve(officers);
-//     } catch (error) {
-//       console.error("Aggregation Error:", error);
-//       reject("Error processing request");
-//     }
-//   });
-// },
-
-// List Officers
-// listOfficers: () => {
-//   return new Promise(async (resolve, reject) => {
-//     try {
-//       console.log("Fetching officers list");
-//       resolve(await db.get().collection(COLLECTION.OFFICERS)
-//         .find(
-//         {},
-//           {
-//             projection: {
-//               officer_id: 1,
-//               name: 1,
-//               status: 1,
-//               gender: 1,
-//               phone: 1,
-//               company_phone_number: 1,
-//               designation: 1,
-//               department: 1,
-//               branch: 1,
-//               officers:1,
-//               created_at: 1,
-//             }
-//           }
-//         )
-//         .toArray());
-//     } catch (error) {
-//       reject("Error processing request");
-//     }
-//   });
-// },
-
 // Edit Officer
 editOfficer : async (id, details) => {
   return new Promise(async (resolve, reject) => {
@@ -295,6 +199,30 @@ editOfficer : async (id, details) => {
   });
 },
 
+updateOfficerPassword: async (id, details) => {
+  try {
+    const collection = db.get().collection(COLLECTION.OFFICERS);
+    const officer = await collection.findOne({ _id: ObjectId(id) });
+    if (!officer) throw "Officer not found";
+
+    const isMatch = await bcrypt.compare(details.current_password.toString(), officer.password);
+    if (!isMatch) throw "Current password does not match";
+
+    const hashedPassword = await bcrypt.hash(details.new_password.toString(), SALT_ROUNDS);
+    const result = await collection.updateOne(
+      { _id: ObjectId(id) },
+      { $set: { password: hashedPassword } }
+    );
+    if (result.modifiedCount > 0) {
+      return "Password updated";
+    } else {
+      throw "Password unchanged";
+    }
+  } catch (error) {
+    throw error || "Error processing request";
+  }
+},
+
 
 deleteOfficer: async (id) => {
   return new Promise(async (resolve, reject) => {
@@ -311,6 +239,8 @@ deleteOfficer: async (id) => {
     }
   });
 },
+
+
 addOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -433,6 +363,102 @@ listLeadOfficers: () => {
 
 }
 
+
+
+
+// listOfficers:async () => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
+//         // Join configs collection
+//         {
+//       $lookup: {
+//         from: "config",
+//         let: { designationCodes: "$designation" }, // assuming [2, 3, ...]
+//         pipeline: [
+//           { $match: { name: "constants" } },
+//           {
+//             $project: {
+//               designation: {
+//                 $filter: {
+//                   input: "$designation",
+//                   as: "d",
+//                   cond: { $in: ["$$d.code", "$$designationCodes"] }
+//                 }
+//               }
+//             }
+//           }
+//         ],
+//         as: "designationData"
+//       }
+//     },
+//         // Flatten designationData.matchedDesignations directly into designation
+//         // {
+//         //   $addFields: {
+//         //     designation: {
+//         //       $cond: [
+//         //         { $gt: [{ $size: "$designationData" }, 0] },
+//         //         { $arrayElemAt: ["$designationData.matchedDesignations", 0] },
+//         //         []
+//         //       ]
+//         //     }
+//         //   }
+//         // },
+//         // {
+//         //   $project: {
+//         //     officer_id: 1,
+//         //     name: 1,
+//         //     status: 1,
+//         //     gender: 1,
+//         //     phone: 1,
+//         //     company_phone_number: 1,
+//         //     designation: 1, // enriched designation list
+//         //     department: 1,
+//         //     branch: 1,
+//         //     officers: 1,
+//         //     created_at: 1
+//         //   }
+//         // }
+//       ]).toArray();
+
+//       resolve(officers);
+//     } catch (error) {
+//       console.error("Aggregation Error:", error);
+//       reject("Error processing request");
+//     }
+//   });
+// },
+
+// List Officers
+// listOfficers: () => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       console.log("Fetching officers list");
+//       resolve(await db.get().collection(COLLECTION.OFFICERS)
+//         .find(
+//         {},
+//           {
+//             projection: {
+//               officer_id: 1,
+//               name: 1,
+//               status: 1,
+//               gender: 1,
+//               phone: 1,
+//               company_phone_number: 1,
+//               designation: 1,
+//               department: 1,
+//               branch: 1,
+//               officers:1,
+//               created_at: 1,
+//             }
+//           }
+//         )
+//         .toArray());
+//     } catch (error) {
+//       reject("Error processing request");
+//     }
+//   });
+// },
 
 
 

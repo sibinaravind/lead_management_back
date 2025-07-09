@@ -27,6 +27,12 @@ app.post("/login", (req, res) => {
     officersHelper.loginOfficer(req.body.officer_id, req.body.password)
   );
 });    
+app.patch("/resetPassword/:id", (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.updateOfficerPassword(req.params.id,req.body)
+  );
+});  
+
 app.delete("/delete/:id", (req, res) => {
   return response.handle(res, () =>
     officersHelper.deleteOfficer(req.params.id)

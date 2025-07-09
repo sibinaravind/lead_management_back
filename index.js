@@ -93,10 +93,31 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 
 // // ACTIVE ,INACTIVE,DELETED,BLOCKED,UNASSIGNED
 
-//  HOT, DEAD, UNASSIGNED,
+//  HOT, DEAD, UNASSIGNED,FOLLOWUP, FUTURE
 
 
 // thinsg to do
 /*** 
  check dead lead while insert lead
  *    ***/
+
+
+ /***
+  *  {          type: 'status_update',
+                type: 'officer_assigned',
+                type: 'call_event',
+                type: 'client_restored'
+                client_id: new ObjectId(data.client_id),
+                officer_id: officerId,
+                duration: data.duration || 0,
+                next_schedule: data.next_schedule || null,
+                client_status: data.client_status || '',
+                comment: data.comment || '',
+                call_type: data.call_type || '',
+                call_status: data.call_status || '',
+                created_at: new Date()
+               
+             
+
+
+  */
