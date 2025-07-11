@@ -55,4 +55,15 @@ app.get("/getAllDeadLeads", middleware.checkToken, (req, res) => {
     leadHelper.getDeadLeads()
   );
 });
+
+app.post("/add_mobile_call_log", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.logMobileCallEvent(req.body)
+  );
+});
+app.get("/get_call_log", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getCallLogs()
+  );
+});
 module.exports = app;

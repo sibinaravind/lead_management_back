@@ -102,6 +102,7 @@ module.exports = {
                     name: details.name,
                     email: details.email,
                     phone: details.phone,
+                    country_code:details.country_code || null,
                     alternate_phone: details.alternate_phone || null,
                     whatsapp: details.whatsapp || null,
                     gender: details.gender || null,
@@ -211,6 +212,8 @@ module.exports = {
             }
         });
     },
+
+
    logCallEvent: async (data, officerId) => {
     return new Promise(async (resolve, reject) => {
         try {
@@ -283,6 +286,62 @@ module.exports = {
         }
     });
     },
+  logMobileCallEvent: async (data) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_CUSTOMERS);
+      const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+      const normalizedPhone = data.phone.toString().replace(/^\+?91/, '').trim();
+      const clientDoc = await customersCollection.findOne({
+        phone: normalizedPhone
+      });
+
+      // Optional: check DEAD_CUSTOMERS for same phone
+      if (clientDoc) {
+        await deadCustomersCollection.findOne({ phone: normalizedPhone });
+      }
+
+      // 📞 Log the call event
+      const insertResult = await callLogCollection.insertOne({
+        type: 'call_event',
+        client_id: clientDoc ? clientDoc._id : null,
+        officer_id: data.officer_id || null,
+        phone: normalizedPhone, // Store the normalized phone
+        duration: parseFloat(data.duration || 0),
+        call_type: data.call_type || '',
+        created_at: new Date()
+      });
+
+      if (insertResult.acknowledged) {
+        resolve("Call event logged successfully");
+      } else {
+        reject("Failed to log call event");
+      }
+
+    } catch (err) {
+      console.error(err);
+      reject("Error logging call event");
+    }
+  });
+  },
+
+getCallLogs: async () => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+            const logs = await callLogCollection.find()
+                .sort({ created_at: -1 })
+                .toArray();
+            resolve(logs);
+        } catch (err) {
+            console.error(err);
+            reject("Error fetching call logs");
+        }
+    });
+},
+
+
 
     updateCustomerStatus: async (data, officerId) => {
     return new Promise(async (resolve, reject) => {
@@ -429,7 +488,7 @@ module.exports = {
 
                 const updateFields = {};
                 const allowedFields = [
-                    "name", "email", "phone", "alternate_phone", "whatsapp",
+                    "name", "email", "phone", "alternate_phone", "whatsapp","country_code",
                     "gender", "dob", "matrial_status", "address", "city", "state", "country",
                     "job_interests", "country_interested", "expected_salary", "qualification",
                     "university", "passing_year", "experience", "skills", "profession", "specialized_in",
@@ -492,6 +551,7 @@ module.exports = {
                     name: 1,
                     email: 1,
                     phone: 1,
+                    country_code: 1,
                     status: 1,
                     lead_source: 1,
                     assigned_to: 1,
@@ -514,6 +574,7 @@ module.exports = {
                     client_id: 1,
                     name: 1,
                     email: 1,
+                    country_code: 1,
                     phone: 1,
                     status: 1,
                     lead_source: 1,

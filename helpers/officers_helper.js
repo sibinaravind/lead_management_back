@@ -520,14 +520,20 @@ listAllRoundRobin: async () => {
           $project: {
             name: 1,
             country: 1,
-            officers: 1,
+          
             officer_details: {
-              _id: { $toString: "$_id" },
-              name: 1,
-              phone: 1,
-              company_phone_number: 1,
-              branch:1,
-              designation:1
+              $map: {
+                input: "$officer_details",
+                as: "officer",
+                in: {
+                  _id: { $toString: "$$officer._id" },
+                  name: "$$officer.name",
+                  phone: "$$officer.phone",
+                  company_phone_number: "$$officer.company_phone_number",
+                  branch: "$$officer.branch",
+                  designation: "$$officer.designation"
+                }
+              }
             }
           }
         }

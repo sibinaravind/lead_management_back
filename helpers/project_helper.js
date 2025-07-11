@@ -187,7 +187,6 @@ module.exports = {
         });
     },
     editVacancyClient: async (projectId, clientId, updateFields) => {
-
         return new Promise(async (resolve, reject) => {
             try {
                 const projectCollection = db.get().collection(COLLECTION.VACANCIES);
