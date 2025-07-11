@@ -11,9 +11,8 @@ module.exports = {
         return new Promise(async (resolve, reject) => {
             try {
                 const collection = db.get().collection(COLLECTION.CLIENTS);
-
                 // // Ensure unique index on client_id (run once in your setup/migration scripts)
-                // await collection.createIndex({ client_id: 1 }, { unique: true });
+                // await collection.createIndex({ client_id: 1 }, { unique: true }); //req
 
                 // Check for duplicate client (by email or phone)
                 const existingClient = await collection.findOne({
@@ -90,17 +89,16 @@ module.exports = {
 
 
     // Create Job Vacancy as Project using next unique sequence
-    createProject: async (details) => {
+    createVacancy: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const collection = db.get().collection(COLLECTION.PROJECTS);
+                const collection = db.get().collection(COLLECTION.VACANCIES);
                 // Get next project number atomically
-                const newNumber = await getNextSequence('project_id');
-                const project_id = `AEPID${String(newNumber).padStart(5, '0')}`;
-
+                const newNumber = await getNextSequence('vacancy_id');
+                const vacancy_id = `AEVID${String(newNumber).padStart(5, '0')}`;
                 // Insert job vacancy as a project
                 const result = await collection.insertOne({
-                    project_id: project_id,
+                    vacancy_id: vacancy_id,
                     job_title: details.job_title,
                     job_category: details.job_category,
                     qualifications: details.qualifications,
@@ -129,10 +127,9 @@ module.exports = {
     },
 
     // Edit Project
-    editProject: async (projectId, updateFields) => {
+    editVacancy: async (projectId, updateFields) => {
         return new Promise(async (resolve, reject) => {
             try {
-
 
                 const result = await db.get().collection(COLLECTION.PROJECTS).updateOne(
                     { _id: ObjectId(projectId) },
@@ -151,7 +148,7 @@ module.exports = {
     },
 
 
-    addClientToProject: async (projectId, clientList) => {
+    addClientToVacancy: async (projectId, clientList) => {
         return new Promise(async (resolve, reject) => {
             try {
 
@@ -189,11 +186,11 @@ module.exports = {
             }
         });
     },
-    editProjectClient: async (projectId, clientId, updateFields) => {
+    editVacancyClient: async (projectId, clientId, updateFields) => {
 
         return new Promise(async (resolve, reject) => {
             try {
-                const projectCollection = db.get().collection(COLLECTION.PROJECTS);
+                const projectCollection = db.get().collection(COLLECTION.VACANCIES);
 
                 // Update the specificclient in the client array
                 const result = await projectCollection.updateOne(
@@ -228,10 +225,10 @@ module.exports = {
         });
     },
 
-    removeClientFromProject: async (projectId, clientId) => {
+    removeClientFromVacancy: async (projectId, clientId) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const collection = db.get().collection(COLLECTION.PROJECTS);
+                const collection = db.get().collection(COLLECTION.VACANCIES);
                 // Find the project to get the current client list
                 const project = await collection.findOne({ _id: ObjectId(projectId) });
                 if (!project) return reject("Project not found");
@@ -264,7 +261,7 @@ module.exports = {
         )
     },
 
-    getlatestProjectList: async () => {
+    getlatestVacancyList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
                 // Use only the date part for comparison (ignore time)
@@ -272,7 +269,7 @@ module.exports = {
                 today.setHours(0, 0, 0, 0);
 
                 // Use $expr to compare only the date part of lastdatetoapply
-                const projects = await db.get().collection(COLLECTION.PROJECTS).find(
+                const projects = await db.get().collection(COLLECTION.VACANCIES).find(
                     {
                         $expr: {
                             $gte: [
@@ -298,10 +295,10 @@ module.exports = {
             }
         });
     },
-    getAllProjects: async () => {
+    getAllVacancy: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-                const projects = await db.get().collection(COLLECTION.PROJECTS).find({}, {
+                const projects = await db.get().collection(COLLECTION.VACANCIES).find({}, {
                     projection: {
                         client: 0,
                     }
@@ -313,10 +310,10 @@ module.exports = {
             }
         });
     },
-    getProjectDeatils: async (projectId) => {
+    getVacancyDeatils: async (projectId) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const collection = db.get().collection(COLLECTION.PROJECTS);
+                const collection = db.get().collection(COLLECTION.VACANCIES);
                 const project = await collection.findOne();
                 if (!project) return reject("Project not found");
                 resolve(project);
@@ -326,11 +323,11 @@ module.exports = {
             }
         });
     },
-     getProjectListWithClientDetails: async (projectId) => {
+     getVacancyListWithClientDetails: async (projectId) => {
         return new Promise(async (resolve, reject) => {
           
             try {
-                const projects = await db.get().collection(COLLECTION.PROJECTS).aggregate([
+                const projects = await db.get().collection(COLLECTION.VACANCIES).aggregate([
                     { $match: { _id: ObjectId(projectId) } },
                     {
                         $lookup: {

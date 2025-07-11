@@ -47,19 +47,68 @@ app.get("/listLeadOfficers", middleware.checkToken, (req, res) => {
 app.patch("/addOfficerToLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     officersHelper.addOfficerUnderOfficer(
-      req.body.lead_officer_id,
-      req.body.officer_id
+      req.body
+    )
+  );
+});  
+
+app.patch("/editOfficerToLead", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.editOfficerLeadPermission(
+      req.body
     )
   );
 });  
 app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    officersHelper.removeOfficerUnderOfficer(
+    officersHelper.deleteOfficerUnderOfficer(
       req.body.lead_officer_id,
       req.body.officer_id
     )
   );
 });  
 
+app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.deleteOfficerUnderOfficer(
+      req.body.lead_officer_id,
+      req.body.officer_id
+    )
+  );
+});  
+
+app.post("/insertRoundRobin", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.insertRoundRobin(
+      req.body
+    )
+  );
+});  
+app.get("/listRoundRobin", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.listAllRoundRobin()
+  );
+});
+app.patch("/insertStaffToRoundRobin", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.insertStaffToRoundRobin(
+      req.body
+    )
+  );
+});  
+app.patch("/removeStaffFromRoundRobin", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.removeStaffFromRoundRobin(
+      req.body
+    )
+  );
+});  
+app.delete("/deleteRoundRobin/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    officersHelper.deleteRoundRobin(
+      req.params.id
+    )
+  );
+}); 
 
 module.exports = app;

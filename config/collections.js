@@ -7,11 +7,14 @@ module.exports={
     CLIENTS:'clients',
     COUNTER: 'counter',
     PROJECTS: 'projects',
+    VACANCIES: 'vacancies',
     CUSTOMERS:'customers',
     LEADS: 'leads',
     CAMPAIGNS: 'campaigns',
     CUSTOMER_ACTIVITY: 'customer_activity',
     DEAD_CUSTOMERS: 'dead_customers',
+    ROUNDROBIN: 'roundrobin',
+    
    
 
 }

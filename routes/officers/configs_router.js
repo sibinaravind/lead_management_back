@@ -17,7 +17,16 @@ app.patch("/edit_configList", middleware.checkToken, (req, res) => {
   );
 });
 
-
+app.post("/insert_accesspermission", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    configHelper.insertAccessPermissionList(req.body)
+  );
+});
+app.delete("/delete_accesspermission", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    configHelper.deleteAccessPermission(req.body.category)
+  );
+});
 app.get("/access_permission", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     configHelper.accessPermissionList()

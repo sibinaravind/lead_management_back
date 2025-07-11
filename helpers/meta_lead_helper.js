@@ -34,7 +34,7 @@ async function getPageAccessToken() {
 module.exports = {
   fetchFormsAndLeadsInsert: async () => {
     const collection = db.get().collection(COLLECTION.LEADS);
-    await collection.createIndex({ leadId: 1 }, { unique: true });
+    // await collection.createIndex({ leadId: 1 }, { unique: true }); //req
 
     const summary = [];
 

@@ -23,15 +23,16 @@ app.get("/clientList", middleware.checkToken, (req, res) => {
     projecthelper.getClientList()
   );
 });
-app.post("/createProject", middleware.checkToken, (req, res) => {
 
+
+app.post("/createVacancy", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.createProject(req.body)
+    projecthelper.createVacancy(req.body)
   );
 });
-app.get("/ongoingProjectList", middleware.checkToken, (req, res) => {
+app.get("/ongoingVacanList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.getlatestProjectList()
+    projecthelper.getlatestVacancyList()
   );
 });
 app.get("/projectList", middleware.checkToken, (req, res) => {
