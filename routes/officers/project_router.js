@@ -23,6 +23,34 @@ app.get("/clientList", middleware.checkToken, (req, res) => {
     projecthelper.getClientList()
   );
 });
+app.delete("/deleteClient/:_id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.deleteClient(req.params._id)
+  );
+});
+
+
+app.post("/clientProject", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.createProject(req.body)
+  );
+});
+
+app.patch("/projectUpdate/:_id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.editProject(req.params._id, req.body)
+  );
+});
+app.get("/projectList", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.getProjectList()
+  );
+});
+app.delete("/deleteProject/:_id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.deletePoject(req.params._id)
+  );
+});
 
 
 app.post("/createVacancy", middleware.checkToken, (req, res) => {
@@ -30,44 +58,51 @@ app.post("/createVacancy", middleware.checkToken, (req, res) => {
     projecthelper.createVacancy(req.body)
   );
 });
-app.get("/ongoingVacanList", middleware.checkToken, (req, res) => {
+app.patch("/editVacancy/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.getlatestVacancyList()
+    projecthelper.editVacancy(req.params._id, req.body)
   );
 });
-app.get("/projectList", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>  
-    projecthelper.getAllProjects()
-  );
-});
-app.get("/projectDetails/:_id", middleware.checkToken, (req, res) => { //test we have to add based on these permissions the data 
+
+app.post("/insertClient/:vacancyId", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.getProjectDeatils(req.params._id)
+    projecthelper.insertClientsToVacancy(req.params.vacancyId, req.body.clients)
   );
 });
-app.get("/projectDetailsWithClientInfo/:_id", middleware.checkToken, (req, res) => { //test we have to add based on these permissions the data 
+app.delete("/removeClient", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.getProjectListWithClientDetails(req.params._id)
+    projecthelper.removeClientFromVacancy(req.body.vacancyId, req.body.clientId)
   );
 });
-app.patch("/projectUpdate/:_id", middleware.checkToken, (req, res) => {
+app.get("/getClientListOnVacancy/:vacancyId", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.editProject(req.params._id, req.body)
+    projecthelper.getClientDetailsWithVacancyData(req.params.vacancyId)
   );
 });
-app.post("/clientProjectInsert", middleware.checkToken, (req, res) => {
+
+app.patch("/editClientInVacancy/:vacancyId", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.addClientToProject(req.body.project_id, req.body.clients)
+    projecthelper.editClientsInVacancy(req.params.vacancyId, req.body.clients)
   );
 });
-app.patch("/updateProjectClient/:_id", middleware.checkToken, (req, res) => {
+
+app.delete("/deleteVacancy/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.editProjectClient(req.params._id,req.body.client_id , req.body.update_fields)
+    projecthelper.deleteVacancy(req.params._id)
   );
 });
-app.patch("/removeClientFromProject/:_id", middleware.checkToken, (req, res) => {
+
+app.get("/vacancyList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.removeClientFromProject(req.params._id,req.body.client_id )
+    projecthelper.getVacancyList()
   );
 });
+
+app.get("/vacancyListByClient/:clientId", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.getVacancyListByClient(req.params.clientId)
+  );
+});
+
+
 module.exports = app;
