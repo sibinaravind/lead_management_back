@@ -1,352 +1,148 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-const e = require('express');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
-
+const { leadSchema } = require("../validations/leadValidation");
+const validatePartial = require("../utils/validatePartial");
+const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 // Helper to get next sequence number
 
 module.exports = {
-    // Create Client/Lead
     createLead: async (details) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CUSTOMERS);
-                const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-                // await collection.createIndex({ client_id: 1 }, { unique: true }); //req
-
-                // Check for duplicate client (by email or phone)
-                var  existingClient = await collection.findOne({
-                    $or: [
-                        { email: details.email },
-                        { phone: details.phone }
-                    ]
-                });
-                if(!existingClient)
-                {
-                    existingClient = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).findOne({
-                        $or: [
-                            { email: details.email },       
-                            { phone: details.phone }
-                        ]
-                    });
-                }
-               
-            if (existingClient) return reject("Client already exists with this email or phone");
-                // Get next client number atomically
-                const newNumber = await getNextSequence('customer_id');
-                const client_id = `AECID${String(newNumber).padStart(5, '0')}`;
-                // Handle automatic round-robin assignment if no assigned_to is provided
-                if (!details.assigned_to) {
-                    const officers = await officersCollection.find({
-                        designation: { $in: [4,5] }
-                    }).toArray();
-                
-                    if (officers.length > 0) {
-                        // Get the counter collection
-                        const counterCollection = db.get().collection(COLLECTION.COUNTER);
-
-                        // First get current counter and update it atomically
-                        const updateResult = await counterCollection.findOneAndUpdate(
-                            { _id: 'lead_roundrobin' },
-                            { $inc: { sequence: 1 } },
-                            { upsert: true, returnDocument: 'after' }
-                        );
-
-                        // Calculate the officer index based on the updated sequence
-                        const officerIndex = ( updateResult.value.sequence - 1) % officers.length;
-                        // Assign the selected officer
-                        details.assigned_to = officers[officerIndex]._id.toString();
-
-                        // Get officer details
-                        const assignedOfficer = officers[officerIndex];
-                        details.assigned_officer_details = {
-                            _id: ObjectId(assignedOfficer._id),
-                            officer_id: assignedOfficer.officer_id,
-                            name: assignedOfficer.name,
-                            email: assignedOfficer.email,
-                            designation: assignedOfficer.designation || 'Officer'
-                        };
-                    }
-                } else {
-                    // If assigned_to already exists, get the basic details of the officer
-                    const assignedOfficer = await officersCollection.findOne(
-                        { officer_id: details.assigned_to },
-                        { projection: {name:1 ,officer_id:1 ,email: 1, designation: 1 } }
-                    );
-
-                    if (assignedOfficer) {
-                        details.assigned_officer_details = {
-                            _id: ObjectId(assignedOfficer._id),
-                            officer_id: assignedOfficer.officer_id,
-                            name: assignedOfficer.name ,
-                            email: assignedOfficer.email,
-                            designation: assignedOfficer.designation || 'Officer'
-                        };
-                    }
-                }
-
-                const isOfficerAssigned = details.assigned_officer_details && details.assigned_officer_details._id;
-                const assignedToValue = isOfficerAssigned ? ObjectId(details.assigned_officer_details._id) : 'UNASSIGNED';
-                let recruiterIdValue = 'UNASSIGNED';
-                if (
-                    isOfficerAssigned &&
-                    Array.isArray(details.assigned_officer_details.designation) &&
-                    (details.assigned_officer_details.designation.includes(4) || details.assigned_officer_details.designation.includes(5))
-                ) {
-                    recruiterIdValue = ObjectId(details.assigned_officer_details._id);
-                }
-                const statusValue = isOfficerAssigned ? (details.status || 'HOT') : 'UNASSIGNED';
-                const result = await collection.insertOne({ // test add inital job add date  
-                    client_id: client_id,
-                    name: details.name,
-                    email: details.email,
-                    phone: details.phone,
-                    country_code:details.country_code || null,
-                    alternate_phone: details.alternate_phone || null,
-                    whatsapp: details.whatsapp || null,
-                    gender: details.gender || null,
-                    dob: details.dob || null ,
-                    matrial_status: details.matrial_status || null,
-                    address: details.address || null,
-                    city: details.city || null,
-                    state: details.state || null,
-                    country: details.country || null,
-                    job_interests: details.job_interests || [],
-                    country_interested: details.country_interested || [],
-                    expected_salary: details.expected_salary || null,
-                    qualification: details.qualification || null,
-                    university: details.university || null,
-                    passing_year: details.passing_year || null,
-                    experience: details.experience || null,
-                    skills: details.skills || [],
-                    profession: details.profession || null,
-                    specialized_in: details.specialized_in || null,
-                    lead_source: details.lead_source || 'direct',
-                    notes: details.notes || '',
-                    assigned_to: assignedToValue,
-                    branch_name: details.branch_name || '',
-                    service_type: details.service_type || '',
-                    recruiter_id: recruiterIdValue,
-                    status:statusValue,    
-                    on_call_communication: details.on_call_communication || false, 
-                    on_whatsapp_communication: details.on_whatsapp_communication || false,
-                    on_email_communication: details.on_email_communication || false,   
-                    created_at: new Date()
-                });
-                if (result.acknowledged) {
-                    try {
-                        const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
-                        await eventsCollection.insertOne({
-                            type: 'customer_created',
-                            client_id: result.insertedId,
-                            officer_id: details.assigned_officer_details != null ? details.assigned_officer_details._id : 'UNASSIGNED',
-                            comment:details.notes || '',
-                            created_at: new Date(),
-                           
-                        });
-                    } catch (eventErr) {
-                        console.error("Failed to log customer creation event:", eventErr);
-                    }
-                    return resolve(result.insertedId);
-                } else {
-                    reject("Insert failed");
-                }
-            } catch (err) {
-                console.log(err);
-                reject("Error processing request");
-            }
-        });
-    },
-
-
-    assignOfficerToLead: async (clientId, officerId) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-              
-                const officer = await db.get().collection(COLLECTION.OFFICERS).findOne(
-                    { _id: ObjectId( officerId) },
-                    { projection: { _id: 1, first_name: 1, last_name: 1, officer_id: 1, email: 1, designation: 1 } }
-                );
-                if (!officer) {
-                    return reject("Officer not found");
-                }
-
-                let updateFields = {
-                    updated_at: new Date()
-                };
-
-                if (Array.isArray(officer.designation) && (officer.designation.includes(4) || officer.designation.includes(5))) {
-                    updateFields.assigned_to = officer._id;
-                    updateFields.recruiter_id = officer._id;
-                } else {
-                    updateFields.assigned_to = officer._id;
-                }
-
-                const result = await db.get().collection(COLLECTION.CUSTOMERS).updateOne(
-                    { _id: new ObjectId(clientId) },
-                    { $set: updateFields }
-                );
-                if (result.modifiedCount > 0) {
-                    try {
-                        const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
-                        await eventsCollection.insertOne({
-                            type: 'officer_assigned',
-                            client_id: new ObjectId(clientId),
-                            officer_id: new ObjectId(officerId),
-                            created_at: new Date()
-                        });
-                    } catch (eventErr) {
-                        console.error("Failed to log officer assignment event:", eventErr);
-                    }
-                }
-
-                if (result.matchedCount === 0) {
-                    reject("Client not found");
-                } else {
-                    resolve("Officer assigned successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error assigning officer");
-            }
-        });
-    },
-
-
-   logCallEvent: async (data, officerId) => {
     return new Promise(async (resolve, reject) => {
         try {
-            const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+        // Validate incoming data
+        const { error, value } = leadSchema.validate(details);
+        if (error) return reject("Validation failed: " + error.details[0].message);
 
-            if (data.client_status && (data.client_status != null || data.client_status !== '')) {
-                if (data.client_status === 'DEAD') {
-                    // Move to DEAD_CUSTOMERS
-                    const clientDoc = await customersCollection.findOne({ _id: new ObjectId(data.client_id) });
-                    if (clientDoc) {
-                        clientDoc.status = 'DEAD';
-                    }
-                    if (clientDoc) {
-                        const insertResult = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).insertOne({
-                            ...clientDoc,
-                            // status : 'DEAD',
-                            moved_to_dead_at: new Date(),
-                            dead_reason: data.comment || '',
-                            moved_by: officerId
-                        });
+        const collection = db.get().collection(COLLECTION.LEADS);
+        const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+        // Check for duplicate
+        const collectionsToCheck = [
+            collection,
+            db.get().collection(COLLECTION.CUSTOMERS),
+            db.get().collection(COLLECTION.DEAD_LEADS),
+        ];
 
-                        if (insertResult.acknowledged) {
-                            await customersCollection.deleteOne({ _id: new ObjectId(data.client_id) });
-                            data.status = data.client_status;
-                        } else {
-                            return reject("Failed to do action");
-                        }
-                    }
-                    else {
-                        return reject("Client not found");
-                    }
-                } else {
-                    // Update status
-                    const updateResult = await customersCollection.updateOne(
-                        { _id: new ObjectId(data.client_id) },
-                        { $set: { status: data.client_status } }
-                    );
-                    console.log("Update result:", updateResult);
-                    // if (updateResult.modifiedCount === 0) {
-                    //     return reject("Failed to update client status");
-                    // }
-                }
-            }
-
-            // Log the call event only after successful status update/move
-            const insertResult = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).insertOne({
-                type: 'call_event',
-                client_id: new ObjectId(data.client_id),
-                officer_id: officerId,
-                duration: data.duration || 0,
-                next_schedule: data.next_schedule || null,
-                client_status: data.client_status || '',
-                comment: data.comment || '',
-                call_type: data.call_type || '',
-                call_status: data.call_status || '',
-                created_at: new Date()
-            });
-
-            if (insertResult.acknowledged) {
-              
-                resolve(
-                    "Call event logged successfully"
-                );
+        for (const col of collectionsToCheck) {
+            let query;
+            if (value.email && value.email.trim() !== "") {
+                query = { $or: [{ email: value.email }, { phone: value.phone }] };
             } else {
-                reject("Failed to log call event");
+                query = { phone: value.phone };
             }
+            const existing = await col.findOne(query);
+            // if (existing) return reject("Client already exists with this email or phone");
+        }
+        const client_id = `AELID${String(await getNextSequence("lead_id")).padStart(5, "0")}`;
+        var assignedOfficer = null;
+        if (!value.assigned_to && value.service_type) {
+            const rrConfig = await db.get()
+            .collection(COLLECTION.ROUNDROBIN)
+            .findOne({ name: value.service_type });
+            if (rrConfig && Array.isArray(rrConfig.officers) && rrConfig.officers.length > 0) {
+            const updateResult = await  db.get().collection(COLLECTION.COUNTER).findOneAndUpdate(
+                { _id: `lead_roundrobin_${value.service_type}` },
+                { $inc: { sequence: 1 } },
+                { upsert: true, returnDocument: "after" }
+            );
+
+            const officerIndex = (updateResult.value.sequence - 1) % rrConfig.officers.length;
+            const selectedOfficerId = rrConfig.officers[officerIndex];
+
+             assignedOfficer = await officersCollection.findOne(
+                { _id: ObjectId(selectedOfficerId) },
+                { projection: { name: 1, officer_id: 1, email: 1, designation: 1 ,branch:1} }
+            );
+            }
+        }else  if (value.assigned_to != null && value.assigned_to != '') {
+             assignedOfficer = await officersCollection.findOne(
+            { _id: ObjectId(value.assigned_to )},
+            { projection: { name: 1, officer_id: 1, email: 1, designation: 1 } }
+            );
+        }
+
+        const assignedToValue = assignedOfficer != null  ? ObjectId(assignedOfficer._id) : "UNASSIGNED";
+        const statusValue = assignedToValue != null ? (value.status || "HOT") : "UNASSIGNED";
+        let recruiterIdValue = "UNASSIGNED";
+        if (
+            assignedOfficer != null &&
+            Array.isArray(assignedOfficer.designation) &&
+            assignedOfficer.designation.includes(DESIGNATIONS.COUNSILOR)
+        ) {
+            recruiterIdValue = ObjectId(assignedOfficer._id);
+        }
+
+
+        collection.insertOne({
+            ...value,
+            client_id,
+            branch: Array.isArray(assignedOfficer?.branch) ? assignedOfficer.branch[0] || "AFFINIX" : assignedOfficer?.branch || "AFFINIX",
+            assigned_to: assignedToValue,
+            recruiter_id: recruiterIdValue,
+            status: statusValue,
+            created_at: new Date(),
+        })
+        .then(result => {
+            if (result.acknowledged) {
+            const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
+            eventsCollection.insertOne({
+                type: "customer_created",
+                client_id: result.insertedId,
+                recruiter_id: recruiterIdValue,
+                officer_id: assignedToValue,
+                comment: value.note|| "",
+                created_at: new Date(),
+            })
+            .then(() => {
+                return resolve(result.insertedId);
+            })
+            .catch(eventErr => {
+                console.error("Failed to log customer creation event:", eventErr);
+                return resolve(result.insertedId);
+            });
+            } else {
+            reject("Insert failed");
+                }
+            })
+            .catch(err => {
+                reject("Error processing request");
+            });
+        
         } catch (err) {
             console.error(err);
-            reject("Error logging call event");
+        reject("Error processing request");
         }
     });
     },
-  logMobileCallEvent: async (data) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
-      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_CUSTOMERS);
-      const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-      const normalizedPhone = data.phone.toString().replace(/^\+?91/, '').trim();
-      const clientDoc = await customersCollection.findOne({
-        phone: normalizedPhone
-      });
-
-      // Optional: check DEAD_CUSTOMERS for same phone
-      if (clientDoc) {
-        await deadCustomersCollection.findOne({ phone: normalizedPhone });
-      }
-
-      // 📞 Log the call event
-      const insertResult = await callLogCollection.insertOne({
-        type: 'call_event',
-        client_id: clientDoc ? clientDoc._id : null,
-        officer_id: data.officer_id || null,
-        phone: normalizedPhone, // Store the normalized phone
-        duration: parseFloat(data.duration || 0),
-        call_type: data.call_type || '',
-        created_at: new Date()
-      });
-
-      if (insertResult.acknowledged) {
-        resolve("Call event logged successfully");
-      } else {
-        reject("Failed to log call event");
-      }
-
-    } catch (err) {
-      console.error(err);
-      reject("Error logging call event");
-    }
-  });
-  },
-
-getCallLogs: async () => {
-    return new Promise(async (resolve, reject) => {
+    
+    
+    editLead : async (leadId, updateData) => {
         try {
-            const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-            const logs = await callLogCollection.find()
-                .sort({ created_at: -1 })
-                .toArray();
-            resolve(logs);
-        } catch (err) {
-            console.error(err);
-            reject("Error fetching call logs");
-        }
-    });
-},
+            // Validate input
+            const validatedData = validatePartial(leadSchema, updateData);
+            const updateResult = await db.get().collection(COLLECTION.LEADS).updateOne(
+            { _id: ObjectId(leadId) },
+            { $set: { ...validatedData, updated_at: new Date() } }
+            );
+            if (updateResult.matchedCount === 0) {
+            throw new Error("Lead not found");
+            }
 
+            return { success: true, message: "Lead updated successfully" };
+
+        } catch (err) {
+            return { success: false, error: err.message };
+        }
+    },
+
+   
 
 
     updateCustomerStatus: async (data, officerId) => {
     return new Promise(async (resolve, reject) => {
     try {
-      const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+      const customersCollection = db.get().collection(COLLECTION.LEADS);
       const customerActivityCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
 
       if (data.client_status && data.client_status !== 'null' && data.client_status !== '') {
@@ -357,7 +153,7 @@ getCallLogs: async () => {
 
           if (!clientDoc) return reject("Client not found");
 
-          const insertResult = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).insertOne({
+          const insertResult = await db.get().collection(COLLECTION.DEAD_LEADS).insertOne({
             ...clientDoc,
             status: 'DEAD',
             moved_to_dead_at: new Date(),
@@ -421,8 +217,8 @@ getCallLogs: async () => {
     return new Promise(async (resolve, reject) => {
         try {
             const dbConn = db.get();
-            const deadCustomersCollection = dbConn.collection(COLLECTION.DEAD_CUSTOMERS);
-            const customersCollection = dbConn.collection(COLLECTION.CUSTOMERS);
+            const deadCustomersCollection = dbConn.collection(COLLECTION.DEAD_LEADS);
+            const customersCollection = dbConn.collection(COLLECTION.LEADS);
             const activityCollection = dbConn.collection(COLLECTION.CUSTOMER_ACTIVITY);
             const officersCollection = dbConn.collection(COLLECTION.OFFICERS);
 
@@ -454,11 +250,11 @@ getCallLogs: async () => {
                 }
             }
 
-            // 4. Insert back to CUSTOMERS
+            // 4. Insert back to LEADS
             const insertResult = await customersCollection.insertOne(deadClient);
             if (!insertResult.acknowledged) return reject("Failed to restore client");
 
-            // 5. Delete from DEAD_CUSTOMERS
+            // 5. Delete from DEAD_LEADS
             await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
 
             // 6. Log activity
@@ -479,57 +275,9 @@ getCallLogs: async () => {
     });
     },
 
-
-    updateLead: async (id, details) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CUSTOMERS);
-                const customerId = new ObjectId(id);
-
-                const updateFields = {};
-                const allowedFields = [
-                    "name", "email", "phone", "alternate_phone", "whatsapp","country_code",
-                    "gender", "dob", "matrial_status", "address", "city", "state", "country",
-                    "job_interests", "country_interested", "expected_salary", "qualification",
-                    "university", "passing_year", "experience", "skills", "profession", "specialized_in",
-                   "service_type",
-                    "on_call_communication", "on_whatsapp_communication", "on_email_communication"
-                ];
-
-                allowedFields.forEach(field => {
-                    const value = details[field];
-                    if (value !== undefined && value !== null && value !== '') {
-                        updateFields[field] = value;
-                    }
-                });
-
-                if (Object.keys(updateFields).length === 0) {
-                    return reject("No valid fields to update");
-                }
-                updateFields.updated_at = new Date();
-                const result = await collection.updateOne(
-                    { _id: customerId },
-                    { $set: updateFields }
-                );
-                if (result.matchedCount === 0) {
-                    return reject("Customer not found");
-                } else if (result.modifiedCount === 0) {
-                    return reject("No changes were made");
-                }
-
-                return resolve("Customer updated successfully");
-
-            } catch (err) {
-                console.error(err);
-                return reject("Error updating customer");
-            }
-        });
-    } ,
-
-
-
     // Get all leads/clients with flexible filtering
     getAllLeads: async (filters) => {
+        console.log("Fetching all leads with filters:", filters);
         return new Promise(async (resolve, reject) => {
             try {
                 
@@ -545,7 +293,7 @@ getCallLogs: async () => {
                 // });
 
                 // Project only basic information
-                const customers = await db.get().collection(COLLECTION.CUSTOMERS).find().project( {
+                const LEADS = await db.get().collection(COLLECTION.LEADS).find().project( {
                     _id: 1,
                     client_id: 1,
                     name: 1,
@@ -557,19 +305,19 @@ getCallLogs: async () => {
                     assigned_to: 1,
                     created_at: 1
                 }).toArray();
-                resolve(customers);
+                resolve(LEADS);
             } catch (err) {
                 console.error(err);
-                reject("Error fetching customers");
+                reject("Error fetching LEADS");
             }
         });
     },
 
-     getDeadLeads: async (filters) => {
+     getDeadLeads: async () => {
+        console.log("Fetching all dead leads");
         return new Promise(async (resolve, reject) => {
             try {
-
-                const customers = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).find().project( {
+                const LEADS = await db.get().collection(COLLECTION.DEAD_LEADS).find().project( {
                     _id: 1,
                     client_id: 1,
                     name: 1,
@@ -581,23 +329,25 @@ getCallLogs: async () => {
                     assigned_to: 1,
                     created_at: 1
                 }).toArray();
-                resolve(customers);
+                resolve(LEADS);
             } catch (err) {
                 console.error(err);
-                reject("Error fetching customers");
+                reject("Error fetching LEADS");
             }
         });
     },
-    
     
 
     // Get lead/client by ID
-    getClient: async (id) => {
+    getCustomer: async (id) => {
         return new Promise(async (resolve, reject) => {
             try {
-                var  lead = await db.get().collection(COLLECTION.CUSTOMERS).findOne({ _id: new ObjectId(id) });
+                var  lead = await db.get().collection(COLLECTION.LEADS).findOne({ _id: new ObjectId(id) });
                 if (!lead) {
-                    lead = await db.get().collection(COLLECTION.DEAD_CUSTOMERS).findOne({ _id: new ObjectId(id) });
+                    lead = await db.get().collection(COLLECTION.DEAD_LEADS).findOne({ _id: new ObjectId(id) });
+                }
+                if (!lead) {
+                    lead = await db.get().collection(COLLECTION.CUSTOMERS).findOne({ _id: new ObjectId(id) });
                 }
                 if (lead) {
                     resolve(lead);
@@ -610,101 +360,162 @@ getCallLogs: async () => {
             }
         });
     },
-    
+  
+}
 
-    // // Update lead/client
-    // updateLead: async (id, updates) => {
+    // Create Client/Lead
+    // createLead: async (details) => {
     //     return new Promise(async (resolve, reject) => {
     //         try {
-    //             const collection = db.get().collection(COLLECTION.CLIENTS);
+    //             const collection = db.get().collection(COLLECTION.LEADS);
+    //             const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+    //             // await collection.createIndex({ client_id: 1, phone : 1 }, { unique: true }); //req
+    //             // await collection(COLLECTION.CUSTOMERS).createIndex({ client_id: 1, phone : 1 }, { unique: true }); //req
+    //             // Check for duplicate client (by email or phone)
+    //            const collectionsToCheck = [
+    //                 collection, // already holds db.get().collection(COLLECTION.CLIENTS)
+    //                 db.get().collection(COLLECTION.CUSTOMERS),
+    //                 db.get().collection(COLLECTION.DEAD_LEADS)
+    //                 ];
 
-    //             // If updating email or phone, check for duplicates
-    //             if (updates.email || updates.phone) {
-    //                 const query = { _id: { $ne: new ObjectId(id) }, $or: [] };
-    //                 if (updates.email) query.$or.push({ email: updates.email });
-    //                 if (updates.phone) query.$or.push({ phone: updates.phone });
+    //                 let existingClient = null;
 
-    //                 if (query.$or.length > 0) {
-    //                     const duplicate = await collection.findOne(query);
-    //                     if (duplicate) return reject("Email or phone already in use by another client");
+    //                 for (const col of collectionsToCheck) {
+    //                 existingClient = await col.findOne({
+    //                     $or: [
+    //                     { email: details.email },
+    //                     { phone: details.phone }
+    //                     ]
+    //                 });
+
+    //                 if (existingClient) break;
     //                 }
-    //             }
 
-    //             updates.updated_at = new Date();
-
-    //             // Handle reassignment if needed
-    //             if (updates.assigned_to === 'auto_assign') {
-    //                 const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-    //                 const officers = await officersCollection.find({ status: 'active' }).toArray();
-
+    //         if (existingClient) return reject("Client already exists with this email or phone");
+    //             // Get next client number atomically
+    //             const newNumber = await getNextSequence('lead_id');
+    //             const client_id = `AELID${String(newNumber).padStart(5, '0')}`;
+    //             // Handle automatic round-robin assignment if no assigned_to is provided
+    //             if (!details.assigned_to) {
+    //                 const officers = await officersCollection.find({
+    //                     designation: { $in: [4,5] }
+    //                 }).toArray();
     //                 if (officers.length > 0) {
-    //                     const counterCollection = db.get().collection(COLLECTION.COUNTERS);
-    //                     const assignmentCounter = await counterCollection.findOne({ _id: 'officer_assignment' });
+    //                     // Get the counter collection
+    //                     const counterCollection = db.get().collection(COLLECTION.COUNTER);
 
-    //                     let lastIndex = 0;
-    //                     if (assignmentCounter) {
-    //                         lastIndex = assignmentCounter.sequence % officers.length;
-    //                     }
-
-    //                     updates.assigned_to = officers[lastIndex]._id.toString();
-
-    //                     await counterCollection.updateOne(
-    //                         { _id: 'officer_assignment' },
+    //                     // First get current counter and update it atomically
+    //                     const updateResult = await counterCollection.findOneAndUpdate(
+    //                         { _id: 'lead_roundrobin' },
     //                         { $inc: { sequence: 1 } },
-    //                         { upsert: true }
+    //                         { upsert: true, returnDocument: 'after' }
     //                     );
-    //                 } else {
-    //                     updates.assigned_to = null;
+
+    //                     // Calculate the officer index based on the updated sequence
+    //                     const officerIndex = ( updateResult.value.sequence - 1) % officers.length;
+    //                     // Assign the selected officer
+    //                     details.assigned_to = officers[officerIndex]._id.toString();
+
+    //                     // Get officer details
+    //                     const assignedOfficer = officers[officerIndex];
+    //                     details.assigned_officer_details = {
+    //                         _id: ObjectId(assignedOfficer._id),
+    //                         officer_id: assignedOfficer.officer_id,
+    //                         name: assignedOfficer.name,
+    //                         email: assignedOfficer.email,
+    //                         designation: assignedOfficer.designation || 'Officer'
+    //                     };
+    //                 }
+    //             } else {
+    //                 // If assigned_to already exists, get the basic details of the officer
+    //                 const assignedOfficer = await officersCollection.findOne(
+    //                     { officer_id: details.assigned_to },
+    //                     { projection: {name:1 ,officer_id:1 ,email: 1, designation: 1 } }
+    //                 );
+
+    //                 if (assignedOfficer) {
+    //                     details.assigned_officer_details = {
+    //                         _id: ObjectId(assignedOfficer._id),
+    //                         officer_id: assignedOfficer.officer_id,
+    //                         name: assignedOfficer.name ,
+    //                         email: assignedOfficer.email,
+    //                         designation: assignedOfficer.designation || 'Officer'
+    //                     };
     //                 }
     //             }
 
-    //             const result = await collection.updateOne(
-    //                 { _id: new ObjectId(id) },
-    //                 { $set: updates }
-    //             );
-
-    //             if (result.matchedCount === 0) {
-    //                 reject("Lead not found");
-    //             } else if (result.modifiedCount === 0) {
-    //                 resolve("No changes made");
+    //             const isOfficerAssigned = details.assigned_officer_details && details.assigned_officer_details._id;
+    //             const assignedToValue = isOfficerAssigned ? ObjectId(details.assigned_officer_details._id) : 'UNASSIGNED';
+    //             let recruiterIdValue = 'UNASSIGNED';
+    //             if (
+    //                 isOfficerAssigned &&
+    //                 Array.isArray(details.assigned_officer_details.designation) &&
+    //                 (details.assigned_officer_details.designation.includes(4) || details.assigned_officer_details.designation.includes(5))
+    //             ) {
+    //                 recruiterIdValue = ObjectId(details.assigned_officer_details._id);
+    //             }
+    //             const statusValue = isOfficerAssigned ? (details.status || 'HOT') : 'UNASSIGNED';
+    //             const result = await collection.insertOne({ // test add inital job add date  
+    //                 client_id: client_id,
+    //                 name: details.name,
+    //                 email: details.email,
+    //                 phone: details.phone,
+    //                 country_code:details.country_code || null,
+    //                 alternate_phone: details.alternate_phone || null,
+    //                 whatsapp: details.whatsapp || null,
+    //                 gender: details.gender || null,
+    //                 dob: details.dob || null ,
+    //                 matrial_status: details.matrial_status || null,
+    //                 address: details.address || null,
+    //                 city: details.city || null,
+    //                 state: details.state || null,
+    //                 country: details.country || null,
+    //                 job_interests: details.job_interests || [],
+    //                 country_interested: details.country_interested || [],
+    //                 expected_salary: details.expected_salary || null,
+    //                 qualification: details.qualification || null,
+    //                 university: details.university || null,
+    //                 passing_year: details.passing_year || null,
+    //                 experience: details.experience || null,
+    //                 skills: details.skills || [],
+    //                 profession: details.profession || null,
+    //                 specialized_in: details.specialized_in || null,
+    //                 lead_source: details.lead_source || 'direct',
+    //                 notes: details.notes || '',
+    //                 assigned_to: assignedToValue,
+    //                 branch_name: details.branch_name || '',
+    //                 service_type: details.service_type || '',
+    //                 recruiter_id: recruiterIdValue,
+    //                 status:statusValue,    
+    //                 on_call_communication: details.on_call_communication || false, 
+    //                 on_whatsapp_communication: details.on_whatsapp_communication || false,
+    //                 on_email_communication: details.on_email_communication || false,   
+    //                 created_at: new Date()
+    //             });
+    //             if (result.acknowledged) {
+    //                 try {
+    //                     const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
+    //                     await eventsCollection.insertOne({
+    //                         type: 'customer_created',
+    //                         client_id: result.insertedId,
+    //                         officer_id: details.assigned_officer_details != null ? details.assigned_officer_details._id : 'UNASSIGNED',
+    //                         comment:details.notes || '',
+    //                         created_at: new Date(),
+                           
+    //                     });
+    //                 } catch (eventErr) {
+    //                     console.error("Failed to log customer creation event:", eventErr);
+    //                 }
+    //                 return resolve(result.insertedId);
     //             } else {
-    //                 resolve("Lead updated successfully");
+    //                 reject("Insert failed");
     //             }
     //         } catch (err) {
-    //             console.error(err);
-    //             reject("Error updating lead");
+    //             console.log(err);
+    //             reject("Error processing request");
     //         }
     //     });
     // },
-
-  
-    // Add additional information to lead
-    addAdditionalInfo: async (leadId, additionalInfo) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.CLIENTS);
-                const result = await collection.updateOne(
-                    { _id: new ObjectId(leadId) },
-                    {
-                        $set: {
-                            'additional_info': additionalInfo,
-                            updated_at: new Date()
-                        }
-                    }
-                );
-
-                if (result.matchedCount === 0) {
-                    reject("Lead not found");
-                } else {
-                    resolve("Additional information updated successfully");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error updating additional information");
-            }
-        });
-    }
-}
 
 
 
@@ -721,7 +532,7 @@ getCallLogs: async () => {
 //     createCustomer: async (details) => {
 //         return new Promise(async (resolve, reject) => {
 //             try {
-//                 const collection = db.get().collection(COLLECTION.CUSTOMERS);
+//                 const collection = db.get().collection(COLLECTION.LEADS);
 //                 const officersCollection = db.get().collection(COLLECTION.OFFICERS);
 //                 // await collection.createIndex({ client_id: 1 }, { unique: true });
 
@@ -855,7 +666,7 @@ getCallLogs: async () => {
 //                     const message = payload.data.message || '';
 //                     const phone = payload.data.phone || '';
 //                     // Find customer by phone
-//                     const collection = db.get().collection(COLLECTION.CUSTOMERS);
+//                     const collection = db.get().collection(COLLECTION.LEADS);
 //                     const customer = await collection.findOne({ phone: phone });
 //                     if (!customer) {
 //                         return reject("Customer not found for WhatsApp message");
@@ -885,7 +696,7 @@ getCallLogs: async () => {
 //     getAllLeads: async (filters = {}) => {
 //         return new Promise(async (resolve, reject) => {
 //             try {
-//                 const collection = db.get().collection(COLLECTION.CUSTOMERS);
+//                 const collection = db.get().collection(COLLECTION.LEADS);
 //                 const query = {};
 //                 Object.keys(filters).forEach(key => {
 //                     if (Array.isArray(filters[key]) && filters[key].length > 0) {
@@ -910,11 +721,11 @@ getCallLogs: async () => {
 //                     created_at: 1
 //                 };
 
-//                 const customers = await collection.find(query).project(projection).toArray();
-//                 resolve(customers);
+//                 const LEADS = await collection.find(query).project(projection).toArray();
+//                 resolve(LEADS);
 //             } catch (err) {
 //                 console.error(err);
-//                 reject("Error fetching customers");
+//                 reject("Error fetching LEADS");
 //             }
 //         });
 //     },

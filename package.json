@@ -25,13 +25,14 @@
     "express-handlebars": "^6.0.7",
     "express-session": "^1.17.3",
     "fs": "^0.0.1-security",
-    "jsonwebtoken": "^8.5.1",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
     "luxon": "^3.6.1",
     "mongodb": "^4.17.2",
     "mongoose": "^8.15.1",
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "nodemon": "^2.0.20",
+    "nodemon": "^3.1.10",
     "request": "^2.88.2",
     "sharp": "^0.33.2"
   }

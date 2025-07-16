@@ -1,0 +1,41 @@
+const Joi = require("joi");
+
+const leadSchema = Joi.object({
+  name: Joi.string().required(),
+  email: Joi.string().email(),
+  phone: Joi.string().required().pattern(/^[0-9]+$/),
+  country_code: Joi.string().optional().allow(null, ""),
+  alternate_phone: Joi.string().optional().allow(null, ""),
+  whatsapp: Joi.string().optional().allow(null, ""),
+  // gender: Joi.string().valid("male", "female", "other").optional().allow(null, ""),
+  gender: Joi.string().optional().allow(null, ""),
+  dob: Joi.date().optional().allow(null, ""),
+  matrial_status: Joi.string().optional().allow(null, ""),
+  address: Joi.string().optional().allow(null, ""),
+  city: Joi.string().optional().allow(null, ""),
+  state: Joi.string().optional().allow(null, ""),
+  country: Joi.string().optional().allow(null, ""),
+  job_interests: Joi.array().items(Joi.string()).default([]),
+  country_interested: Joi.array().items(Joi.string()).default([]),
+  expected_salary: Joi.number().optional().allow(null),
+  qualification: Joi.string().optional().allow(null, ""),
+  // university: Joi.string().optional().allow(null, ""),
+  // passing_year: Joi.string().optional().allow(null, ""),
+  experience: Joi.number().optional().allow(null),
+  skills: Joi.array().items(Joi.string()).default([]),
+  profession: Joi.string().optional().allow(null, ""),
+  specialized_in: Joi.array().items(Joi.string()).default([]),
+  lead_source: Joi.string().default("direct"),
+  assigned_to: Joi.string().optional(),
+  branch_name: Joi.string().optional().allow("", null),
+  service_type: Joi.string().required(),
+  status: Joi.string().optional().allow("", null),
+  on_call_communication: Joi.boolean().default(false),
+  on_whatsapp_communication: Joi.boolean().default(false),
+  on_email_communication: Joi.boolean().default(false),
+  note: Joi.string().optional().allow(null, ""),
+}).unknown(false);
+
+module.exports = {
+  leadSchema,
+};

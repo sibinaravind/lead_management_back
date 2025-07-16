@@ -65,6 +65,7 @@ const routes = [
   { path: '/project', route: require("./routes/officers/project_router") },
   { path: '/lead', route: require("./routes/officers/lead_router") },
   {path: '/campaign', route: require("./routes/officers/campaign_router") },
+  {path: '/customer', route: require("./routes/officers/customer_interaction_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -121,3 +122,27 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 
 
   */
+
+
+                /***. 
+_id
+6867a96d0d60d184707e25c7
+leadId
+"1261308965352408"
+formId
+"1360534075016407"
+createdAt
+2025-05-04T19:35:43.000+00:00
+
+fields
+Object
+full_name
+"Sanjay Bunch"
+city
+"Lucknow"
+phone_number
+"+919236280588"
+job_title
+"i want a job supervision warehouse  and supervision site office work l…"
+email
+"sanjaybunch0@gmail.com" */

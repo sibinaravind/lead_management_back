@@ -1,8 +1,8 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-const getNextSequence = require('../utils/get_next_unique').getNextSequence;
-
+// const getNextSequence = require('../utils/get_next_unique').getNextSequence;
+const { STATUSES } = require('../constants/enums');
 // Helper to get next sequence number
 
 module.exports = {
@@ -34,7 +34,7 @@ module.exports = {
                     city: details.city,
                     state: details.state,
                     country: details.country,
-                    status: 'ACTIVE',
+                    status: STATUSES.ACTIVE,
                     created_at: new Date()
                 }).then(result => {
                     if (result.acknowledged) {
@@ -85,7 +85,7 @@ module.exports = {
     getClientList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-                const clients = await db.get().collection(COLLECTION.CLIENTS).find({ status: { $ne: 'DELETED' } }).toArray();
+                const clients = await db.get().collection(COLLECTION.CLIENTS).find({ status: { $ne: STATUSES.DELETED } }).toArray();
                 resolve(clients);
             } catch (err) {
                 console.error(err);
@@ -98,7 +98,7 @@ module.exports = {
             try {
                 const result = await db.get().collection(COLLECTION.CLIENTS).updateOne(
                     { _id: ObjectId(clientId) },
-                    { $set: { status: 'DELETED', updated_at: new Date() } }
+                    { $set: { status: STATUSES.DELETED, updated_at: new Date() } }
                 );
                 if (result.modifiedCount > 0) {
                     resolve(true);
@@ -126,7 +126,7 @@ module.exports = {
                     organization_name: details.organization_name,
                     country: details.country,
                     city: details.city,
-                    status: 'active',
+                    status: STATUSES.ACTIVE,
                     created_at: new Date()
                 }).then(result => {
                     if (result.acknowledged) {
@@ -175,7 +175,7 @@ module.exports = {
     getProjectList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-                resolve(await db.get().collection(COLLECTION.PROJECTS).find({ status: { $ne: 'DELETED' } }).toArray());
+                resolve(await db.get().collection(COLLECTION.PROJECTS).find({ status: { $ne: STATUSES.DELETED } }).toArray());
 
             } catch (err) {
                 console.error(err);
@@ -188,7 +188,7 @@ module.exports = {
             try {
                 db.get().collection(COLLECTION.PROJECTS).updateOne(
                     { _id: ObjectId(projectId) },
-                    { $set: { status: 'DELETED', updated_at: new Date() } }
+                    { $set: { status: STATUSES.DELETED, updated_at: new Date() } }
                 ).then(result => {
                     if (result.modifiedCount > 0) {
                         resolve(true);
@@ -227,7 +227,7 @@ module.exports = {
                     ...vacancyData,
                     clients: formattedClients,
                     created_at: new Date(),
-                    status: "ACTIVE"
+                    status: STATUSES.ACTIVE
                 };
 
                 db.get().collection(COLLECTION.VACANCIES).insertOne(documentToInsert)
@@ -398,7 +398,7 @@ module.exports = {
             try {
                 db.get().collection(COLLECTION.VACANCIES).updateOne(
                     { _id: ObjectId(vacancyId) },
-                    { $set: { status: "DELETED", updated_at: new Date() } }
+                    { $set: { status: STATUSES.DELETED, updated_at: new Date() } }
                 ).then(result => {
                     if (result.modifiedCount > 0) resolve(true);
                     else reject("Delete failed or not found");
@@ -412,11 +412,120 @@ module.exports = {
             }
         });
     },
+    // getVacancyList: async () => {
+    //     return new Promise(async (resolve, reject) => {
+    //         try {
+    //             const result = await db.get().collection(COLLECTION.VACANCIES).aggregate([
+    //                 { $match: { status: "ACTIVE" } },
+    //                 {
+    //                     $lookup: {
+    //                         from: COLLECTION.PROJECTS,
+    //                         localField: "project_id",
+    //                         foreignField: "_id",
+    //                         as: "project"
+    //                     }
+    //                 },
+    //                 { $unwind: "$project" },
+    //                 {
+    //                     $addFields: {
+    //                         all_vacancies: {
+    //                             $reduce: {
+    //                                 input: "$clients",
+    //                                 initialValue: [],
+    //                                 in: {
+    //                                     $concatArrays: [
+    //                                         "$$value",
+    //                                         { $objectToArray: "$$this.vacancies" }
+    //                                     ]
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
+    //                 },
+    //                 {
+    //                     $addFields: {
+    //                         specialization_totals: {
+    //                             $arrayToObject: {
+    //                                 $map: {
+    //                                     input: "$all_vacancies",
+    //                                     as: "vac",
+    //                                     in: {
+    //                                         k: "$$vac.k",
+    //                                         v: {
+    //                                             count: "$$vac.v.count",
+    //                                             target_cv: "$$vac.v.target_cv"
+    //                                         }
+    //                                     }
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
+    //                 },
+    //                 {
+    //                     $addFields: {
+    //                         total_vacancies: {
+    //                             $sum: {
+    //                                 $map: {
+    //                                     input: { $objectToArray: "$specialization_totals" },
+    //                                     as: "s",
+    //                                     in: "$$s.v.count"
+    //                                 }
+    //                             }
+    //                         },
+    //                         total_target_cv: {
+    //                             $sum: {
+    //                                 $map: {
+    //                                     input: { $objectToArray: "$specialization_totals" },
+    //                                     as: "s",
+    //                                     in: "$$s.v.target_cv"
+    //                                 }
+    //                             }
+    //                         }
+    //                     }
+    //                 },
+    //                 {
+    //                     $project: {
+    //                         job_title: 1,
+    //                         job_category: 1,
+    //                         qualifications: 1,
+    //                         experience: 1,
+    //                         salary_from: 1,
+    //                         salary_to: 1,
+    //                         lastdatetoapply: 1,
+    //                         description: 1,
+    //                         country: 1,
+    //                         city: 1,
+    //                         project: {
+    //                             _id: 1,
+    //                             project_name: 1,
+    //                             organization_type: 1,
+    //                             organization_category: 1,
+    //                             organization_name: 1,
+    //                             country: 1,
+    //                             city: 1
+
+    //                         },
+    //                         total_vacancies: 1,
+    //                         total_target_cv: 1,
+    //                         specialization_totals: 1
+    //                     }
+    //                 }
+    //             ]).toArray();
+
+    //             resolve(result);
+    //         } catch (err) {
+    //             console.error(err);
+    //             reject("Error fetching vacancy list");
+    //         }
+    //     });
+    // },
+
     getVacancyList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
                 const result = await db.get().collection(COLLECTION.VACANCIES).aggregate([
                     { $match: { status: "ACTIVE" } },
+
                     {
                         $lookup: {
                             from: COLLECTION.PROJECTS,
@@ -426,34 +535,90 @@ module.exports = {
                         }
                     },
                     { $unwind: "$project" },
+
+                    // Step 1: Flatten all client vacancies into a single array
                     {
                         $addFields: {
-                            all_vacancies: {
+                            all_vacancies_array: {
                                 $reduce: {
                                     input: "$clients",
                                     initialValue: [],
                                     in: {
                                         $concatArrays: [
                                             "$$value",
-                                            { $objectToArray: "$$this.vacancies" }
+                                            {
+                                                $map: {
+                                                    input: { $objectToArray: "$$this.vacancies" },
+                                                    as: "item",
+                                                    in: {
+                                                        k: "$$item.k",
+                                                        v: {
+                                                            $cond: [
+                                                                { $in: [{ $type: "$$item.v" }, ["object"]] },
+                                                                "$$item.v",
+                                                                { count: "$$item.v", target_cv: 0 }
+                                                            ]
+
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         ]
                                     }
                                 }
                             }
                         }
                     },
+
+                    // Step 2: Group by specialization and sum values
                     {
                         $addFields: {
                             specialization_totals: {
                                 $arrayToObject: {
-                                    $map: {
-                                        input: "$all_vacancies",
-                                        as: "vac",
+                                    $reduce: {
+                                        input: "$all_vacancies_array",
+                                        initialValue: [],
                                         in: {
-                                            k: "$$vac.k",
-                                            v: {
-                                                count: "$$vac.v.count",
-                                                target_cv: "$$vac.v.target_cv"
+                                            $let: {
+                                                vars: {
+                                                    existing: {
+                                                        $filter: {
+                                                            input: "$$value",
+                                                            as: "item",
+                                                            cond: { $eq: ["$$item.k", "$$this.k"] }
+                                                        }
+                                                    }
+                                                },
+                                                in: {
+                                                    $cond: [
+                                                        { $gt: [{ $size: "$$existing" }, 0] },
+                                                        {
+                                                            $map: {
+                                                                input: "$$value",
+                                                                as: "item",
+                                                                in: {
+                                                                    $cond: [
+                                                                        { $eq: ["$$item.k", "$$this.k"] },
+                                                                        {
+                                                                            k: "$$item.k",
+                                                                            v: {
+                                                                                count: { $add: ["$$item.v.count", "$$this.v.count"] },
+                                                                                target_cv: { $add: ["$$item.v.target_cv", "$$this.v.target_cv"] }
+                                                                            }
+                                                                        },
+                                                                        "$$item"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        },
+                                                        {
+                                                            $concatArrays: [
+                                                                "$$value",
+                                                                [{ k: "$$this.k", v: "$$this.v" }]
+                                                            ]
+                                                        }
+                                                    ]
+                                                }
                                             }
                                         }
                                     }
@@ -461,6 +626,8 @@ module.exports = {
                             }
                         }
                     },
+
+                    // Step 3: Sum total count and total target_cv
                     {
                         $addFields: {
                             total_vacancies: {
@@ -484,6 +651,22 @@ module.exports = {
                         }
                     },
                     {
+                    $addFields: {
+                        specialization_totals: {
+                        $map: {
+                            input: { $objectToArray: "$specialization_totals" },
+                            as: "item",
+                            in: {
+                            specialization: "$$item.k",
+                            count: "$$item.v.count",
+                            target_cv: "$$item.v.target_cv"
+                            }
+                        }
+                        }
+                    }
+                    },
+                    // Step 4: Project the final output
+                    {
                         $project: {
                             job_title: 1,
                             job_category: 1,
@@ -503,7 +686,6 @@ module.exports = {
                                 organization_name: 1,
                                 country: 1,
                                 city: 1
-
                             },
                             total_vacancies: 1,
                             total_target_cv: 1,
@@ -519,6 +701,7 @@ module.exports = {
             }
         });
     },
+
 
     getClientDetailsWithVacancyData: async (vacancyId) => {
         return new Promise(async (resolve, reject) => {

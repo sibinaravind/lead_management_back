@@ -10,19 +10,39 @@ app.post("/insertLead", middleware.checkToken, (req, res) => {
     leadHelper.createLead(req.body)
   );
 });
+
+app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.updateLead(req.params.id, req.body)
+  );
+});
+app.get("/getCustomer/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getCustomer(req.params.id)
+  );
+});
+app.get("/getAllLeads", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getAllLeads()
+  );
+});
+app.get("/getAllDeadLeads", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getDeadLeads()
+  );
+});
+
 app.get("/metaLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     metalead.fetchFormsAndLeadsInsert()
   );
 });
+
+
+
 app.patch("/assign_officer", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.assignOfficerToLead(req.body.clientId, req.body.officerId)
-  );
-});
-app.post("/logCallEvent", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.logCallEvent(req.body, req.decoded._id)
   );
 });
 app.patch("/updateCustomerStatus", middleware.checkToken, (req, res) => {
@@ -38,32 +58,6 @@ app.patch("/updateCustomer/:id", middleware.checkToken, (req, res) => {
 app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.restoreClientFromDeadAndAssignOfficer(req.body.clientId, req.body.officerId, req.body.comment)
-  );
-});
-app.get("/getCustomer/:id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.getClient(req.params.id)
-  );
-});
-app.get("/getAllLeads", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.getAllLeads()
-  );
-});
-app.get("/getAllDeadLeads", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.getDeadLeads()
-  );
-});
-
-app.post("/add_mobile_call_log", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.logMobileCallEvent(req.body)
-  );
-});
-app.get("/get_call_log", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.getCallLogs()
   );
 });
 module.exports = app;
