@@ -116,7 +116,6 @@ module.exports = {
     });
     },
     
-    
     editLead : async (leadId, updateData) => {
         try {
             // Validate input
@@ -135,9 +134,6 @@ module.exports = {
             return { success: false, error: err.message };
         }
     },
-
-   
-
 
     updateCustomerStatus: async (data, officerId) => {
     return new Promise(async (resolve, reject) => {
@@ -171,6 +167,7 @@ module.exports = {
           await customerActivityCollection.insertOne({
             type: 'status_update',
             client_id: clientId,
+            recruiter_id: clientDoc.recruiter_id || null,
             officer_id: officerId,
             new_status: 'DEAD',
             comment: data.comment || '',
@@ -183,7 +180,7 @@ module.exports = {
           const existingClient = await customersCollection.findOne({ _id: clientId });
           if (!existingClient) return reject("Client not found");
 
-          const updateResult = await customersCollection.updateOne(
+          const updateResult = await customersCollection.findOneAndUpdate(
             { _id: clientId },
             { $set: { status: data.client_status } }
           );
@@ -193,6 +190,7 @@ module.exports = {
             await customerActivityCollection.insertOne({
               type: 'status_update',
               client_id: clientId,
+              recruiter_id: updateResult.value.recruiter_id || null, 
               officer_id: officerId,
               client_status: data.client_status,
               comment: data.comment,

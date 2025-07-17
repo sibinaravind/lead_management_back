@@ -174,28 +174,48 @@ module.exports = {
     // },
 
 
-    accessPermissionList: async () => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                await db.get()
-                    .collection(COLLECTION.CONFIG)
-                    .findOne(
-                        {
-                            _id: ObjectId("682a9eeb231dc6e6d693248a")
-                        }
+    // accessPermissionList: async () => {
+    //     return new Promise(async (resolve, reject) => {
+    //         try {
+    //             await db.get()
+    //                 .collection(COLLECTION.CONFIG)
+    //                 .findOne(
+    //                     {
+    //                         _id: ObjectId("682a9eeb231dc6e6d693248a")
+    //                     }
 
-                    ).then((result, err) => {
-                        if (result) {
-                            resolve(result);
-                        } else {
-                            reject(err || "Error processing request");
-                        }
-                    });
-            } catch (error) {
-                reject(error);
-            }
-        });
+    //                 ).then((result, err) => {
+    //                     if (result) {
+    //                         resolve(result);
+    //                     } else {
+    //                         reject(err || "Error processing request");
+    //                     }
+    //                 });
+    //         } catch (error) {
+    //             reject(error);
+    //         }
+    //     });
+    // },
+    accessPermissionList: async () => {
+    return new Promise(async (resolve, reject) => {
+        try {
+        const result = await db.get()
+            .collection(COLLECTION.CONFIG)
+            .findOne({ _id: ObjectId("682a9eeb231dc6e6d693248a") });
+
+        if (!result) return reject("No data found");
+        const { _id, ...roles } = result;
+        const transformed = Object.entries(roles).map(([category, value]) => ({
+            category,
+            value
+        }));
+        resolve(transformed);
+        } catch (error) {
+        reject(error);
+        }
+    });
     },
+
     insertAccessPermissionList: async (data) => {
     return new Promise(async (resolve, reject) => {
         try {

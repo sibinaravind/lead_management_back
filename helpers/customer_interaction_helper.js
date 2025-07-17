@@ -1,10 +1,7 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-const getNextSequence = require('../utils/get_next_unique').getNextSequence;
-const { leadSchema } = require("../validations/leadValidation");
-const validatePartial = require("../utils/validatePartial");
-const { DESIGNATIONS, STATUSES } = require('../constants/enums');
+const {  STATUSES } = require('../constants/enums');
 // Helper to get next sequence number
 
 module.exports = {
@@ -12,7 +9,6 @@ module.exports = {
         return new Promise(async (resolve, reject) => {
             try {
                 const customersCollection = db.get().collection(COLLECTION.LEADS);
-
                 if (data.client_status && (data.client_status != null || data.client_status !== '')) {
                     if (data.client_status === STATUSES.DEAD) {
                         // Move to DEAD_LEADS
@@ -40,7 +36,7 @@ module.exports = {
                             return reject("Client not found");
                         }
                     }
-                     else if (data.client_status === STATUSES.REGISTER) {
+                    else if (data.client_status === STATUSES.REGISTER) {
                         // Move to DEAD_LEADS
                         const clientDoc = await customersCollection.findOne({ _id: new ObjectId(data.client_id) });
                         if (clientDoc) {
@@ -70,13 +66,12 @@ module.exports = {
                             { _id: new ObjectId(data.client_id) },
                             { $set: { status: data.client_status } }
                         );
-                        console.log("Update result:", updateResult);
+                        // console.log("Update result:", updateResult);
                         // if (updateResult.modifiedCount === 0) {
                         //     return reject("Failed to update client status");
                         // }
                     }
                 }
-
                 // Log the call event only after successful status update/move
                 const insertResult = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).insertOne({
                     type: 'call_event',
@@ -120,7 +115,6 @@ module.exports = {
             if (clientDoc) {
                 await deadCustomersCollection.findOne({ phone: normalizedPhone });
             }
-
             // 📞 Log the call event
             const insertResult = await callLogCollection.insertOne({
                 type: 'call_event',
