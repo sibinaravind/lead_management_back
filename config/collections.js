@@ -15,6 +15,7 @@ module.exports={
     CALL_LOG_ACTIVITY:'call_log_activity',
     DEAD_LEADS: 'dead_leads',
     ROUNDROBIN: 'roundrobin',
+    ANNOUNCEMENTS: 'announcements',
     
    
 

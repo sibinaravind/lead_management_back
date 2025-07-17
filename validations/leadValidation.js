@@ -26,7 +26,7 @@ const leadSchema = Joi.object({
   profession: Joi.string().optional().allow(null, ""),
   specialized_in: Joi.array().items(Joi.string()).default([]),
   lead_source: Joi.string().default("direct"),
-  assigned_to: Joi.string().optional(),
+  officer_id: Joi.string().optional(),
   branch_name: Joi.string().optional().allow("", null),
   service_type: Joi.string().required(),
   status: Joi.string().optional().allow("", null),

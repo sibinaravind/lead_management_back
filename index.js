@@ -66,6 +66,8 @@ const routes = [
   { path: '/lead', route: require("./routes/officers/lead_router") },
   {path: '/campaign', route: require("./routes/officers/campaign_router") },
   {path: '/customer', route: require("./routes/officers/customer_interaction_router") },
+  {path: '/customer', route: require("./routes/officers/customer_router") },
+  {path: '/announcement', route: require("./routes/officers/announcement_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 

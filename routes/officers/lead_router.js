@@ -13,12 +13,7 @@ app.post("/insertLead", middleware.checkToken, (req, res) => {
 
 app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.updateLead(req.params.id, req.body)
-  );
-});
-app.get("/getCustomer/:id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.getCustomer(req.params.id)
+    leadHelper.editLead(req.params.id, req.body)
   );
 });
 app.get("/getAllLeads", middleware.checkToken, (req, res) => {
@@ -37,27 +32,10 @@ app.get("/metaLead", middleware.checkToken, (req, res) => {
     metalead.fetchFormsAndLeadsInsert()
   );
 });
-
-
-
-app.patch("/assign_officer", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.assignOfficerToLead(req.body.clientId, req.body.officerId)
-  );
-});
-app.patch("/updateCustomerStatus", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.updateCustomerStatus(req.body, req.decoded._id)
-  );
-});
-app.patch("/updateCustomer/:id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    leadHelper.updateLead(req.params.id, req.body)
-  );
-});
 app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.restoreClientFromDeadAndAssignOfficer(req.body.clientId, req.body.officerId, req.body.comment)
   );
 });
+
 module.exports = app;

@@ -7,7 +7,7 @@ const response = require("../../utils/responseManager");
 
 app.post("/logCallEvent", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.logCallEvent(req.body,req.decoded._id)
+    leadHelper.logCallEvent(req.body ,req.decoded._id)
   );
 });
 

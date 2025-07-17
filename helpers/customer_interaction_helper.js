@@ -1,127 +1,215 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-const {  STATUSES } = require('../constants/enums');
-// Helper to get next sequence number
-
+const { STATUSES } = require('../constants/enums');
+const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 module.exports = {
-    logCallEvent: async (data, officerId) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const customersCollection = db.get().collection(COLLECTION.LEADS);
-                if (data.client_status && (data.client_status != null || data.client_status !== '')) {
-                    if (data.client_status === STATUSES.DEAD) {
-                        // Move to DEAD_LEADS
-                        const clientDoc = await customersCollection.findOne({ _id: new ObjectId(data.client_id) });
-                        if (clientDoc) {
-                            clientDoc.status = STATUSES.DEAD;
-                        }
-                        if (clientDoc) {
-                            const insertResult = await db.get().collection(COLLECTION.DEAD_LEADS).insertOne({
-                                ...clientDoc,
-                                // status : 'DEAD',
-                                moved_to_dead_at: new Date(),
-                                dead_reason: data.comment || '',
-                                moved_by: officerId
-                            });
-
-                            if (insertResult.acknowledged) {
-                                await customersCollection.deleteOne({ _id: new ObjectId(data.client_id) });
-                                data.status = data.client_status;
-                            } else {
-                                return reject("Failed to do action");
-                            }
-                        }
-                        else {
-                            return reject("Client not found");
+    logActivity: async ({
+        type,
+        client_id,
+        officer_id = null,
+        recruiter_id = null,
+        assigned_by = null,
+        comment = null,
+        client_status = null
+    }) => {
+        try {
+            // Validate required fields
+            if (!type) throw new Error("Activity type is required");
+            if (!client_id) throw new Error("Client ID is required");
+            const safeObjectId = (id) => {
+                if (!id) return null;
+                if (id instanceof ObjectId) return id;
+                if (typeof id === 'string') {
+                    if (/^[0-9a-fA-F]{24}$/.test(id)) {
+                        try {
+                            return new ObjectId(id);
+                        } catch {
+                            return null;
                         }
                     }
-                    else if (data.client_status === STATUSES.REGISTER) {
-                        // Move to DEAD_LEADS
-                        const clientDoc = await customersCollection.findOne({ _id: new ObjectId(data.client_id) });
-                        if (clientDoc) {
-                            clientDoc.status = data.client_status;
-                        }
-                        if (clientDoc) {
-                            const insertResult = await db.get().collection(COLLECTION.CUSTOMERS).insertOne({
-                                ...clientDoc,
-                                // status : 'DEAD',
-                            });
-
-                            if (insertResult.acknowledged) {
-                                await customersCollection.deleteOne({ _id: new ObjectId(data.client_id) });
-                                data.status = data.client_status;
-                            } else {
-                                return reject("Failed to do action");
-                            }
-                        }
-                        else {
-                            return reject("Client not found");
-                        }
-                    }
-
-                    else {
-                        // Update status
-                        const updateResult = await customersCollection.updateOne(
-                            { _id: new ObjectId(data.client_id) },
-                            { $set: { status: data.client_status } }
-                        );
-                        // console.log("Update result:", updateResult);
-                        // if (updateResult.modifiedCount === 0) {
-                        //     return reject("Failed to update client status");
-                        // }
-                    }
+                    return null;
                 }
-                // Log the call event only after successful status update/move
-                const insertResult = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).insertOne({
+                return null;
+            };
+
+            const data = {
+                type,
+                client_id: safeObjectId(client_id),
+                created_at: new Date(),
+                ...(comment && { comment }),
+                ...(client_status && { client_status })
+            };
+
+            // Only include these fields if they have valid ObjectIds
+            const validOfficerId = safeObjectId(officer_id);
+            if (validOfficerId) data.officer_id = validOfficerId;
+
+            const validRecruiterId = safeObjectId(recruiter_id);
+            if (validRecruiterId) data.recruiter_id = validRecruiterId;
+
+            const validAssignedById = safeObjectId(assigned_by);
+            if (validAssignedById) data.assigned_by = validAssignedById;
+
+            // Validate the client_id was properly converted
+            if (!data.client_id) {
+                throw new Error(`Invalid client_id format: ${client_id}`);
+            }
+
+            return await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).insertOne(data);
+        } catch (err) {
+            console.error("Error logging activity:", err.message);
+            throw err; // Re-throw the error for the caller to handle
+        }
+    },
+
+
+    logCallEvent: async (data, officer_id) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            if (!data.client_id) return reject("Client ID is required");
+            
+            const clientId = new ObjectId(data.client_id);
+            const leadsCollection = db.get().collection(COLLECTION.LEADS);
+            const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+            const deadLeadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+            const customerActivityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+
+            // Try to find client in LEADS, then CUSTOMERS, then DEAD_LEADS
+            let clientDoc = await leadsCollection.findOne({ _id: clientId });
+            let currentCollection = leadsCollection;
+            
+            if (!clientDoc) {
+                clientDoc = await customersCollection.findOne({ _id: clientId });
+                currentCollection = customersCollection;
+            }
+
+            if (!clientDoc) {
+                clientDoc = await deadLeadsCollection.findOne({ _id: clientId });
+                currentCollection = deadLeadsCollection;
+            }
+
+            if (!clientDoc) return reject("Client not found in any collection");
+
+            // If client is in DEAD_LEADS, just log the call and return
+            if (currentCollection === deadLeadsCollection) {
+                console.log("Client is in DEAD_LEADS, logging call event only");
+                const activityLog = {
                     type: 'call_event',
-                    client_id: new ObjectId(data.client_id),
-                    officer_id: officerId,
+                    recruiter_id: ObjectId.isValid(clientDoc.recruiter_id) ? ObjectId(clientDoc.recruiter_id) : null,
+                    client_id:ObjectId.isValid( clientId) ? ObjectId(clientId) : null,
+                    officer_id:ObjectId.isValid( officer_id )? ObjectId(officer_id) : null,
                     duration: data.duration || 0,
                     next_schedule: data.next_schedule || null,
-                    client_status: data.client_status || '',
                     comment: data.comment || '',
                     call_type: data.call_type || '',
                     call_status: data.call_status || '',
                     created_at: new Date()
-                });
+                };
 
-                if (insertResult.acknowledged) {
-                
-                    resolve(
-                        "Call event logged successfully"
-                    );
-                } else {
-                    reject("Failed to log call event");
+                const logResult = await customerActivityCollection.insertOne(activityLog);
+                return logResult.acknowledged 
+                    ? resolve("Call event logged ") 
+                    : reject("Failed to log call event ");
+            }
+
+            // Handle status changes if provided (only for non-dead leads)
+            if (
+                data.client_status &&
+                data.client_status !== 'null' &&
+                data.client_status !== '' &&
+                clientDoc.status !== data.client_status
+            ) {
+                const status = data.client_status;
+
+                if (status === STATUSES.DEAD && currentCollection !== deadLeadsCollection) {
+                    const insertResult = await deadLeadsCollection.insertOne({
+                        ...clientDoc,
+                        status: STATUSES.DEAD,
+                        moved_to_dead_at: new Date(),
+                        dead_reason: data.comment || ''
+                    });
+                    if (!insertResult.acknowledged) return reject("Failed to move to DEAD_LEADS");
+                    await currentCollection.deleteOne({ _id: clientId });
                 }
-            } catch (err) {
-                console.error(err);
-                reject("Error logging call event");
-            }
-        });
-        },
-        logMobileCallEvent: async (data) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-            const customersCollection = db.get().collection(COLLECTION.LEADS);
-            const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-            const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-            const normalizedPhone = data.phone.toString().replace(/^\+?91/, '').trim();
-            const clientDoc = await customersCollection.findOne({
-                phone: normalizedPhone
-            });
+                else if (status === STATUSES.REGISTER  && currentCollection !== customersCollection) {
+                    const new_client_id = `AECID${String(await getNextSequence("customer_id")).padStart(5, "0")}`;
+                    clientDoc.client_id = new_client_id;
+                    const insertResult = await customersCollection.insertOne({
+                        ...clientDoc,
+                        status: status,
+                    });
 
-            // Optional: check DEAD_LEADS for same phone
-            if (clientDoc) {
-                await deadCustomersCollection.findOne({ phone: normalizedPhone });
+                    if (!insertResult.acknowledged) return reject("Failed to move to CUSTOMERS");
+                    await currentCollection.deleteOne({ _id: clientId });
+                }
+                else {
+                    await currentCollection.updateOne(
+                        { _id: clientId },
+                        { $set: { status: status } }
+                    );
+                }
+
+                // Log the status update activity
+                await module.exports.logActivity({
+                    type: 'status_update',
+                    client_id: clientId,
+                    recruiter_id: clientDoc.recruiter_id || null,
+                    officer_id: officer_id || null,
+                    client_status: status,
+                    comment: data.comment || ''
+                });
             }
-            // 📞 Log the call event
+
+            // Log the call event
+            const activityLog = {
+                type: 'call_event',
+                client_id:ObjectId.isValid( clientId) ? ObjectId(clientId) : null,
+                officer_id: ObjectId.isValid(officer_id) ? ObjectId(officer_id) : null,
+                duration: data.duration || 0,
+                next_schedule: data.next_schedule || null,
+                comment: data.comment || '',
+                call_type: data.call_type || '',
+                call_status: data.call_status || '',
+                created_at: new Date()
+            };
+
+            const logResult = await customerActivityCollection.insertOne(activityLog);
+            if (logResult.acknowledged) {
+                resolve("Call event logged successfully");
+            } else {
+                reject("Failed to log call event");
+            }
+        } catch (err) {
+            console.error(err);
+            reject("Error logging call event");
+        }
+    });
+    },
+
+   logMobileCallEvent: async (data) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const normalizedPhone = data.phone.toString().replace(/^\+?91/, '').trim();
+
+            const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
+            const leadsCollection = db.get().collection(COLLECTION.LEADS);
+            const deadLeadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+            const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+            let clientDoc = await leadsCollection.findOne({ phone: normalizedPhone });
+            if (!clientDoc) {
+                clientDoc = await customersCollection.findOne({ phone: normalizedPhone });
+            }
+            if (!clientDoc) {
+                clientDoc = await deadLeadsCollection.findOne({ phone: normalizedPhone });
+            }
+
             const insertResult = await callLogCollection.insertOne({
                 type: 'call_event',
-                client_id: clientDoc ? clientDoc._id : null,
-                officer_id: data.officer_id || null,
+                client_id: clientDoc ? ObjectId(clientDoc._id) : null,
+                officer_id: data.officer_id ? ObjectId(data.officer_id) : null,
                 received_phone: data.received_phone || null,
-                phone: normalizedPhone, // Store the normalized phone
+                phone: normalizedPhone,
                 duration: parseFloat(data.duration || 0),
                 call_type: data.call_type || '',
                 created_at: new Date()
@@ -133,26 +221,26 @@ module.exports = {
                 reject("Failed to log call event");
             }
 
-            } catch (err) {
+        } catch (err) {
             console.error(err);
             reject("Error logging call event");
+        }
+    });
+    },
+
+    getCallLogs: async () => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+                const logs = await callLogCollection.find()
+                    .sort({ created_at: -1 })
+                    .toArray();
+                resolve(logs);
+            } catch (err) {
+                console.error(err);
+                reject("Error fetching call logs");
             }
         });
-        },
-
-        getCallLogs: async () => {
-            return new Promise(async (resolve, reject) => {
-                try {
-                    const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-                    const logs = await callLogCollection.find()
-                        .sort({ created_at: -1 })
-                        .toArray();
-                    resolve(logs);
-                } catch (err) {
-                    console.error(err);
-                    reject("Error fetching call logs");
-                }
-            });
-        },
+    },
 
 }
