@@ -6,6 +6,7 @@ const { leadSchema } = require("../validations/leadValidation");
 const validatePartial = require("../utils/validatePartial");
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
+const { off } = require('../routes/officers/customer_router');
 // Helper to get next sequence number
 
 module.exports = {
@@ -253,6 +254,88 @@ module.exports = {
             }
         });
     },
+    
+        // db.leads.createIndex({ officer_id: 1 }); //tst add index to all  primary fields
+        // db.leads.createIndex({ status: 1 });
+        // db.leads.createIndex({ service_type: 1 });
+        // db.leads.createIndex({ created_at: -1 });
+
+    getAllFilteredLeads: async (filters, user , page = 1, limit = 20, ) => {
+    return new Promise(async (resolve, reject) => {
+            let officers = [];
+            if (user.designation?.includes('ADMIN')) {
+                officers = [];
+            } else if (Array.isArray(user.officers)) {
+                officers = user.officers.map(o => ({
+                    ...o,
+                    officer_id: o.officer_id || (typeof o === 'string' ? o : undefined),
+                    user_id: o.user_id || (typeof o === 'object' && o.user_id ? o.user_id : undefined)
+                }));
+                const officerIds = officers.map(o => o.officer_id).filter(Boolean);
+                const userIds = officers.map(o => o.user_id).filter(Boolean);
+                const ids = [...officerIds, ...userIds].filter(Boolean);
+                if (ids.length > 0) {
+                    query.officer_id = { $in: ids };
+                }
+            }
+        try {
+            const query = {};
+            // Filter Mapping - Only allow certain fields
+            const filterableFields = ['status', 'service_type', 'lead_source', 'officer_id'];
+            for (const key of filterableFields) {
+                const value = filters[key];
+                if (Array.isArray(value) && value.length > 0) {
+                    query[key] = { $in: value };
+                } else if (value) {
+                    query[key] = value;
+                }
+            }
+
+            // Access control
+        
+        
+
+            // Pagination
+            const skip = (page - 1) * limit;
+
+            const collection = db.get().collection(COLLECTION.LEADS);
+
+            const [total, leads] = await Promise.all([
+                collection.countDocuments(query),
+                collection.find(query, {
+                        projection: {
+                            _id: 1,
+                            client_id: 1,
+                            name: 1,
+                            email: 1,
+                            phone: 1,
+                            service_type: 1,
+                            country_code: 1,
+                            status: 1,
+                            lead_source: 1,
+                            officer_id: 1,
+                            created_at: 1
+                        },
+                        skip,
+                        limit,
+                        sort: { created_at: -1 } // remove if not required
+                    }).toArray()
+            ]);
+
+            resolve({
+                total,
+                page,
+                totalPages: Math.ceil(total / limit),
+                data: leads
+            });
+
+        } catch (err) {
+            console.error(err);
+            reject("Error fetching filtered LEADS");
+        }
+    });
+    },  
+
 
      getDeadLeads: async () => {
         console.log("Fetching all dead leads");

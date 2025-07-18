@@ -21,4 +21,9 @@ app.get("/get_call_log", middleware.checkToken, (req, res) => {
     leadHelper.getCallLogs()
   );
 });
+app.get("/customercall/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getCustomerCallLogs(req.params.id)
+  );
+});
 module.exports = app;

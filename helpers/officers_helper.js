@@ -28,7 +28,8 @@ loginOfficer: async (officer_id, password) => {
         _id: officer._id,
         officer_id: officer.officer_id,
         designation: officer.designation,
-        branch: officer.branch
+        branch: officer.branch,
+        officers: officer.officers || [],
       };
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });
       // Exclude password from response

@@ -10,6 +10,12 @@ app.get("/getCustomer/:id", middleware.checkToken, (req, res) => {
     customerHelper.getCustomer(req.params.id)
   );
 });
+
+app.get("/search/:query", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    customerHelper.searchCustomer(req.params.query)
+  );
+});
 app.patch("/assign_officer", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     customerHelper.assignOfficerToLead(req.body.clientId, req.body.officerId,req.body.comment, req.decoded._id)
@@ -21,6 +27,8 @@ app.patch("/updateCustomerStatus", middleware.checkToken, (req, res) => {
     customerHelper.updateCustomerStatus(req.body, req.decoded._id)
   );
 });
+
+
 // app.patch("/updateCustomer/:id", middleware.checkToken, (req, res) => {
 //   return response.handle(res, () =>
 //     customerHelper.updateLead(req.params.id, req.body)

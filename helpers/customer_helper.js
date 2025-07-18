@@ -28,6 +28,49 @@ module.exports = {
     });
   },
 
+  searchCustomer: async (query) => {
+    const projection = {
+      _id: 1,
+      client_id: 1,
+      name: 1,
+      email: 1,
+      phone: 1,
+      service_type: 1,
+      country_code: 1,
+      status: 1,
+      lead_source: 1,
+      officer_id: 1,
+      created_at: 1
+    };
+
+    try {
+
+      if (!query) {
+        return [];
+      }
+      const searchQuery = {
+        $or: [
+          { phone: { $regex: query, $options: 'i' } },
+          { name: { $regex: query, $options: 'i' } },
+          { email: { $regex: query, $options: 'i' } },
+          { client_id: { $regex: query, $options: 'i' } }
+        ]
+      };
+
+      // Search all collections in parallel
+      const [leads, customers, deadLeads] = await Promise.all([
+        db.get().collection(COLLECTION.LEADS).find(searchQuery, { projection }).toArray(),
+        db.get().collection(COLLECTION.CUSTOMERS).find(searchQuery, { projection }).toArray(),
+        db.get().collection(COLLECTION.DEAD_LEADS).find(searchQuery, { projection }).toArray()
+      ]);
+
+      // Combine and return all results
+      return [...leads, ...customers, ...deadLeads];
+    } catch (err) {
+      console.error("Error searching customer:", err);
+      throw new Error("Error searching customer");
+    }
+  },
   assignOfficerToLead: async (clientId, officerId, comment, assignedby) => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -104,7 +147,7 @@ module.exports = {
         await logActivity({
           type: 'assign_officer',
           client_id: clientObjectId,
-          assigned_by:  assignedby,
+          assigned_by: assignedby,
           recruiter_id: recruiterIdValue || updateResult.value.recruiter_id || null,
           officer_id: officerObjectId,
           comment: comment || null
@@ -162,9 +205,9 @@ module.exports = {
         }
 
         else if (status === STATUSES.REGISTER) {
-           const client_id = `AECID${String(await getNextSequence("customer_id")).padStart(5, "0")}`;
-           clientDoc.client_id = client_id;
-           clientDoc.status = status;
+          const client_id = `AECID${String(await getNextSequence("customer_id")).padStart(5, "0")}`;
+          clientDoc.client_id = client_id;
+          clientDoc.status = status;
 
           const insertResult = await customersCollection.insertOne({
             ...clientDoc
@@ -176,7 +219,7 @@ module.exports = {
         }
 
         else {
-         await currentCollection.updateOne(
+          await currentCollection.updateOne(
             { _id: clientId },
             { $set: { status: status } }
           );
@@ -194,7 +237,7 @@ module.exports = {
         //   created_at: new Date()
         // };
 
-        const logResult =  await logActivity({
+        const logResult = await logActivity({
           type: 'status_update',
           client_id: clientId,
           recruiter_id: clientDoc.recruiter_id || null,

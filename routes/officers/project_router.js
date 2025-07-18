@@ -105,7 +105,6 @@ app.get("/vacancyListByClient/:clientId", middleware.checkToken, (req, res) => {
 });
 
 app.get("/getVacancyMatchingProfiles/:vacancy_id", middleware.checkToken, (req, res) => {
-  console.log("vacancy_id", req.params.vacancy_id);
   return response.handle(res, () =>
     projecthelper.getVacancyMatchingProfiles(req.params.vacancy_id)
   );

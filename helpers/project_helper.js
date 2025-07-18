@@ -665,13 +665,13 @@ module.exports = {
                 };
 
                 // Get data from LEADS (from db1)
-                const leadsPromise = db1.get().collection(COLLECTION.LEADS)
+                const leadsPromise = db.get().collection(COLLECTION.LEADS)
                     .find()
                     .project(projection)
                     .toArray();
 
                 // Get data from CUSTOMERS (from db2)
-                const customersPromise = db2.get().collection(COLLECTION.CUSTOMERS)
+                const customersPromise = db.get().collection(COLLECTION.CUSTOMERS)
                     .find()
                     .project(projection)
                     .toArray();
@@ -682,7 +682,7 @@ module.exports = {
                 const combined = [...leads, ...customers];
                 resolve(combined);
             } catch (err) {
-                console.error(err);
+            
                 reject("Error fetching data from leads and customers");
             }
         });
