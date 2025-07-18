@@ -26,4 +26,9 @@ app.get("/customercall/:id", middleware.checkToken, (req, res) => {
     leadHelper.getCustomerCallLogs(req.params.id)
   );
 });
+app.patch("/updatelog/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.updateCallLog(req.params.id, req.body)
+  );
+});
 module.exports = app;

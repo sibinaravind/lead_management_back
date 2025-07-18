@@ -292,4 +292,36 @@ module.exports = {
         }
     },
 
+    updateCallLog: async (logId, data ) => {
+    try {
+        const collection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+        const updateFields = { updated_at: new Date() };
+
+        const allowedFields = [
+            'duration', 'next_schedule', 'next_shedule_time', 
+            'comment'
+        ];
+        allowedFields.forEach(field => {
+            if (data[field] !== undefined) {
+                updateFields[field] = field === 'officer_id' 
+                    ? (ObjectId.isValid(data.officer_id) ? new ObjectId(data.officer_id) : null)
+                    : data[field];
+            }
+        });
+
+        // Execute update
+        const result = await collection.updateOne(
+            { _id: new ObjectId(logId) },
+            { $set: updateFields }
+        );
+
+        if (!result.matchedCount) throw new Error("Call log not found");
+        
+        return { success: true, updated: result.modifiedCount > 0 };
+    } catch (err) {
+        console.error("Update error:", err);
+        throw new Error(err.message || "Failed to update call log");
+    }
+    },
+
 }
