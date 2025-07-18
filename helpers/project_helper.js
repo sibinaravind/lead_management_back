@@ -412,113 +412,6 @@ module.exports = {
             }
         });
     },
-    // getVacancyList: async () => {
-    //     return new Promise(async (resolve, reject) => {
-    //         try {
-    //             const result = await db.get().collection(COLLECTION.VACANCIES).aggregate([
-    //                 { $match: { status: "ACTIVE" } },
-    //                 {
-    //                     $lookup: {
-    //                         from: COLLECTION.PROJECTS,
-    //                         localField: "project_id",
-    //                         foreignField: "_id",
-    //                         as: "project"
-    //                     }
-    //                 },
-    //                 { $unwind: "$project" },
-    //                 {
-    //                     $addFields: {
-    //                         all_vacancies: {
-    //                             $reduce: {
-    //                                 input: "$clients",
-    //                                 initialValue: [],
-    //                                 in: {
-    //                                     $concatArrays: [
-    //                                         "$$value",
-    //                                         { $objectToArray: "$$this.vacancies" }
-    //                                     ]
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 },
-    //                 {
-    //                     $addFields: {
-    //                         specialization_totals: {
-    //                             $arrayToObject: {
-    //                                 $map: {
-    //                                     input: "$all_vacancies",
-    //                                     as: "vac",
-    //                                     in: {
-    //                                         k: "$$vac.k",
-    //                                         v: {
-    //                                             count: "$$vac.v.count",
-    //                                             target_cv: "$$vac.v.target_cv"
-    //                                         }
-    //                                     }
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 },
-    //                 {
-    //                     $addFields: {
-    //                         total_vacancies: {
-    //                             $sum: {
-    //                                 $map: {
-    //                                     input: { $objectToArray: "$specialization_totals" },
-    //                                     as: "s",
-    //                                     in: "$$s.v.count"
-    //                                 }
-    //                             }
-    //                         },
-    //                         total_target_cv: {
-    //                             $sum: {
-    //                                 $map: {
-    //                                     input: { $objectToArray: "$specialization_totals" },
-    //                                     as: "s",
-    //                                     in: "$$s.v.target_cv"
-    //                                 }
-    //                             }
-    //                         }
-    //                     }
-    //                 },
-    //                 {
-    //                     $project: {
-    //                         job_title: 1,
-    //                         job_category: 1,
-    //                         qualifications: 1,
-    //                         experience: 1,
-    //                         salary_from: 1,
-    //                         salary_to: 1,
-    //                         lastdatetoapply: 1,
-    //                         description: 1,
-    //                         country: 1,
-    //                         city: 1,
-    //                         project: {
-    //                             _id: 1,
-    //                             project_name: 1,
-    //                             organization_type: 1,
-    //                             organization_category: 1,
-    //                             organization_name: 1,
-    //                             country: 1,
-    //                             city: 1
-
-    //                         },
-    //                         total_vacancies: 1,
-    //                         total_target_cv: 1,
-    //                         specialization_totals: 1
-    //                     }
-    //                 }
-    //             ]).toArray();
-
-    //             resolve(result);
-    //         } catch (err) {
-    //             console.error(err);
-    //             reject("Error fetching vacancy list");
-    //         }
-    //     });
-    // },
 
     getVacancyList: async () => {
         return new Promise(async (resolve, reject) => {
@@ -651,19 +544,19 @@ module.exports = {
                         }
                     },
                     {
-                    $addFields: {
-                        specialization_totals: {
-                        $map: {
-                            input: { $objectToArray: "$specialization_totals" },
-                            as: "item",
-                            in: {
-                            specialization: "$$item.k",
-                            count: "$$item.v.count",
-                            target_cv: "$$item.v.target_cv"
+                        $addFields: {
+                            specialization_totals: {
+                                $map: {
+                                    input: { $objectToArray: "$specialization_totals" },
+                                    as: "item",
+                                    in: {
+                                        specialization: "$$item.k",
+                                        count: "$$item.v.count",
+                                        target_cv: "$$item.v.target_cv"
+                                    }
+                                }
                             }
                         }
-                        }
-                    }
                     },
                     // Step 4: Project the final output
                     {
@@ -753,6 +646,48 @@ module.exports = {
             }
         });
     },
+
+    getVacancyMatchingProfiles: async (vacancyId) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const projection = {
+                    _id: 1,
+                    client_id: 1,
+                    name: 1,
+                    email: 1,
+                    phone: 1,
+                    service_type: 1,
+                    country_code: 1,
+                    status: 1,
+                    lead_source: 1,
+                    officer_id: 1,
+                    created_at: 1
+                };
+
+                // Get data from LEADS (from db1)
+                const leadsPromise = db1.get().collection(COLLECTION.LEADS)
+                    .find()
+                    .project(projection)
+                    .toArray();
+
+                // Get data from CUSTOMERS (from db2)
+                const customersPromise = db2.get().collection(COLLECTION.CUSTOMERS)
+                    .find()
+                    .project(projection)
+                    .toArray();
+
+                // Await both promises in parallel
+                const [leads, customers] = await Promise.all([leadsPromise, customersPromise]);
+                // Combine both datasets
+                const combined = [...leads, ...customers];
+                resolve(combined);
+            } catch (err) {
+                console.error(err);
+                reject("Error fetching data from leads and customers");
+            }
+        });
+    },
+
 
 
 

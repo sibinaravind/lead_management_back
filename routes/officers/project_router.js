@@ -30,7 +30,7 @@ app.delete("/deleteClient/:_id", middleware.checkToken, (req, res) => {
 });
 
 
-app.post("/clientProject", middleware.checkToken, (req, res) => {
+app.post("/createProject", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     projecthelper.createProject(req.body)
   );
@@ -101,6 +101,13 @@ app.get("/vacancyList", middleware.checkToken, (req, res) => {
 app.get("/vacancyListByClient/:clientId", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     projecthelper.getVacancyListByClient(req.params.clientId)
+  );
+});
+
+app.get("/getVacancyMatchingProfiles/:vacancy_id", middleware.checkToken, (req, res) => {
+  console.log("vacancy_id", req.params.vacancy_id);
+  return response.handle(res, () =>
+    projecthelper.getVacancyMatchingProfiles(req.params.vacancy_id)
   );
 });
 
