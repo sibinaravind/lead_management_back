@@ -6,7 +6,6 @@ const { leadSchema } = require("../validations/leadValidation");
 const validatePartial = require("../utils/validatePartial");
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
-const { off } = require('../routes/officers/customer_router');
 // Helper to get next sequence number
 
 module.exports = {
@@ -255,86 +254,148 @@ module.exports = {
         });
     },
     
-        // db.leads.createIndex({ officer_id: 1 }); //tst add index to all  primary fields
-        // db.leads.createIndex({ status: 1 });
-        // db.leads.createIndex({ service_type: 1 });
-        // db.leads.createIndex({ created_at: -1 });
+    // db.leads.createIndex({ officer_id: 1 }); //tst add index to all  primary fields
+    // db.leads.createIndex({ status: 1 });
+    // db.leads.createIndex({ service_type: 1 });
+    // db.leads.createIndex({ created_at: -1 });
 
-    getAllFilteredLeads: async (filters, user , page = 1, limit = 20, ) => {
-    return new Promise(async (resolve, reject) => {
-            let officers = [];
-            if (user.designation?.includes('ADMIN')) {
-                officers = [];
-            } else if (Array.isArray(user.officers)) {
-                officers = user.officers.map(o => ({
-                    ...o,
-                    officer_id: o.officer_id || (typeof o === 'string' ? o : undefined),
-                    user_id: o.user_id || (typeof o === 'object' && o.user_id ? o.user_id : undefined)
-                }));
-                const officerIds = officers.map(o => o.officer_id).filter(Boolean);
-                const userIds = officers.map(o => o.user_id).filter(Boolean);
-                const ids = [...officerIds, ...userIds].filter(Boolean);
-                if (ids.length > 0) {
-                    query.officer_id = { $in: ids };
-                }
-            }
+    // getAllFilteredLeads: async (filters, user , page = 1, limit = 20 ) => {
+    // return new Promise(async (resolve, reject) => {
+    //         let officers = [];
+    //         if (user.designation?.includes('ADMIN')) {
+    //             officers = [];
+    //         } else if (Array.isArray(user.officers)) {
+    //             officers = user.officers.map(o => ({
+    //                 ...o,
+    //                 officer_id: o.officer_id || (typeof o === 'string' ? o : undefined),
+    //                 user_id: o.user_id || (typeof o === 'object' && o.user_id ? o.user_id : undefined)
+    //             }));
+    //             const officerIds = officers.map(o => o.officer_id).filter(Boolean);
+    //             const userIds = officers.map(o => o.user_id).filter(Boolean);
+    //             const ids = [...officerIds, ...userIds].filter(Boolean);
+    //             if (ids.length > 0) {
+    //                 query.officer_id = { $in: ids };
+    //             }
+    //         }
+    //     try {
+    //         const query = {};
+    //         // Filter Mapping - Only allow certain fields
+    //         const filterableFields = ['status', 'service_type', 'lead_source', 'officer_id'];
+    //         for (const key of filterableFields) {
+    //             const value = filters[key];
+    //             if (Array.isArray(value) && value.length > 0) {
+    //                 query[key] = { $in: value };
+    //             } else if (value) {
+    //                 query[key] = value;
+    //             }
+    //         }
+    //         const skip = (page - 1) * limit;
+    //         const [total, leads] = await Promise.all([
+    //              db.get().collection(COLLECTION.LEADS).find(query, {
+    //                     projection: {
+    //                         _id: 1,
+    //                         client_id: 1,
+    //                         name: 1,
+    //                         email: 1,
+    //                         phone: 1,
+    //                         service_type: 1,
+    //                         country_code: 1,
+    //                         status: 1,
+    //                         lead_source: 1,
+    //                         officer_id: 1,
+    //                         created_at: 1
+    //                     },
+    //                     skip,
+    //                     limit,
+    //                     sort: { created_at: -1 } 
+    //                 }).toArray()
+    //         ]);
+
+    //         resolve({
+    //             total,
+    //             page,
+    //             totalPages: Math.ceil(total / limit),
+    //             data: leads
+    //         });
+
+    //     } catch (err) {
+    //         console.error(err);
+    //         reject("Error fetching filtered LEADS");
+    //     }
+    // });
+    // },  
+
+   getFilteredLeads: async (query, decoded) => {
         try {
-            const query = {};
-            // Filter Mapping - Only allow certain fields
-            const filterableFields = ['status', 'service_type', 'lead_source', 'officer_id'];
-            for (const key of filterableFields) {
-                const value = filters[key];
-                if (Array.isArray(value) && value.length > 0) {
-                    query[key] = { $in: value };
-                } else if (value) {
-                    query[key] = value;
+            const {
+            page = 1,
+            limit = 10,
+            status,
+            callStatus,
+            branch,
+            employee,
+            serviceType,
+            leadStatus,
+            agent,
+            quick
+            } = query;
+
+            const skip = (parseInt(page) - 1) * parseInt(limit);
+
+            const filter = {};
+            // 🔐 Officer filter
+            if (!decoded?.designation.includes("ADMIN")) {
+                const officerIdList = decoded?.officers?.map((o) => o.officer_id) || [];
+                if (officerIdList.length > 0) {
+                filter.officer_id = { $in: [decoded?._id, ...officerIdList] };
+                } else {
+                filter.officer_id = decoded?._id;
                 }
             }
+            console.log("Filter criteria:", filter);
+            // ✅ Apply filters
+            if (status) filter.status = status;
+            if (callStatus) filter.call_status = callStatus;
+            if (branch) filter.branch = branch;
+            if (employee) filter.employee = employee;
+            if (serviceType) filter['Service Type'] = serviceType;
+            if (leadStatus) filter.lead_status = leadStatus;
+            if (agent) filter.agent = agent;
 
-            // Access control
-        
-        
+            const leadsCollection = db.get().collection('leads');
 
-            // Pagination
-            const skip = (page - 1) * limit;
+            // 🕐 Quick last 10 unattended
+            if (quick === 'true') {
+            filter.status = 'UNATTENDED';
+            const data = await leadsCollection.find(filter)
+                .sort({ created_at: -1 })
+                .limit(10)
+                .toArray();
+            return { success: true, data };
+            }
 
-            const collection = db.get().collection(COLLECTION.LEADS);
-
-            const [total, leads] = await Promise.all([
-                collection.countDocuments(query),
-                collection.find(query, {
-                        projection: {
-                            _id: 1,
-                            client_id: 1,
-                            name: 1,
-                            email: 1,
-                            phone: 1,
-                            service_type: 1,
-                            country_code: 1,
-                            status: 1,
-                            lead_source: 1,
-                            officer_id: 1,
-                            created_at: 1
-                        },
-                        skip,
-                        limit,
-                        sort: { created_at: -1 } // remove if not required
-                    }).toArray()
+            // ⚙️ Paginated filtering
+            const [total, data] = await Promise.all([
+            leadsCollection.countDocuments(filter),
+            leadsCollection.find(filter).skip(skip).limit(parseInt(limit)).sort({ created_at: -1 }).toArray(),
             ]);
 
-            resolve({
-                total,
-                page,
+            return {
+            success: true,
+            data,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
                 totalPages: Math.ceil(total / limit),
-                data: leads
-            });
+                        totalRecords: total,
+                    }
+                    };
 
-        } catch (err) {
-            console.error(err);
-            reject("Error fetching filtered LEADS");
-        }
-    });
-    },  
+                } catch (error) {
+                    console.error('getFilteredLeads error:', error);
+                    throw new Error('Server Error');
+                }
+    },
 
 
      getDeadLeads: async () => {

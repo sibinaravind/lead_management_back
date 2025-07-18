@@ -38,4 +38,9 @@ app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
   );
 });
 
+app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
+    return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
+});
+
+
 module.exports = app;
