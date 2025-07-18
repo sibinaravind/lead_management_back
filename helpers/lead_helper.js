@@ -6,124 +6,239 @@ const { leadSchema } = require("../validations/leadValidation");
 const validatePartial = require("../utils/validatePartial");
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
+const { safeObjectId } = require('../utils/safeObjectId');
 // Helper to get next sequence number
 
 module.exports = {
-    createLead: async (details) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-        // Validate incoming data
-        const { error, value } = leadSchema.validate(details);
-        if (error) return reject("Validation failed: " + error.details[0].message);
+createLead: async (details) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      // ✅ Validate input
+      const { error, value } = leadSchema.validate(details);
+      if (error) return reject("Validation failed: " + error.details[0].message);
 
-        const collection = db.get().collection(COLLECTION.LEADS);
-        const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-        // Check for duplicate
-        const collectionsToCheck = [
-            collection,
-            db.get().collection(COLLECTION.CUSTOMERS),
-            db.get().collection(COLLECTION.DEAD_LEADS),
-        ];
+      const dbInstance = db.get();
+      const leadsCol = dbInstance.collection(COLLECTION.LEADS);
+      const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
 
-        for (const col of collectionsToCheck) {
-            let query;
-            if (value.email && value.email.trim() !== "") {
-                query = { $or: [{ email: value.email }, { phone: value.phone }] };
-            } else {
-                query = { phone: value.phone };
+      // ✅ Check for duplicates
+      const collectionsToCheck = [
+        leadsCol,
+        dbInstance.collection(COLLECTION.CUSTOMERS),
+        dbInstance.collection(COLLECTION.DEAD_LEADS),
+      ];
+
+      for (const col of collectionsToCheck) {
+        const query = value.email?.trim()
+          ? { $or: [{ email: value.email }, { phone: value.phone }] }
+          : { phone: value.phone };
+
+        const exists = await col.findOne(query);
+        // if (exists) return reject("Client already exists");
+      }
+
+      // ✅ Generate client ID
+      const leadIdSeq = await getNextSequence("lead_id");
+      const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+
+      // ✅ Officer assignment
+      let assignedOfficer = null;
+
+      if (!value.officer_id && value.service_type) {
+        const rrConfig = await dbInstance
+          .collection(COLLECTION.ROUNDROBIN)
+          .findOne({ name: value.service_type });
+
+        if (rrConfig?.officers?.length > 0) {
+          const { value: counter } = await dbInstance
+            .collection(COLLECTION.COUNTER)
+            .findOneAndUpdate(
+              { _id: `lead_roundrobin_${value.service_type}` },
+              { $inc: { sequence: 1 } },
+              { upsert: true, returnDocument: "after" }
+            );
+
+          const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
+          const selectedOfficerId = rrConfig.officers[officerIndex];
+
+          assignedOfficer = await officersCol.findOne(
+            { _id: safeObjectId(selectedOfficerId) },
+            { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+          );
+        }
+      } else if (value.officer_id) {
+        assignedOfficer = await officersCol.findOne(
+          { _id: safeObjectId(value.officer_id) },
+          { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+        );
+      }
+
+      // ✅ Recruiter logic
+      let recruiterIdValue = "UNASSIGNED";
+      if (
+        assignedOfficer?.designation?.includes(DESIGNATIONS.COUNSILOR)
+      ) {
+        recruiterIdValue = safeObjectId(assignedOfficer._id);
+      }
+
+      // ✅ Prepare insert data
+
+      // ✅ Insert lead
+      const result = await leadsCol.insertOne({
+        client_id,
+        officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
+        recruiter_id: recruiterIdValue,
+        status: assignedOfficer ? value.status || "HOT" : "UNASSIGNED",
+        branch: Array.isArray(assignedOfficer?.branch)
+          ? assignedOfficer.branch[0] || "AFFINIX"
+          : assignedOfficer?.branch || "AFFINIX",
+        ...value,
+        created_at: new Date(),
+      });
+
+      if (result.acknowledged) {
+            if(value.officer_id) //for fix the error when officer_id not settting as ObjectId
+            {
+                leadsCol.updateOne({ _id: result.insertedId }, { $set: { officer_id: safeObjectId(value.officer_id) } });
             }
-            const existing = await col.findOne(query);
-            //  if (existing) return reject("Client already exists with this email or phone");
-        }
-        const client_id = `AELID${String(await getNextSequence("lead_id")).padStart(5, "0")}`;
-        var assignedOfficer = null;
-        if (!value.officer_id && value.service_type) {
-            const rrConfig = await db.get()
-            .collection(COLLECTION.ROUNDROBIN)
-            .findOne({ name: value.service_type });
-            if (rrConfig && Array.isArray(rrConfig.officers) && rrConfig.officers.length > 0) {
-            const updateResult = await  db.get().collection(COLLECTION.COUNTER).findOneAndUpdate(
-                { _id: `lead_roundrobin_${value.service_type}` },
-                { $inc: { sequence: 1 } },
-                { upsert: true, returnDocument: "after" }
-            );
 
-            const officerIndex = (updateResult.value.sequence - 1) % rrConfig.officers.length;
-            const selectedOfficerId = rrConfig.officers[officerIndex];
+        await logActivity({
+          type: "customer_created",
+          client_id: result.insertedId,
+          recruiter_id: recruiterIdValue,
+          officer_id: assignedOfficer
+            ? safeObjectId(assignedOfficer._id)
+            : "UNASSIGNED",
+          comment: value.note || "",
+        });
+        return resolve(result.insertedId);
+      } else {
+        return reject("Insert failed");
+      }
 
-             assignedOfficer = await officersCollection.findOne(
-                { _id: ObjectId(selectedOfficerId) },
-                { projection: { name: 1, officer_id: 1, email: 1, designation: 1 ,branch:1} }
-            );
-            }
-        }else  if (value.officer_id != null && value.officer_id != '') {
-             assignedOfficer = await officersCollection.findOne(
-            { _id: ObjectId(value.officer_id )},
-            { projection: { name: 1, officer_id: 1, email: 1, designation: 1 } }
-            );
-        }
+    } catch (err) {
+      console.error("Error inserting lead:", err);
+      return reject("Error processing request");
+    }
+  });
+},
 
-        const assignedToValue = assignedOfficer != null  ? ObjectId(assignedOfficer._id) : "UNASSIGNED";
-        const statusValue = assignedToValue != null ? (value.status || "HOT") : "UNASSIGNED";
-        let recruiterIdValue = "UNASSIGNED";
-        if (
-            assignedOfficer != null &&
-            Array.isArray(assignedOfficer.designation) &&
-            assignedOfficer.designation.includes(DESIGNATIONS.COUNSILOR)
-        ) {
-            recruiterIdValue = ObjectId(assignedOfficer._id);
-        }
+    // createLead: async (details) => {
+    // return new Promise(async (resolve, reject) => {
+    //     try {
+    //     // Validate incoming data
+    //     const { error, value } = leadSchema.validate(details);
+    //     if (error) return reject("Validation failed: " + error.details[0].message);
 
+    //     const collection = db.get().collection(COLLECTION.LEADS);
+    //     const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+    //     // Check for duplicate
+    //     const collectionsToCheck = [
+    //         collection,
+    //         db.get().collection(COLLECTION.CUSTOMERS),
+    //         db.get().collection(COLLECTION.DEAD_LEADS),
+    //     ];
 
-        collection.insertOne({
-            client_id,
-            branch: Array.isArray(assignedOfficer?.branch) ? assignedOfficer.branch[0] || "AFFINIX" : assignedOfficer?.branch || "AFFINIX",
-            officer_id: ObjectId(assignedToValue),
-            recruiter_id: recruiterIdValue,
-            status: statusValue,
-             ...value,
-            created_at: new Date(),
-        })
-        .then(result => {
-            if (result.acknowledged) {
-            // const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
-            // eventsCollection.insertOne({
-            //     type: "customer_created",
-            //     client_id: ObjectId(result.insertedId),
-            //     recruiter_id:recruiterIdValue,
-            //     officer_id: assignedToValue,
-            //     comment: value.note|| "",
-            //     created_at: new Date(),
-            // })
-            // .then(() => {
-            //     return resolve(result.insertedId);
-            // })
-            // .catch(eventErr => {
-            //     console.error("Failed to log customer creation event:", eventErr);
-            //     return resolve(result.insertedId);
-            // });
-            logActivity({
-                    type: "customer_created",
-                    client_id: result.insertedId  || null,
-                    recruiter_id: recruiterIdValue || null,
-                    officer_id: assignedToValue  || null,
-                    comment: value.note || "",
-                })
-            return resolve(result.insertedId);
+    //     for (const col of collectionsToCheck) {
+    //         let query;
+    //         if (value.email && value.email.trim() !== "") {
+    //             query = { $or: [{ email: value.email }, { phone: value.phone }] };
+    //         } else {
+    //             query = { phone: value.phone };
+    //         }
+    //         const existing = await col.findOne(query);
+    //         //  if (existing) return reject("Client already exists with this email or phone");  //test
+    //     }
+    //     const client_id = `AELID${String(await getNextSequence("lead_id")).padStart(5, "0")}`;
+    //     var assignedOfficer = null;
+    //     if (!value.officer_id && value.service_type) {
+    //         const rrConfig = await db.get()
+    //         .collection(COLLECTION.ROUNDROBIN)
+    //         .findOne({ name: value.service_type });
+    //         console.log("Round Robin Config:", rrConfig);
+    //         if (rrConfig && Array.isArray(rrConfig.officers) && rrConfig.officers.length > 0) {
+    //               console.log("Round Robin Config:", rrConfig);
+    //         const updateResult = await  db.get().collection(COLLECTION.COUNTER).findOneAndUpdate(
+    //             { _id: `lead_roundrobin_${value.service_type}` },
+    //             { $inc: { sequence: 1 } },
+    //             { upsert: true, returnDocument: "after" }
+    //         );
 
-            } else {
-            reject("Insert failed");
-                }
-            })
-            .catch(err => {
-                reject("Error processing request",err);
-            });
+    //         const officerIndex = (updateResult.value.sequence - 1) % rrConfig.officers.length;
+    //         const selectedOfficerId = rrConfig.officers[officerIndex];
+
+    //          assignedOfficer = await officersCollection.findOne(
+    //             { _id: ObjectId(selectedOfficerId) },
+    //             { projection: { name: 1, officer_id: 1, email: 1, designation: 1 ,branch:1} }
+    //         );
+    //         }
+    //     }else  if (value.officer_id != null && value.officer_id != '') {
+    //         console.log("Assigned officer ID:", value.officer_id);
+    //          assignedOfficer = await officersCollection.findOne(
+    //         { _id: ObjectId(value.officer_id )},
+    //         { projection: { name: 1, officer_id: 1, email: 1, designation: 1 } }
+    //         );
+    //     }
+    //     let recruiterIdValue = "UNASSIGNED";
+    //     if (
+    //         assignedOfficer != null &&
+    //         Array.isArray(assignedOfficer.designation) &&
+    //         assignedOfficer.designation.includes(DESIGNATIONS.COUNSILOR)
+    //     ) {
+    //         recruiterIdValue = ObjectId(assignedOfficer._id);
+    //     }
+    //     collection.insertOne({
+    //         client_id,
+    //         officer_id: assignedOfficer !=null ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
+    //         branch: Array.isArray(assignedOfficer?.branch) ? assignedOfficer.branch[0] || "AFFINIX" : assignedOfficer?.branch || "AFFINIX",
+    //         // officer_id: assignedOfficer != null  ? assignedOfficer._id : "UNASSIGNED",
+    //         recruiter_id: recruiterIdValue,
+    //         status: assignedOfficer != null ? (value.status || "HOT") : "UNASSIGNED",
+    //          ...value,
+    //         created_at: new Date(),
+    //     })
+    //     .then(result => {
+    //         if (result.acknowledged) {
+    //         // const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
+    //         // eventsCollection.insertOne({
+    //         //     type: "customer_created",
+    //         //     client_id: ObjectId(result.insertedId),
+    //         //     recruiter_id:recruiterIdValue,
+    //         //     officer_id: assignedToValue,
+    //         //     comment: value.note|| "",
+    //         //     created_at: new Date(),
+    //         // })
+    //         // .then(() => {
+    //         //     return resolve(result.insertedId);
+    //         // })
+    //         // .catch(eventErr => {
+    //         //     console.error("Failed to log customer creation event:", eventErr);
+    //         //     return resolve(result.insertedId);
+    //         // });
+    //         logActivity({
+    //                 type: "customer_created",
+    //                 client_id: result.insertedId  || null,
+    //                 recruiter_id: recruiterIdValue || null,
+    //                 officer_id:assignedOfficer != null  ? ObjectId(assignedOfficer._id) : "UNASSIGNED",
+    //                 comment: value.note || "",
+    //             })
+    //         return resolve(result.insertedId);
+
+    //         } else {
+    //         reject("Insert failed");
+    //             }
+    //         })
+    //         .catch(err => {
+    //             console.error("Error inserting lead:", err);
+    //             reject("Error processing request",err);
+    //         });
         
-        } catch (err) {
-        reject("Error processing request");
-        }
-    });
-    },
+    //     } catch (err) {
+    //          console.error("Error inserting lead:", err);
+    //     reject("Error processing request");
+    //     }
+    // });
+    // },
 
     
     editLead : async (leadId, updateData) => {
@@ -344,14 +459,18 @@ module.exports = {
 
             const filter = {};
             // 🔐 Officer filter
-            if (!decoded?.designation.includes("ADMIN")) {
-                const officerIdList = decoded?.officers?.map((o) => o.officer_id) || [];
+            // if (!decoded?.designation.includes("ADMIN")) {
+            console.log("Decoded user:", decoded);
+             const officerIdList = Array.isArray(decoded?.officers)
+            ? decoded.officers.map((id) => safeObjectId(id.officer_id)).filter(Boolean)
+            : [];
+                console.log("Officer ID List:", officerIdList);
                 if (officerIdList.length > 0) {
-                filter.officer_id = { $in: [decoded?._id, ...officerIdList] };
+                    filter.officer_id = { $in: [ObjectId(decoded?._id), ...officerIdList] };
                 } else {
-                filter.officer_id = decoded?._id;
+                    filter.officer_id = ObjectId(decoded?._id);
                 }
-            }
+            // }
             console.log("Filter criteria:", filter);
             // ✅ Apply filters
             if (status) filter.status = status;
@@ -381,14 +500,11 @@ module.exports = {
             ]);
 
             return {
-            success: true,
-            data,
-            pagination: {
-                page: parseInt(page),
-                limit: parseInt(limit),
-                totalPages: Math.ceil(total / limit),
-                        totalRecords: total,
-                    }
+            leads: data,
+            page: parseInt(page),
+            limit: parseInt(limit),
+            totalPages: Math.ceil(total / limit),
+                    totalRecords: total,
                     };
 
                 } catch (error) {
