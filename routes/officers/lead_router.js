@@ -43,4 +43,10 @@ app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
 });
 
 
+
+app.get("/getAllTodaysFilterdLeads", middleware.checkToken, async (req, res) => {
+    return response.handle(res, () =>   leadHelper.getFilteredTodaysLeads(req.query, req.decoded));
+});
+
+
 module.exports = app;

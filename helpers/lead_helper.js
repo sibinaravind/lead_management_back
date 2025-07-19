@@ -8,7 +8,6 @@ const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
 const { safeObjectId } = require('../utils/safeObjectId');
 // Helper to get next sequence number
-
 module.exports = {
 createLead: async (details) => {
   return new Promise(async (resolve, reject) => {
@@ -121,127 +120,10 @@ createLead: async (details) => {
       return reject("Error processing request");
     }
   });
-},
+  },
 
-    // createLead: async (details) => {
-    // return new Promise(async (resolve, reject) => {
-    //     try {
-    //     // Validate incoming data
-    //     const { error, value } = leadSchema.validate(details);
-    //     if (error) return reject("Validation failed: " + error.details[0].message);
-
-    //     const collection = db.get().collection(COLLECTION.LEADS);
-    //     const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-    //     // Check for duplicate
-    //     const collectionsToCheck = [
-    //         collection,
-    //         db.get().collection(COLLECTION.CUSTOMERS),
-    //         db.get().collection(COLLECTION.DEAD_LEADS),
-    //     ];
-
-    //     for (const col of collectionsToCheck) {
-    //         let query;
-    //         if (value.email && value.email.trim() !== "") {
-    //             query = { $or: [{ email: value.email }, { phone: value.phone }] };
-    //         } else {
-    //             query = { phone: value.phone };
-    //         }
-    //         const existing = await col.findOne(query);
-    //         //  if (existing) return reject("Client already exists with this email or phone");  //test
-    //     }
-    //     const client_id = `AELID${String(await getNextSequence("lead_id")).padStart(5, "0")}`;
-    //     var assignedOfficer = null;
-    //     if (!value.officer_id && value.service_type) {
-    //         const rrConfig = await db.get()
-    //         .collection(COLLECTION.ROUNDROBIN)
-    //         .findOne({ name: value.service_type });
-    //         console.log("Round Robin Config:", rrConfig);
-    //         if (rrConfig && Array.isArray(rrConfig.officers) && rrConfig.officers.length > 0) {
-    //               console.log("Round Robin Config:", rrConfig);
-    //         const updateResult = await  db.get().collection(COLLECTION.COUNTER).findOneAndUpdate(
-    //             { _id: `lead_roundrobin_${value.service_type}` },
-    //             { $inc: { sequence: 1 } },
-    //             { upsert: true, returnDocument: "after" }
-    //         );
-
-    //         const officerIndex = (updateResult.value.sequence - 1) % rrConfig.officers.length;
-    //         const selectedOfficerId = rrConfig.officers[officerIndex];
-
-    //          assignedOfficer = await officersCollection.findOne(
-    //             { _id: ObjectId(selectedOfficerId) },
-    //             { projection: { name: 1, officer_id: 1, email: 1, designation: 1 ,branch:1} }
-    //         );
-    //         }
-    //     }else  if (value.officer_id != null && value.officer_id != '') {
-    //         console.log("Assigned officer ID:", value.officer_id);
-    //          assignedOfficer = await officersCollection.findOne(
-    //         { _id: ObjectId(value.officer_id )},
-    //         { projection: { name: 1, officer_id: 1, email: 1, designation: 1 } }
-    //         );
-    //     }
-    //     let recruiterIdValue = "UNASSIGNED";
-    //     if (
-    //         assignedOfficer != null &&
-    //         Array.isArray(assignedOfficer.designation) &&
-    //         assignedOfficer.designation.includes(DESIGNATIONS.COUNSILOR)
-    //     ) {
-    //         recruiterIdValue = ObjectId(assignedOfficer._id);
-    //     }
-    //     collection.insertOne({
-    //         client_id,
-    //         officer_id: assignedOfficer !=null ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
-    //         branch: Array.isArray(assignedOfficer?.branch) ? assignedOfficer.branch[0] || "AFFINIX" : assignedOfficer?.branch || "AFFINIX",
-    //         // officer_id: assignedOfficer != null  ? assignedOfficer._id : "UNASSIGNED",
-    //         recruiter_id: recruiterIdValue,
-    //         status: assignedOfficer != null ? (value.status || "HOT") : "UNASSIGNED",
-    //          ...value,
-    //         created_at: new Date(),
-    //     })
-    //     .then(result => {
-    //         if (result.acknowledged) {
-    //         // const eventsCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
-    //         // eventsCollection.insertOne({
-    //         //     type: "customer_created",
-    //         //     client_id: ObjectId(result.insertedId),
-    //         //     recruiter_id:recruiterIdValue,
-    //         //     officer_id: assignedToValue,
-    //         //     comment: value.note|| "",
-    //         //     created_at: new Date(),
-    //         // })
-    //         // .then(() => {
-    //         //     return resolve(result.insertedId);
-    //         // })
-    //         // .catch(eventErr => {
-    //         //     console.error("Failed to log customer creation event:", eventErr);
-    //         //     return resolve(result.insertedId);
-    //         // });
-    //         logActivity({
-    //                 type: "customer_created",
-    //                 client_id: result.insertedId  || null,
-    //                 recruiter_id: recruiterIdValue || null,
-    //                 officer_id:assignedOfficer != null  ? ObjectId(assignedOfficer._id) : "UNASSIGNED",
-    //                 comment: value.note || "",
-    //             })
-    //         return resolve(result.insertedId);
-
-    //         } else {
-    //         reject("Insert failed");
-    //             }
-    //         })
-    //         .catch(err => {
-    //             console.error("Error inserting lead:", err);
-    //             reject("Error processing request",err);
-    //         });
-        
-    //     } catch (err) {
-    //          console.error("Error inserting lead:", err);
-    //     reject("Error processing request");
-    //     }
-    // });
-    // },
-
-    
-    editLead : async (leadId, updateData) => {
+  
+  editLead : async (leadId, updateData) => {
         try {
             // Validate input
             const validatedData = validatePartial(leadSchema, updateData);
@@ -258,8 +140,7 @@ createLead: async (details) => {
         } catch (err) {
             return { success: false, error: err.message };
         }
-    },
-
+  },
 
    restoreClientFromDeadAndAssignOfficer: async (deadClientId, officerId = null,comment) => {
     return new Promise(async (resolve, reject) => {
@@ -374,144 +255,294 @@ createLead: async (details) => {
     // db.leads.createIndex({ service_type: 1 });
     // db.leads.createIndex({ created_at: -1 });
 
-    // getAllFilteredLeads: async (filters, user , page = 1, limit = 20 ) => {
-    // return new Promise(async (resolve, reject) => {
-    //         let officers = [];
-    //         if (user.designation?.includes('ADMIN')) {
-    //             officers = [];
-    //         } else if (Array.isArray(user.officers)) {
-    //             officers = user.officers.map(o => ({
-    //                 ...o,
-    //                 officer_id: o.officer_id || (typeof o === 'string' ? o : undefined),
-    //                 user_id: o.user_id || (typeof o === 'object' && o.user_id ? o.user_id : undefined)
-    //             }));
-    //             const officerIds = officers.map(o => o.officer_id).filter(Boolean);
-    //             const userIds = officers.map(o => o.user_id).filter(Boolean);
-    //             const ids = [...officerIds, ...userIds].filter(Boolean);
-    //             if (ids.length > 0) {
-    //                 query.officer_id = { $in: ids };
-    //             }
-    //         }
-    //     try {
-    //         const query = {};
-    //         // Filter Mapping - Only allow certain fields
-    //         const filterableFields = ['status', 'service_type', 'lead_source', 'officer_id'];
-    //         for (const key of filterableFields) {
-    //             const value = filters[key];
-    //             if (Array.isArray(value) && value.length > 0) {
-    //                 query[key] = { $in: value };
-    //             } else if (value) {
-    //                 query[key] = value;
-    //             }
-    //         }
-    //         const skip = (page - 1) * limit;
-    //         const [total, leads] = await Promise.all([
-    //              db.get().collection(COLLECTION.LEADS).find(query, {
-    //                     projection: {
-    //                         _id: 1,
-    //                         client_id: 1,
-    //                         name: 1,
-    //                         email: 1,
-    //                         phone: 1,
-    //                         service_type: 1,
-    //                         country_code: 1,
-    //                         status: 1,
-    //                         lead_source: 1,
-    //                         officer_id: 1,
-    //                         created_at: 1
-    //                     },
-    //                     skip,
-    //                     limit,
-    //                     sort: { created_at: -1 } 
-    //                 }).toArray()
-    //         ]);
-
-    //         resolve({
-    //             total,
-    //             page,
-    //             totalPages: Math.ceil(total / limit),
-    //             data: leads
-    //         });
-
-    //     } catch (err) {
-    //         console.error(err);
-    //         reject("Error fetching filtered LEADS");
-    //     }
-    // });
-    // },  
-
-   getFilteredLeads: async (query, decoded) => {
+    getFilteredLeads: async (query, decoded) => {
         try {
-            const {
+          const {
+            filterCategory,
             page = 1,
             limit = 10,
             status,
-            callStatus,
             branch,
             employee,
             serviceType,
-            leadStatus,
-            agent,
-            quick
-            } = query;
+            profession,
+            leadSource,
+            campagin,
+            startDate,
+            endDate,
+            searchString
+          } = query;
 
-            const skip = (parseInt(page) - 1) * parseInt(limit);
+          const parsedPage = parseInt(page);
+          const parsedLimit = parseInt(limit);
+          const skip = (parsedPage - 1) * parsedLimit;
+          const filter = {};
+          // Officer filtering
+          const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+          let officerIdList = [];
 
-            const filter = {};
-            // 🔐 Officer filter
-            // if (!decoded?.designation.includes("ADMIN")) {
-            console.log("Decoded user:", decoded);
-             const officerIdList = Array.isArray(decoded?.officers)
-            ? decoded.officers.map((id) => safeObjectId(id.officer_id)).filter(Boolean)
-            : [];
-                console.log("Officer ID List:", officerIdList);
-                if (officerIdList.length > 0) {
-                    filter.officer_id = { $in: [ObjectId(decoded?._id), ...officerIdList] };
-                } else {
-                    filter.officer_id = ObjectId(decoded?._id);
-                }
-            // }
-            console.log("Filter criteria:", filter);
-            // ✅ Apply filters
-            if (status) filter.status = status;
-            if (callStatus) filter.call_status = callStatus;
-            if (branch) filter.branch = branch;
-            if (employee) filter.employee = employee;
-            if (serviceType) filter['Service Type'] = serviceType;
-            if (leadStatus) filter.lead_status = leadStatus;
-            if (agent) filter.agent = agent;
-
-            const leadsCollection = db.get().collection('leads');
-
-            // 🕐 Quick last 10 unattended
-            if (quick === 'true') {
-            filter.status = 'UNATTENDED';
-            const data = await leadsCollection.find(filter)
-                .sort({ created_at: -1 })
-                .limit(10)
-                .toArray();
-            return { success: true, data };
+          if (!isAdmin) {
+            officerIdList = Array.isArray(decoded?.officers)
+              ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+              : [];
+          }
+          if (filterCategory === 'UNASSIGNED') {
+              filter.officer_id = 'UNASSIGNED';
+          }
+          else if (employee) {
+              filter.officer_id = safeObjectId(employee);
+          } else if (isAdmin) {
+            // Admins see all
+          } else if (officerIdList.length > 0) {
+            filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+          } else {
+            filter.officer_id = safeObjectId(decoded?._id);
+          }
+            
+           if(filterCategory === 'NEW')
+            {
+              filter.status = "HOT"
+            }
+            else if (status)
+            { filter.status = status;
             }
 
-            // ⚙️ Paginated filtering
-            const [total, data] = await Promise.all([
-            leadsCollection.countDocuments(filter),
-            leadsCollection.find(filter).skip(skip).limit(parseInt(limit)).sort({ created_at: -1 }).toArray(),
-            ]);
 
-            return {
-            leads: data,
-            page: parseInt(page),
-            limit: parseInt(limit),
-            totalPages: Math.ceil(total / limit),
-                    totalRecords: total,
-                    };
+          // Apply additional filters
+          if (branch) filter.branch = branch;
+          if (serviceType) filter.service_type = serviceType;
+          if (profession) filter.profession = profession;
+          if (leadSource) filter.lead_source = leadSource;
+          if(campagin) filter.campagin = campagin;
+          if (startDate || endDate) {
+            // Support DD/MM/YYYY format as well as ISO
+            const parseDate = (str) => {
+              if (!str) return null;
+              // Try DD/MM/YYYY
+              const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+              if (match) {
+              // month is 0-based in JS Date
+              return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+              }
+              // fallback to Date parse
+              return new Date(str);
+            };
 
-                } catch (error) {
-                    console.error('getFilteredLeads error:', error);
-                    throw new Error('Server Error');
-                }
-    },
+            filter.created_at = {};
+            if (startDate) {
+              const start = parseDate(startDate);
+              if (!isNaN(start)) filter.created_at.$gte = start;
+            }
+            if (endDate) {
+              const end = parseDate(endDate);
+              if (!isNaN(end)) {
+              end.setHours(23, 59, 59, 999);
+              filter.created_at.$lte = end;
+              }
+            }
+            }
+          if (searchString) {
+            const searchRegex = new RegExp(searchString, "i");
+            filter.$or = [
+              { phone: { $regex: searchRegex } },
+              { name: { $regex: searchRegex } },
+              { client_id: { $regex: searchRegex } },
+              { email: { $regex: searchRegex } }
+            ];
+            }
+
+
+          const leadsCollection = db.get().collection(COLLECTION.LEADS);
+
+          const result = await leadsCollection.aggregate([
+            { $match: filter },
+            {
+              $facet: {
+                data: [
+                  { $sort: { created_at: -1 } },
+                  { $skip: skip },
+                  { $limit: parsedLimit },
+                  {
+                    $lookup: {
+                      from: COLLECTION.OFFICERS,
+                      localField: "officer_id",
+                      foreignField: "_id",
+                      as: "officer",
+                    },
+                  },
+                  {
+                    $unwind: {
+                      path: "$officer",
+                      preserveNullAndEmptyArrays: true,
+                    },
+                  },
+                  {
+                    $project: {
+                      _id: 1,
+                      client_id: 1,
+                      name: 1,
+                      email: 1,
+                      phone: 1,
+                      branch: 1,
+                      service_type: 1,
+                      country_code: 1,
+                      status: 1,
+                      lead_source: 1,
+                      created_at: 1,
+                      officer_id: 1,
+                      officer_name: "$officer.name",
+                      officer_staff_id: "$officer.officer_id",
+                    },
+                  },
+                ],
+                totalCount: [
+                  { $count: "count" },
+                ],
+              },
+            },
+          ]).toArray();
+
+          const leadsData = result[0]?.data || [];
+          const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+          return {
+            leads: leadsData,
+            limit: parsedLimit,
+            page: parsedPage,
+            totalMatch: totalCount,
+            totalPages: Math.ceil(totalCount / parsedLimit),
+          };
+
+        } catch (error) {
+          console.error('getFilteredLeads error:', error);
+          throw new Error('Server Error');
+        }
+      },
+
+
+      getFilteredTodaysLeads: async (query, decoded) => {
+        try {
+          const {
+            page = 1,
+            limit = 10,
+            status,
+            branch,
+            employee,
+            serviceType,
+            profession,
+            leadSource,
+            campaign,
+            startDate,
+            endDate,
+            searchString,
+            filterCategory,
+          } = query;
+
+          const parsedPage = parseInt(page);
+          const parsedLimit = parseInt(limit);
+          const skip = (parsedPage - 1) * parsedLimit;
+          const now = new Date();
+          const todayStart = new Date(now.setHours(0, 0, 0, 0));
+          const todayEnd = new Date(now.setHours(23, 59, 59, 999));
+          const tomorrowStart = new Date(todayEnd.getTime() + 1);
+          const tomorrowEnd = new Date(tomorrowStart.getTime() + 86400000 - 1);
+
+          const callEventMatch = {};
+
+          if (filterCategory === 'TODAY') {
+            callEventMatch.next_schedule = { $gte: todayStart, $lte: todayEnd };
+          } else if (filterCategory === 'TOMORROW') {
+            callEventMatch.next_schedule = { $gte: tomorrowStart, $lte: tomorrowEnd };
+          } else if (filterCategory === 'UPCOMING') {
+            callEventMatch.next_schedule = { $gt: tomorrowEnd };
+          } else if (filterCategory === 'PENDING') {
+            callEventMatch.call_status = 'MISSED';
+          }
+          if (startDate || endDate) {
+            callEventMatch.next_schedule = {
+              ...(callEventMatch.next_schedule || {}),
+              ...(startDate && { $gte: new Date(startDate) }),
+              ...(endDate && { $lte: new Date(endDate) }),
+            };
+          }
+          const baseMatch = {};
+          if (status) baseMatch.status = status;
+          if (branch) baseMatch.branch = branch;
+          if (employee) baseMatch.employee = employee;
+          if (serviceType) baseMatch.serviceType = serviceType;
+          if (profession) baseMatch.profession = profession;
+          if (leadSource) baseMatch.leadSource = leadSource;
+          if (campaign) baseMatch.campaign = campaign;
+
+          // Search
+          if (searchString) {
+            baseMatch.$or = [
+              { name: { $regex: searchString, $options: 'i' } },
+              { phone: { $regex: searchString, $options: 'i' } },
+              { email: { $regex: searchString, $options: 'i' } },
+            ];
+          }
+          const pipeline = [
+            {
+              $sort: { created_at: -1 },
+            },
+            {
+              $group: {
+                _id: "$client_id",
+                latestForm: { $first: "$$ROOT" },
+              },
+            },
+            {
+              $replaceRoot: { newRoot: "$latestForm" },
+            },
+            {
+              $match: callEventMatch,
+            },
+            // {
+            //   $lookup: {
+            //     from: "leads",
+            //     localField: "client_id",
+            //     foreignField: "_id",
+            //     as: "client",
+            //   },
+            // },
+            // {
+            //   $unwind: "$client",
+            // },
+            // {
+            //   $match: baseMatch,
+            // },
+            // {
+            //   $facet: {
+            //     data: [
+            //       { $skip: skip },
+            //       { $limit: parsedLimit },
+            //     ],
+            //     totalCount: [
+            //       { $count: "count" },
+            //     ],
+            //   },
+            // },
+          ];
+
+          const result = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).aggregate(pipeline).toArray();
+console.log("Result:", result);
+          const totalCount = result?.totalCount[0]?.count || 0;
+          return {
+            success: true,
+            data: result[0]?.data || [],
+            limit: parsedLimit,
+            page: parsedPage,
+            totalMatch: totalCount,
+            totalPages: Math.ceil(totalCount / parsedLimit),
+          };
+        } catch (err) {
+          console.error(err);
+          return { success: false, message: "Something went wrong" };
+        }
+      },
+
+
 
 
      getDeadLeads: async () => {

@@ -1,6 +1,5 @@
 var db = require('../config/connection');
-let COLLECTION = require('../config/collections')
-
+let COLLECTION = require('../config/collections');
 module.exports = {
     getAnnouncements: async () => {
         const collection = db.get().collection(COLLECTION.ANNOUNCEMENTS);
@@ -9,8 +8,7 @@ module.exports = {
         } catch (err) {
             throw err;
         }
-    }
-    ,
+    },
     createAnnouncement: async (title, content,expire_on) => { 
         const collection = db.get().collection(COLLECTION.ANNOUNCEMENTS);
         try {

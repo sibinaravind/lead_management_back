@@ -461,8 +461,15 @@ listLeadOfficers: () => {
           }
         }
       ]).toArray();
-
-      resolve(officers);
+      
+      const cleanedData = officers.map((item) => {
+        const filteredOfficers = (item.officers || []).filter(officer => officer.name);
+        return {
+          ...item,
+          officers: filteredOfficers
+        };
+      });
+      resolve(cleanedData);
     } catch (error) {
       console.error(error);
       reject("Error processing request");

@@ -51,7 +51,6 @@ app.patch("/addOfficerToLead", middleware.checkToken, (req, res) => {
     )
   );
 });  
-
 app.patch("/editOfficerToLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     officersHelper.editOfficerLeadPermission(
