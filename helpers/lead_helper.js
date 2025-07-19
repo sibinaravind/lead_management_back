@@ -297,17 +297,14 @@ createLead: async (details) => {
             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
           } else {
             filter.officer_id = safeObjectId(decoded?._id);
-          }
-            
-           if(filterCategory === 'NEW')
+          } 
+          if(filterCategory === 'NEW')
             {
               filter.status = "HOT"
             }
             else if (status)
             { filter.status = status;
-            }
-
-
+          }
           // Apply additional filters
           if (branch) filter.branch = branch;
           if (serviceType) filter.service_type = serviceType;
@@ -340,7 +337,7 @@ createLead: async (details) => {
               filter.created_at.$lte = end;
               }
             }
-            }
+          }
           if (searchString) {
             const searchRegex = new RegExp(searchString, "i");
             filter.$or = [
@@ -419,126 +416,140 @@ createLead: async (details) => {
         }
       },
 
-
-      getFilteredTodaysLeads: async (query, decoded) => {
+   getCallHistoryWithFilters: async (query, decoded) => {
         try {
           const {
             page = 1,
             limit = 10,
-            status,
-            branch,
+            callType,
+            callStatus,
             employee,
-            serviceType,
-            profession,
-            leadSource,
-            campaign,
             startDate,
             endDate,
-            searchString,
-            filterCategory,
+            searchString
           } = query;
 
           const parsedPage = parseInt(page);
           const parsedLimit = parseInt(limit);
           const skip = (parsedPage - 1) * parsedLimit;
-          const now = new Date();
-          const todayStart = new Date(now.setHours(0, 0, 0, 0));
-          const todayEnd = new Date(now.setHours(23, 59, 59, 999));
-          const tomorrowStart = new Date(todayEnd.getTime() + 1);
-          const tomorrowEnd = new Date(tomorrowStart.getTime() + 86400000 - 1);
 
-          const callEventMatch = {};
+          const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
+          let officerIdList = [];
 
-          if (filterCategory === 'TODAY') {
-            callEventMatch.next_schedule = { $gte: todayStart, $lte: todayEnd };
-          } else if (filterCategory === 'TOMORROW') {
-            callEventMatch.next_schedule = { $gte: tomorrowStart, $lte: tomorrowEnd };
-          } else if (filterCategory === 'UPCOMING') {
-            callEventMatch.next_schedule = { $gt: tomorrowEnd };
-          } else if (filterCategory === 'PENDING') {
-            callEventMatch.call_status = 'MISSED';
+          if (!isAdmin) {
+            officerIdList = Array.isArray(decoded?.officers)
+              ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+              : [];
           }
+
+          const filter = { };
+
+          // Officer filtering
+          if (employee) {
+            filter.officer_id = safeObjectId(employee);
+          } else if (!isAdmin) {
+            if (officerIdList.length > 0) {
+              filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+            } else {
+              filter.officer_id = safeObjectId(decoded?._id);
+            }
+          }
+
+          // Additional filters
+          if (callType) filter.call_type = callType;
+          if (callStatus) filter.call_status = callStatus;
+
+          // Date range filtering
           if (startDate || endDate) {
-            callEventMatch.next_schedule = {
-              ...(callEventMatch.next_schedule || {}),
-              ...(startDate && { $gte: new Date(startDate) }),
-              ...(endDate && { $lte: new Date(endDate) }),
+            const parseDate = (str) => {
+              if (!str) return null;
+              const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+              if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+              return new Date(str);
             };
-          }
-          const baseMatch = {};
-          if (status) baseMatch.status = status;
-          if (branch) baseMatch.branch = branch;
-          if (employee) baseMatch.employee = employee;
-          if (serviceType) baseMatch.serviceType = serviceType;
-          if (profession) baseMatch.profession = profession;
-          if (leadSource) baseMatch.leadSource = leadSource;
-          if (campaign) baseMatch.campaign = campaign;
 
+            filter.created_at = {};
+            if (startDate) {
+              const start = parseDate(startDate);
+              if (!isNaN(start)) filter.created_at.$gte = start;
+            }
+            if (endDate) {
+              const end = parseDate(endDate);
+              if (!isNaN(end)) {
+                end.setHours(23, 59, 59, 999);
+                filter.created_at.$lte = end;
+              }
+            }
+          }
           // Search
           if (searchString) {
-            baseMatch.$or = [
-              { name: { $regex: searchString, $options: 'i' } },
-              { phone: { $regex: searchString, $options: 'i' } },
-              { email: { $regex: searchString, $options: 'i' } },
+            const regex = new RegExp(searchString, 'i');
+            filter.$or = [
+              { phone: { $regex: regex } },
+              { client_id: { $regex: regex } }
             ];
           }
-          const pipeline = [
-            {
-              $sort: { created_at: -1 },
-            },
-            {
-              $group: {
-                _id: "$client_id",
-                latestForm: { $first: "$$ROOT" },
-              },
-            },
-            {
-              $replaceRoot: { newRoot: "$latestForm" },
-            },
-            {
-              $match: callEventMatch,
-            },
-            // {
-            //   $lookup: {
-            //     from: "leads",
-            //     localField: "client_id",
-            //     foreignField: "_id",
-            //     as: "client",
-            //   },
-            // },
-            // {
-            //   $unwind: "$client",
-            // },
-            // {
-            //   $match: baseMatch,
-            // },
-            // {
-            //   $facet: {
-            //     data: [
-            //       { $skip: skip },
-            //       { $limit: parsedLimit },
-            //     ],
-            //     totalCount: [
-            //       { $count: "count" },
-            //     ],
-            //   },
-            // },
-          ];
 
-          const result = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).aggregate(pipeline).toArray();
-console.log("Result:", result);
-          const totalCount = result?.totalCount[0]?.count || 0;
+          const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+
+          const result = await callLogCollection.aggregate([
+            { $match: filter },
+            {
+              $facet: {
+                data: [
+                  { $sort: { created_at: -1 } },
+                  { $skip: skip },
+                  { $limit: parsedLimit },
+                  {
+                    $lookup: {
+                      from: COLLECTION.OFFICERS,
+                      localField: "officer_id",
+                      foreignField: "_id",
+                      as: "officer"
+                    }
+                  },
+                  {
+                    $unwind: {
+                      path: "$officer",
+                      preserveNullAndEmptyArrays: true
+                    }
+                  },
+                  {
+                    $project: {
+                      _id: 1,
+                      client_id: 1,
+                      officer_id: 1,
+                      recruiter_id: 1,
+                      call_type: 1,
+                      call_status: 1,
+                      comment: 1,
+                      duration: 1,
+                      next_schedule: 1,
+                      created_at: 1,
+                      officer_name: "$officer.name",
+                      officer_staff_id: "$officer.officer_id"
+                    }
+                  }
+                ],
+                totalCount: [{ $count: "count" }]
+              }
+            }
+          ]).toArray();
+
+          const callData = result[0]?.data || [];
+          const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
           return {
-            success: true,
-            data: result[0]?.data || [],
+            calls: callData,
             limit: parsedLimit,
             page: parsedPage,
             totalMatch: totalCount,
             totalPages: Math.ceil(totalCount / parsedLimit),
           };
+
         } catch (err) {
-          console.error(err);
-          return { success: false, message: "Something went wrong" };
+          console.error("getCallHistoryWithFilters error:", err);
+          throw new Error("Server Error");
         }
       },
 

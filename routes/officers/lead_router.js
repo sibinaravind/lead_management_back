@@ -39,14 +39,17 @@ app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
 });
 
 app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
+  if (req.query.filterCategory == 'HISTORY') {
+      return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
+  }
+  else
+  {
     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
+  }
+
 });
 
 
-
-app.get("/getAllTodaysFilterdLeads", middleware.checkToken, async (req, res) => {
-    return response.handle(res, () =>   leadHelper.getFilteredTodaysLeads(req.query, req.decoded));
-});
 
 
 module.exports = app;
