@@ -46,8 +46,12 @@ app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
   {
     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
   }
-
 });
+
+app.get("/getLeadCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getLeadCountByCategory(req.decoded));
+});
+
 
 
 

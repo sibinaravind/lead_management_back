@@ -15,11 +15,9 @@ createLead: async (details) => {
       // ✅ Validate input
       const { error, value } = leadSchema.validate(details);
       if (error) return reject("Validation failed: " + error.details[0].message);
-
       const dbInstance = db.get();
       const leadsCol = dbInstance.collection(COLLECTION.LEADS);
       const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
-
       // ✅ Check for duplicates
       const collectionsToCheck = [
         leadsCol,
@@ -244,7 +242,6 @@ createLead: async (details) => {
                 }).toArray();
                 resolve(LEADS);
             } catch (err) {
-                console.error(err);
                 reject("Error fetching LEADS");
             }
         });
@@ -254,6 +251,241 @@ createLead: async (details) => {
     // db.leads.createIndex({ status: 1 });
     // db.leads.createIndex({ service_type: 1 });
     // db.leads.createIndex({ created_at: -1 });
+    // getFilteredLeads: async (query, decoded) => {
+    //     try {
+    //       const {
+    //         filterCategory,
+    //         page = 1,
+    //         limit = 10,
+    //         status,
+    //         branch,
+    //         employee,
+    //         serviceType,
+    //         profession,
+    //         leadSource,
+    //         campagin,
+    //         startDate,
+    //         endDate,
+    //         searchString
+    //       } = query;
+
+    //       const parsedPage = parseInt(page);
+    //       const parsedLimit = parseInt(limit);
+    //       const skip = (parsedPage - 1) * parsedLimit;
+    //       const filter = {};
+    //       // Officer filtering
+    //       const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+    //       let officerIdList = [];
+
+    //       if (!isAdmin) {
+    //         officerIdList = Array.isArray(decoded?.officers)
+    //           ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+    //           : [];
+    //       }
+    //       if (filterCategory === 'UNASSIGNED') {
+    //           filter.officer_id = 'UNASSIGNED';
+    //       }
+    //       else if (employee) {
+    //           filter.officer_id = safeObjectId(employee);
+    //       } else if (isAdmin) {
+    //         // Admins see all
+    //       } else if (officerIdList.length > 0) {
+    //         filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+    //       } else {
+    //         filter.officer_id = safeObjectId(decoded?._id);
+    //       } 
+    //       if(filterCategory === 'NEW')
+    //         {
+    //           filter.status = "HOT"
+    //         }
+    //         else if (status)
+    //         { filter.status = status;
+    //       }
+    //       // Apply additional filters
+    //       if (branch) filter.branch = branch;
+    //       if (serviceType) filter.service_type = serviceType;
+    //       if (profession) filter.profession = profession;
+    //       if (leadSource) filter.lead_source = leadSource;
+    //       if(campagin) filter.campagin = campagin;
+    //       if (startDate || endDate) {
+    //         // Support DD/MM/YYYY format as well as ISO
+    //         const parseDate = (str) => {
+    //           if (!str) return null;
+    //           // Try DD/MM/YYYY
+    //           const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+    //           if (match) {
+    //           // month is 0-based in JS Date
+    //           return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    //           }
+    //           // fallback to Date parse
+    //           return new Date(str);
+    //         };
+
+    //         filter.created_at = {};
+    //         if (startDate) {
+    //           const start = parseDate(startDate);
+    //           if (!isNaN(start)) filter.created_at.$gte = start;
+    //         }
+    //         if (endDate) {
+    //           const end = parseDate(endDate);
+    //           if (!isNaN(end)) {
+    //           end.setHours(23, 59, 59, 999);
+    //           filter.created_at.$lte = end;
+    //           }
+    //         }
+    //       }
+    //       if (searchString) {
+    //         const searchRegex = new RegExp(searchString, "i");
+    //         filter.$or = [
+    //           { phone: { $regex: searchRegex } },
+    //           { name: { $regex: searchRegex } },
+    //           { client_id: { $regex: searchRegex } },
+    //           { email: { $regex: searchRegex } }
+    //         ];
+    //         }
+    //       const leadsCollection = db.get().collection(COLLECTION.LEADS);
+    //       const result = await leadsCollection.aggregate([
+    //         { $match: filter },
+    //         {
+    //           $facet: {
+    //             data: [
+    //               { $sort: { created_at: -1 } },
+    //               { $skip: skip },
+    //               { $limit: parsedLimit },
+    //               {
+    //                 $lookup: {
+    //                   from: COLLECTION.OFFICERS,
+    //                   localField: "officer_id",
+    //                   foreignField: "_id",
+    //                   as: "officer",
+    //                 },
+    //               },
+    //               {
+    //                 $unwind: {
+    //                   path: "$officer",
+    //                   preserveNullAndEmptyArrays: true,
+    //                 },
+    //               },
+    //               {
+    //                 $project: {
+    //                   _id: 1,
+    //                   client_id: 1,
+    //                   name: 1,
+    //                   email: 1,
+    //                   phone: 1,
+    //                   branch: 1,
+    //                   service_type: 1,
+    //                   country_code: 1,
+    //                   status: 1,
+    //                   lead_source: 1,
+    //                   created_at: 1,
+    //                   officer_id: 1,
+    //                   officer_name: "$officer.name",
+    //                   officer_staff_id: "$officer.officer_id",
+    //                 },
+    //               },
+    //             ],
+    //             totalCount: [
+    //               { $count: "count" },
+    //             ],
+    //           },
+    //         },
+    //       ]).toArray();
+
+    //       const leadsData = result[0]?.data || [];
+    //       const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+    //       return {
+    //         leads: leadsData,
+    //         limit: parsedLimit,
+    //         page: parsedPage,
+    //         totalMatch: totalCount,
+    //         totalPages: Math.ceil(totalCount / parsedLimit),
+    //       };
+
+    //     } catch (error) {
+    //       console.error('getFilteredLeads error:', error);
+    //       throw new Error('Server Error');
+    //     }
+    // },
+
+   getLeadCountByCategory: async (decoded) => {
+        try {
+          const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
+
+          let officerIds = [];
+          if (!isAdmin) {
+            officerIds = Array.isArray(decoded?.officers)
+              ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+              : [];
+          }
+          const officerFilter = () => {
+            if (isAdmin) return {};
+            const ids = [safeObjectId(decoded?._id), ...officerIds].filter(Boolean);
+            return { officer_id: { $in: ids } };
+          };
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(today.getDate() + 1);
+          const dayAfterTomorrow = new Date(tomorrow);
+          dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+          const dateField = "lastcall.next_schedule";
+
+          const leadResult = await  db.get().collection(COLLECTION.LEADS).aggregate( [
+            { $match: officerFilter() },
+            {
+              $facet: {
+                TOTAL: [{ $count: "count" }],
+                NEW: [{ $match: { status: "HOT" } }, { $count: "count" }],
+                TODAY: [{
+                  $match: {
+                    [dateField]: { $gte: today, $lt: tomorrow }
+                  }
+                }, { $count: "count" }],
+                TOMORROW: [{
+                  $match: {
+                    [dateField]: { $gte: tomorrow, $lt: dayAfterTomorrow }
+                  }
+                }, { $count: "count" }],
+                UPCOMING: [{
+                  $match: {
+                    [dateField]: { $gte: dayAfterTomorrow }
+                  }
+                }, { $count: "count" }],
+                PENDING: [{
+                  $match: {
+                    [dateField]: { $lt: today }
+                  }
+                }, { $count: "count" }]
+              }
+            }
+          ]).toArray();
+          const counts = leadResult[0] || {};
+
+          const getCountVal = (key) => (counts[key]?.[0]?.count ?? 0);
+          // ✅ Replace expensive distinct with fast countDocuments
+          const historyCount = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).countDocuments({
+            created_at: { $gte: today, $lt: tomorrow },
+            ...officerFilter()
+          });
+          return {
+            TOTAL: getCountVal("TOTAL"),
+            NEW: getCountVal("NEW"),
+            TODAY: getCountVal("TODAY"),
+            TOMORROW: getCountVal("TOMORROW"),
+            UPCOMING: getCountVal("UPCOMING"),
+            PENDING: getCountVal("PENDING"),
+            HISTORY: historyCount
+          };
+
+        } catch (err) {
+          console.error("getLeadCountByCategory error:", err);
+          throw new Error("Server Error");
+        }
+      },
+
+
 
     getFilteredLeads: async (query, decoded) => {
         try {
@@ -277,6 +509,7 @@ createLead: async (details) => {
           const parsedLimit = parseInt(limit);
           const skip = (parsedPage - 1) * parsedLimit;
           const filter = {};
+
           // Officer filtering
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
           let officerIdList = [];
@@ -286,58 +519,97 @@ createLead: async (details) => {
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
           }
+
           if (filterCategory === 'UNASSIGNED') {
-              filter.officer_id = 'UNASSIGNED';
-          }
-          else if (employee) {
-              filter.officer_id = safeObjectId(employee);
+            filter.officer_id = 'UNASSIGNED';
+          } else if (employee) {
+            filter.officer_id = safeObjectId(employee);
           } else if (isAdmin) {
             // Admins see all
           } else if (officerIdList.length > 0) {
             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
           } else {
             filter.officer_id = safeObjectId(decoded?._id);
-          } 
-          if(filterCategory === 'NEW')
-            {
-              filter.status = "HOT"
-            }
-            else if (status)
-            { filter.status = status;
           }
-          // Apply additional filters
+
+          if (filterCategory === 'NEW') {
+            filter.status = 'HOT';
+          } else if (status) {
+            filter.status = status;
+          }
+
+          // Additional filters
           if (branch) filter.branch = branch;
           if (serviceType) filter.service_type = serviceType;
           if (profession) filter.profession = profession;
           if (leadSource) filter.lead_source = leadSource;
-          if(campagin) filter.campagin = campagin;
-          if (startDate || endDate) {
-            // Support DD/MM/YYYY format as well as ISO
-            const parseDate = (str) => {
-              if (!str) return null;
-              // Try DD/MM/YYYY
-              const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
-              if (match) {
-              // month is 0-based in JS Date
-              return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
-              }
-              // fallback to Date parse
-              return new Date(str);
-            };
+          if (campagin) filter.campagin = campagin;
 
-            filter.created_at = {};
-            if (startDate) {
-              const start = parseDate(startDate);
-              if (!isNaN(start)) filter.created_at.$gte = start;
+          // Date filters: created_at or lastcall.next_schedule
+       
+
+          let dateField = 'created_at';
+          let start = null;
+          let end = null;
+        const parseDate = (str) => {
+          if (!str) return null;
+          const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+          if (match) {
+            return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+          }
+          return new Date(str);
+        };
+          // Override for filterCategory
+          if (['TODAY', 'TOMORROW', 'PENDING', 'UPCOMING'].includes(filterCategory)) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            const dayAfterTomorrow = new Date(tomorrow);
+            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+            dateField = 'lastcall.next_schedule';
+            if (filterCategory === 'TODAY') {
+              start = new Date(today);
+              end = new Date(tomorrow);
+              end.setMilliseconds(-1);
+            } else if (filterCategory === 'TOMORROW') {
+              start = new Date(tomorrow);
+              end = new Date(dayAfterTomorrow);
+              end.setMilliseconds(-1);
+            } else if (filterCategory === 'PENDING') {
+
+                start = startDate ? parseDate(startDate) : null;
+                end = endDate ? parseDate(endDate) : new Date(today);
+
+                if (end && !isNaN(end)) {
+                  end.setHours(23, 59, 59, 999);
+                }
+              } else if (filterCategory === 'UPCOMING') {
+                start = startDate ? parseDate(startDate) : new Date(dayAfterTomorrow);
+                end = endDate ? parseDate(endDate) : null;
+
+                if (end && !isNaN(end)) {
+                  end.setHours(23, 59, 59, 999);
+                }
             }
-            if (endDate) {
-              const end = parseDate(endDate);
-              if (!isNaN(end)) {
-              end.setHours(23, 59, 59, 999);
-              filter.created_at.$lte = end;
-              }
+          } else if (startDate || endDate) {
+            // Parse date from DD/MM/YYYY or ISO
+            start = startDate ? parseDate(startDate) : null;
+            end = endDate ? parseDate(endDate) : null;
+            if (end && !isNaN(end)) end.setHours(23, 59, 59, 999);
+          }
+
+          if (start || end) {
+            filter[dateField] = {};
+            if (start && !isNaN(start)) filter[dateField].$gte = start;
+            if (end && !isNaN(end)) filter[dateField].$lte = end;
+            // Cleanup if empty
+            if (Object.keys(filter[dateField]).length === 0) {
+              delete filter[dateField];
             }
           }
+
+          // Search text match
           if (searchString) {
             const searchRegex = new RegExp(searchString, "i");
             filter.$or = [
@@ -346,8 +618,7 @@ createLead: async (details) => {
               { client_id: { $regex: searchRegex } },
               { email: { $regex: searchRegex } }
             ];
-            }
-
+          }
 
           const leadsCollection = db.get().collection(COLLECTION.LEADS);
 
@@ -389,6 +660,7 @@ createLead: async (details) => {
                       officer_id: 1,
                       officer_name: "$officer.name",
                       officer_staff_id: "$officer.officer_id",
+                      lastcall: 1 // Optional: expose if needed for frontend
                     },
                   },
                 ],
@@ -414,7 +686,8 @@ createLead: async (details) => {
           console.error('getFilteredLeads error:', error);
           throw new Error('Server Error');
         }
-      },
+  },  
+
 
    getCallHistoryWithFilters: async (query, decoded) => {
         try {
