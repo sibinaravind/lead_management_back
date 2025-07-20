@@ -29,22 +29,7 @@ module.exports = {
   },
 
   searchCustomer: async (query) => {
-    const projection = {
-      _id: 1,
-      client_id: 1,
-      name: 1,
-      email: 1,
-      phone: 1,
-      service_type: 1,
-      country_code: 1,
-      status: 1,
-      lead_source: 1,
-      officer_id: 1,
-      created_at: 1
-    };
-
     try {
-
       if (!query) {
         return [];
       }
@@ -55,6 +40,19 @@ module.exports = {
           { email: { $regex: query, $options: 'i' } },
           { client_id: { $regex: query, $options: 'i' } }
         ]
+      };
+      const projection = {
+        _id: 1,
+        client_id: 1,
+        name: 1,
+        email: 1,
+        phone: 1,
+        service_type: 1,
+        country_code: 1,
+        status: 1,
+        lead_source: 1,
+        officer_id: 1,
+        created_at: 1
       };
 
       // Search all collections in parallel
