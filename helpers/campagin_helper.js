@@ -3,8 +3,16 @@ let COLLECTION = require('../config/collections')
 const ObjectId = require('mongodb').ObjectId
 const fileUploader = require('../utils/fileUploader');
 const fs = require('fs');
+const Joi = require('joi');
+const campaignValidation = require('../validations/campaginValidation');
+
 module.exports = {
     createCampaign: async ( title, startDate, image ) => {
+        // Validate input
+        const { error } = campaignValidation.validate({ title, startDate, image });
+        if (error) {
+            throw new Error('Validation error: ' + error.details[0].message);
+        }
         const collection = db.get().collection(COLLECTION.CAMPAIGNS);
         let imagePath = '';
         try {
@@ -36,6 +44,9 @@ module.exports = {
         }
     },
     deleteCampaign: async (campaignId) => {
+        if (!ObjectId.isValid(campaignId)) {
+            throw new Error('Invalid campaignId');
+        }
         const collection = db.get().collection(COLLECTION.CAMPAIGNS);
         let campaign = null;
         try {

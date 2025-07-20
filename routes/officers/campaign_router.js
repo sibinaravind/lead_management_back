@@ -12,7 +12,6 @@ app.get("/list", middleware.checkToken, (req, res) => {
   );
 });
 app.post("/insert", middleware.checkToken, (req, res) => {
-  console.log(req.body);
   return response.handle(res, () =>
     campaginHelper.createCampaign(req.body.title, req.body.startDate, req.body.doc_file)
   );

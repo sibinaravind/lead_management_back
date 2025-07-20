@@ -11,7 +11,7 @@ app.post("/logCallEvent", middleware.checkToken, (req, res) => {
   );
 });
 
-app.post("/add_mobile_call_log", middleware.checkToken, (req, res) => {
+app.post("/add_mobile_call_log", (req, res) => {
   return response.handle(res, () =>
     leadHelper.logMobileCallEvent(req.body)
   );

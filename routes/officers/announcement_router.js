@@ -22,9 +22,9 @@ app.delete("/delete/:id", middleware.checkToken, (req, res) => {
     announcementHelper.deleteAnnouncement(req.params.id)
   );
 });
-app.put("/update/:id", middleware.checkToken, (req, res) => {
+app.patch("/update/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>         
-    announcementHelper.updateAnnouncement(req.params.id, req.body.title, req.body.content)
+    announcementHelper.updateAnnouncement(req.params.id, req.body)
     );
 }
 );

@@ -251,164 +251,7 @@ createLead: async (details) => {
     // db.leads.createIndex({ status: 1 });
     // db.leads.createIndex({ service_type: 1 });
     // db.leads.createIndex({ created_at: -1 });
-    // getFilteredLeads: async (query, decoded) => {
-    //     try {
-    //       const {
-    //         filterCategory,
-    //         page = 1,
-    //         limit = 10,
-    //         status,
-    //         branch,
-    //         employee,
-    //         serviceType,
-    //         profession,
-    //         leadSource,
-    //         campagin,
-    //         startDate,
-    //         endDate,
-    //         searchString
-    //       } = query;
-
-    //       const parsedPage = parseInt(page);
-    //       const parsedLimit = parseInt(limit);
-    //       const skip = (parsedPage - 1) * parsedLimit;
-    //       const filter = {};
-    //       // Officer filtering
-    //       const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
-    //       let officerIdList = [];
-
-    //       if (!isAdmin) {
-    //         officerIdList = Array.isArray(decoded?.officers)
-    //           ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
-    //           : [];
-    //       }
-    //       if (filterCategory === 'UNASSIGNED') {
-    //           filter.officer_id = 'UNASSIGNED';
-    //       }
-    //       else if (employee) {
-    //           filter.officer_id = safeObjectId(employee);
-    //       } else if (isAdmin) {
-    //         // Admins see all
-    //       } else if (officerIdList.length > 0) {
-    //         filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-    //       } else {
-    //         filter.officer_id = safeObjectId(decoded?._id);
-    //       } 
-    //       if(filterCategory === 'NEW')
-    //         {
-    //           filter.status = "HOT"
-    //         }
-    //         else if (status)
-    //         { filter.status = status;
-    //       }
-    //       // Apply additional filters
-    //       if (branch) filter.branch = branch;
-    //       if (serviceType) filter.service_type = serviceType;
-    //       if (profession) filter.profession = profession;
-    //       if (leadSource) filter.lead_source = leadSource;
-    //       if(campagin) filter.campagin = campagin;
-    //       if (startDate || endDate) {
-    //         // Support DD/MM/YYYY format as well as ISO
-    //         const parseDate = (str) => {
-    //           if (!str) return null;
-    //           // Try DD/MM/YYYY
-    //           const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
-    //           if (match) {
-    //           // month is 0-based in JS Date
-    //           return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
-    //           }
-    //           // fallback to Date parse
-    //           return new Date(str);
-    //         };
-
-    //         filter.created_at = {};
-    //         if (startDate) {
-    //           const start = parseDate(startDate);
-    //           if (!isNaN(start)) filter.created_at.$gte = start;
-    //         }
-    //         if (endDate) {
-    //           const end = parseDate(endDate);
-    //           if (!isNaN(end)) {
-    //           end.setHours(23, 59, 59, 999);
-    //           filter.created_at.$lte = end;
-    //           }
-    //         }
-    //       }
-    //       if (searchString) {
-    //         const searchRegex = new RegExp(searchString, "i");
-    //         filter.$or = [
-    //           { phone: { $regex: searchRegex } },
-    //           { name: { $regex: searchRegex } },
-    //           { client_id: { $regex: searchRegex } },
-    //           { email: { $regex: searchRegex } }
-    //         ];
-    //         }
-    //       const leadsCollection = db.get().collection(COLLECTION.LEADS);
-    //       const result = await leadsCollection.aggregate([
-    //         { $match: filter },
-    //         {
-    //           $facet: {
-    //             data: [
-    //               { $sort: { created_at: -1 } },
-    //               { $skip: skip },
-    //               { $limit: parsedLimit },
-    //               {
-    //                 $lookup: {
-    //                   from: COLLECTION.OFFICERS,
-    //                   localField: "officer_id",
-    //                   foreignField: "_id",
-    //                   as: "officer",
-    //                 },
-    //               },
-    //               {
-    //                 $unwind: {
-    //                   path: "$officer",
-    //                   preserveNullAndEmptyArrays: true,
-    //                 },
-    //               },
-    //               {
-    //                 $project: {
-    //                   _id: 1,
-    //                   client_id: 1,
-    //                   name: 1,
-    //                   email: 1,
-    //                   phone: 1,
-    //                   branch: 1,
-    //                   service_type: 1,
-    //                   country_code: 1,
-    //                   status: 1,
-    //                   lead_source: 1,
-    //                   created_at: 1,
-    //                   officer_id: 1,
-    //                   officer_name: "$officer.name",
-    //                   officer_staff_id: "$officer.officer_id",
-    //                 },
-    //               },
-    //             ],
-    //             totalCount: [
-    //               { $count: "count" },
-    //             ],
-    //           },
-    //         },
-    //       ]).toArray();
-
-    //       const leadsData = result[0]?.data || [];
-    //       const totalCount = result[0]?.totalCount?.[0]?.count || 0;
-
-    //       return {
-    //         leads: leadsData,
-    //         limit: parsedLimit,
-    //         page: parsedPage,
-    //         totalMatch: totalCount,
-    //         totalPages: Math.ceil(totalCount / parsedLimit),
-    //       };
-
-    //     } catch (error) {
-    //       console.error('getFilteredLeads error:', error);
-    //       throw new Error('Server Error');
-    //     }
-    // },
-
+ 
    getLeadCountByCategory: async (decoded) => {
         try {
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
@@ -551,7 +394,7 @@ createLead: async (details) => {
           let dateField = 'created_at';
           let start = null;
           let end = null;
-        const parseDate = (str) => {
+          const parseDate = (str) => {
           if (!str) return null;
           const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
           if (match) {
@@ -858,6 +701,166 @@ createLead: async (details) => {
     // Get lead/client by ID
   
 }
+
+
+   // getFilteredLeads: async (query, decoded) => {
+    //     try {
+    //       const {
+    //         filterCategory,
+    //         page = 1,
+    //         limit = 10,
+    //         status,
+    //         branch,
+    //         employee,
+    //         serviceType,
+    //         profession,
+    //         leadSource,
+    //         campagin,
+    //         startDate,
+    //         endDate,
+    //         searchString
+    //       } = query;
+
+    //       const parsedPage = parseInt(page);
+    //       const parsedLimit = parseInt(limit);
+    //       const skip = (parsedPage - 1) * parsedLimit;
+    //       const filter = {};
+    //       // Officer filtering
+    //       const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+    //       let officerIdList = [];
+
+    //       if (!isAdmin) {
+    //         officerIdList = Array.isArray(decoded?.officers)
+    //           ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+    //           : [];
+    //       }
+    //       if (filterCategory === 'UNASSIGNED') {
+    //           filter.officer_id = 'UNASSIGNED';
+    //       }
+    //       else if (employee) {
+    //           filter.officer_id = safeObjectId(employee);
+    //       } else if (isAdmin) {
+    //         // Admins see all
+    //       } else if (officerIdList.length > 0) {
+    //         filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+    //       } else {
+    //         filter.officer_id = safeObjectId(decoded?._id);
+    //       } 
+    //       if(filterCategory === 'NEW')
+    //         {
+    //           filter.status = "HOT"
+    //         }
+    //         else if (status)
+    //         { filter.status = status;
+    //       }
+    //       // Apply additional filters
+    //       if (branch) filter.branch = branch;
+    //       if (serviceType) filter.service_type = serviceType;
+    //       if (profession) filter.profession = profession;
+    //       if (leadSource) filter.lead_source = leadSource;
+    //       if(campagin) filter.campagin = campagin;
+    //       if (startDate || endDate) {
+    //         // Support DD/MM/YYYY format as well as ISO
+    //         const parseDate = (str) => {
+    //           if (!str) return null;
+    //           // Try DD/MM/YYYY
+    //           const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+    //           if (match) {
+    //           // month is 0-based in JS Date
+    //           return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+    //           }
+    //           // fallback to Date parse
+    //           return new Date(str);
+    //         };
+
+    //         filter.created_at = {};
+    //         if (startDate) {
+    //           const start = parseDate(startDate);
+    //           if (!isNaN(start)) filter.created_at.$gte = start;
+    //         }
+    //         if (endDate) {
+    //           const end = parseDate(endDate);
+    //           if (!isNaN(end)) {
+    //           end.setHours(23, 59, 59, 999);
+    //           filter.created_at.$lte = end;
+    //           }
+    //         }
+    //       }
+    //       if (searchString) {
+    //         const searchRegex = new RegExp(searchString, "i");
+    //         filter.$or = [
+    //           { phone: { $regex: searchRegex } },
+    //           { name: { $regex: searchRegex } },
+    //           { client_id: { $regex: searchRegex } },
+    //           { email: { $regex: searchRegex } }
+    //         ];
+    //         }
+    //       const leadsCollection = db.get().collection(COLLECTION.LEADS);
+    //       const result = await leadsCollection.aggregate([
+    //         { $match: filter },
+    //         {
+    //           $facet: {
+    //             data: [
+    //               { $sort: { created_at: -1 } },
+    //               { $skip: skip },
+    //               { $limit: parsedLimit },
+    //               {
+    //                 $lookup: {
+    //                   from: COLLECTION.OFFICERS,
+    //                   localField: "officer_id",
+    //                   foreignField: "_id",
+    //                   as: "officer",
+    //                 },
+    //               },
+    //               {
+    //                 $unwind: {
+    //                   path: "$officer",
+    //                   preserveNullAndEmptyArrays: true,
+    //                 },
+    //               },
+    //               {
+    //                 $project: {
+    //                   _id: 1,
+    //                   client_id: 1,
+    //                   name: 1,
+    //                   email: 1,
+    //                   phone: 1,
+    //                   branch: 1,
+    //                   service_type: 1,
+    //                   country_code: 1,
+    //                   status: 1,
+    //                   lead_source: 1,
+    //                   created_at: 1,
+    //                   officer_id: 1,
+    //                   officer_name: "$officer.name",
+    //                   officer_staff_id: "$officer.officer_id",
+    //                 },
+    //               },
+    //             ],
+    //             totalCount: [
+    //               { $count: "count" },
+    //             ],
+    //           },
+    //         },
+    //       ]).toArray();
+
+    //       const leadsData = result[0]?.data || [];
+    //       const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+    //       return {
+    //         leads: leadsData,
+    //         limit: parsedLimit,
+    //         page: parsedPage,
+    //         totalMatch: totalCount,
+    //         totalPages: Math.ceil(totalCount / parsedLimit),
+    //       };
+
+    //     } catch (error) {
+    //       console.error('getFilteredLeads error:', error);
+    //       throw new Error('Server Error');
+    //     }
+    // },
+
 
     // Create Client/Lead
     // createLead: async (details) => {

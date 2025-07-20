@@ -43,6 +43,14 @@ module.exports = {
                     if (value.status !== "ACTIVE" && value.status !== "INACTIVE") {
                         return reject("Status must be 'ACTIVE' or 'INACTIVE'");
                     }
+                    if (typeof value.name !== "string" || value.name.trim() === "") {
+                        return reject("Name cannot be empty");
+                    }
+                    // Check if name contains only special characters
+                    if (/^[^a-zA-Z0-9]+$/.test(value.name.trim())) {
+                        return reject("Valid name is required");
+                    }
+
                     const newItem = { _id: new ObjectId(), ...value };
                     insertedId = newItem._id;
                     updateResult = await collection.updateOne(
@@ -57,6 +65,12 @@ module.exports = {
                     // Only allow if status is 'ACTIVE' or 'INACTIVE'
                     if (value.status !== undefined && value.status !== "ACTIVE" && value.status !== "INACTIVE") {
                         return reject("Status must be 'ACTIVE' or 'INACTIVE'");
+                    }
+                    if (typeof value.name !== "string" || value.name.trim() === "") {
+                        return reject("Name cannot be empty");
+                    }
+                    if (/^[^a-zA-Z0-9]+$/.test(value.name.trim())) {
+                        return reject("Valid name is required");
                     }
 
                     // Prevent updating the _id field
@@ -101,7 +115,142 @@ module.exports = {
             }
         });
     },
-    // editConfig: async (data) => {
+  
+    accessPermissionList: async () => {
+    return new Promise(async (resolve, reject) => {
+        try {
+        const result = await db.get()
+            .collection(COLLECTION.CONFIG)
+            .findOne({ _id: ObjectId("682a9eeb231dc6e6d693248a") });
+
+        if (!result) return reject("No data found");
+        const { _id, ...roles } = result;
+        const transformed = Object.entries(roles).map(([category, value]) => ({
+            category,
+            value
+        }));
+        resolve(transformed);
+        } catch (error) {
+        reject(error);
+        }
+    });
+    },
+
+    insertAccessPermissionList: async (data) => {
+    return new Promise(async (resolve, reject) => {
+        
+        try {
+            if (typeof data.category !== "string" || data.category.trim() === "") {
+                        return reject("Category cannot be empty");
+            }
+
+            const result = await db.get()
+                .collection(COLLECTION.CONFIG)
+                .updateOne(
+                    { 
+                        _id: ObjectId("682a9eeb231dc6e6d693248a")
+                    },
+                    { $set:  {
+                [data.category]: data.value 
+                } }
+                );
+
+            if (result.modifiedCount > 0 || result.upsertedCount > 0) {
+                resolve(`'${data.category}' Inserted successfully`);
+            } else {
+                reject("No document modified");
+            }
+        } catch (error) {
+            reject(error);
+        }
+    });
+   },
+
+   deleteAccessPermission: async (roleKey) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const officerWithRole = await db.get()
+                .collection(COLLECTION.OFFICERS)
+                .findOne({ designation: roleKey });
+
+            if (officerWithRole) {
+                return reject(`Cannot delete '${roleKey}' – role is currently assigned to at least one officer.`);
+            }
+            const updateResult = await db.get()
+                .collection(COLLECTION.CONFIG)
+                .updateOne(
+                    {
+                        _id: ObjectId("682a9eeb231dc6e6d693248a")
+                    },
+                    {
+                        $unset: { [roleKey]: "" }
+                    }
+                );
+
+            if (updateResult.modifiedCount > 0) {
+                resolve(`Role '${roleKey}' deleted successfully.`);
+            } else {
+                reject("No document modified or role not found.");
+            }
+        } catch (error) {
+            reject(error);
+        }
+    });
+   },   
+
+    editAccessPermission: async ({ category, value }) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (!category || !Array.isArray(value) || value.length === 0) {
+                    return reject("Missing or invalid 'category' or 'value' array");
+                }
+
+                const collection = db.get().collection(COLLECTION.CONFIG);
+                const docId = ObjectId("682a9eeb231dc6e6d693248a");
+
+                const config = await collection.findOne({ _id: docId });
+
+                if (!config || !config[category]) {
+                    return reject(`Invalid category '${category}'`);
+                }
+
+                const updateFields = {};
+
+                for (const item of value) {
+                    const { field, value: fieldValue } = item;
+
+                    if (!field || typeof fieldValue !== 'boolean') {
+                        return reject("Each item in 'value' must include a 'field' and a boolean 'value'");
+                    }
+
+                    if (!(field in config[category])) {
+                        return reject(`Field '${field}' not found in category '${category}'`);
+                    }
+
+                    updateFields[`${category}.${field}`] = fieldValue;
+                }
+
+                const updateResult = await collection.updateOne(
+                    { _id: docId },
+                    { $set: updateFields }
+                );
+
+                if (updateResult.modifiedCount > 0) {
+                    resolve({ status: true });
+                } else {
+                    reject("No changes were made");
+                }
+            } catch (error) {
+                reject(error.message || error);
+            }
+        });
+
+    }
+}
+
+
+
+  // editConfig: async (data) => {
     //     return new Promise(async (resolve, reject) => {
     //         try {
     //             const collection = db.get().collection(COLLECTION.CONFIG);
@@ -196,133 +345,3 @@ module.exports = {
     //         }
     //     });
     // },
-    accessPermissionList: async () => {
-    return new Promise(async (resolve, reject) => {
-        try {
-        const result = await db.get()
-            .collection(COLLECTION.CONFIG)
-            .findOne({ _id: ObjectId("682a9eeb231dc6e6d693248a") });
-
-        if (!result) return reject("No data found");
-        const { _id, ...roles } = result;
-        const transformed = Object.entries(roles).map(([category, value]) => ({
-            category,
-            value
-        }));
-        resolve(transformed);
-        } catch (error) {
-        reject(error);
-        }
-    });
-    },
-
-    insertAccessPermissionList: async (data) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const result = await db.get()
-                .collection(COLLECTION.CONFIG)
-                .updateOne(
-                    { 
-                        _id: ObjectId("682a9eeb231dc6e6d693248a")
-                    },
-                    { $set:  {
-                [data.category]: data.value 
-                } }
-                );
-
-            if (result.modifiedCount > 0 || result.upsertedCount > 0) {
-                resolve(`'${data.category}' Inserted successfully`);
-            } else {
-                reject("No document modified");
-            }
-        } catch (error) {
-            reject(error);
-        }
-    });
-   },
-
-   deleteAccessPermission: async (roleKey) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const officerWithRole = await db.get()
-                .collection(COLLECTION.OFFICERS)
-                .findOne({ designation: roleKey });
-
-            if (officerWithRole) {
-                return reject(`Cannot delete '${roleKey}' – role is currently assigned to at least one officer.`);
-            }
-            const updateResult = await db.get()
-                .collection(COLLECTION.CONFIG)
-                .updateOne(
-                    {
-                        _id: ObjectId("682a9eeb231dc6e6d693248a")
-                    },
-                    {
-                        $unset: { [roleKey]: "" }
-                    }
-                );
-
-            if (updateResult.modifiedCount > 0) {
-                resolve(`Role '${roleKey}' deleted successfully.`);
-            } else {
-                reject("No document modified or role not found.");
-            }
-        } catch (error) {
-            reject(error);
-        }
-    });
-   },   
-
-
- 
-
-
-    editAccessPermission: async ({ category, value }) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                if (!category || !Array.isArray(value) || value.length === 0) {
-                    return reject("Missing or invalid 'category' or 'value' array");
-                }
-
-                const collection = db.get().collection(COLLECTION.CONFIG);
-                const docId = ObjectId("682a9eeb231dc6e6d693248a");
-
-                const config = await collection.findOne({ _id: docId });
-
-                if (!config || !config[category]) {
-                    return reject(`Invalid category '${category}'`);
-                }
-
-                const updateFields = {};
-
-                for (const item of value) {
-                    const { field, value: fieldValue } = item;
-
-                    if (!field || typeof fieldValue !== 'boolean') {
-                        return reject("Each item in 'value' must include a 'field' and a boolean 'value'");
-                    }
-
-                    if (!(field in config[category])) {
-                        return reject(`Field '${field}' not found in category '${category}'`);
-                    }
-
-                    updateFields[`${category}.${field}`] = fieldValue;
-                }
-
-                const updateResult = await collection.updateOne(
-                    { _id: docId },
-                    { $set: updateFields }
-                );
-
-                if (updateResult.modifiedCount > 0) {
-                    resolve({ status: true });
-                } else {
-                    reject("No changes were made");
-                }
-            } catch (error) {
-                reject(error.message || error);
-            }
-        });
-
-    }
-}
