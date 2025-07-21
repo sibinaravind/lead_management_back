@@ -2,15 +2,12 @@
 var db = require('../config/connection');
 let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
-
-const fileUploader = require('../utils/fileUploader');
-var fs = require('fs');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { off } = require('process');
-
-
 const SALT_ROUNDS = 10;
+const  officerValidation= require('../validations/officerValidation');
+const validatePartial = require("../utils/validatePartial");
+
 module.exports = {
 loginOfficer: async (officer_id, password) => {
   const JWT_SECRET = process.env.JWT_SECRET ;
@@ -43,6 +40,9 @@ loginOfficer: async (officer_id, password) => {
 
 createOfficer : async (details) => {
   return new Promise(async (resolve, reject) => {
+    const { error, value } = officerValidation.validate(details);
+    if (error) return reject("Validation failed: " + error.details[0].message);
+    details = value; 
     try {
       const collection = db.get().collection(COLLECTION.OFFICERS);
       const existingOfficer = await collection.findOne({
@@ -113,89 +113,20 @@ listOfficers: () => {
   });
 },
 
-//  listOfficers : async () => {
-//   try {
-//     const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
-//       {
-//         $lookup: {
-//           from: "config", // ensure this matches your actual collection name
-//           let: { designationCodes: "$designation" },
-//           pipeline: [
-//             { $match: { name: "constants" } },
-//             {
-//               $project: {
-//                 designation: {
-//                   $filter: {
-//                     input: "$designation",
-//                     as: "d",
-//                     cond: { $in: ["$$d.code", "$$designationCodes"] }
-//                   }
-//                 }
-//               }
-//             }
-//           ],
-//           as: "designationData"
-//         }
-//       },
-//        {
-//         $addFields: {
-//           designation: {
-//             $cond: {
-//               if: { $gt: [{ $size: "$designationData" }, 0] },
-//               then: {
-//                 $map: {
-//                   input: {
-//                     $reduce: {
-//                       input: "$designationData.designation",
-//                       initialValue: [],
-//                       in: { $concatArrays: ["$$value", "$$this"] }
-//                     }
-//                   },
-//                   as: "d",
-//                   in: "$$d.name"
-//                 }
-//               },
-//               else: []
-//             }
-//           }
-//         }
-//       },
-//       {
-//         $project: {
-//           officer_id: 1,
-//           name: 1,
-//           status: 1,
-//           gender: 1,
-//           phone: 1,
-//           company_phone_number: 1,
-//           designation: 1, // now contains designation objects
-//           department: 1,
-//           branch: 1,
-//           officers: 1,
-//           created_at: 1
-//         }
-//       }
-//     ]).toArray();
-
-//     return officers;
-//   } catch (error) {
-   
-//     throw new Error("Error processing request");
-//   }
-// },
 
 // Edit Officer
 editOfficer : async (id, details) => {
   return new Promise(async (resolve, reject) => {
     try {
-      let updateData = { ...details };
+      const updateData = validatePartial(officerValidation, details);
       // Validate status if present
-      if (updateData.status) {
-        const allowedStatuses = ['ACTIVE', 'INACTIVE', 'BLOCKED'];
-        if (!allowedStatuses.includes(updateData.status)) {
-          return reject("Invalid status.");
-        }
-      }
+      // if (updateData.status) {
+      //   const allowedStatuses = ['ACTIVE', 'INACTIVE', 'BLOCKED'];
+      //   if (!allowedStatuses.includes(updateData.status)) {
+      //     return reject("Invalid status.");
+      //   }
+      // }
+      console.log("Update Data:", updateData);
       if (details.password) {
         updateData.password = await bcrypt.hash(details.password.toString(), SALT_ROUNDS);
       } else {
@@ -212,7 +143,7 @@ editOfficer : async (id, details) => {
         reject("Error processing request");
       }
     } catch (error) {
-      reject("Error processing request");
+      reject( error || "Error processing request");
     }
   });
 },
@@ -225,7 +156,17 @@ updateOfficerPassword: async (id, details) => {
 
     const isMatch = await bcrypt.compare(details.current_password.toString(), officer.password);
     if (!isMatch) throw "Current password does not match";
-
+    if (
+      typeof details.new_password !== "string" ||
+      details.new_password.length < 8 ||
+      !/[A-Z]/.test(details.new_password) || // at least one capital letter
+      !/[a-z]/.test(details.new_password) || // at least one lowercase letter
+      !/\d/.test(details.new_password) ||
+      !/[!@#$%^&*(),.?":{}|<>]/.test(details.new_password)
+    ) {
+      throw "New password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a digit, and a symbol.";
+    }
+    details.new_password = details.new_password.toString();
     const hashedPassword = await bcrypt.hash(details.new_password.toString(), SALT_ROUNDS);
     const result = await collection.updateOne(
       { _id: ObjectId(id) },
@@ -262,7 +203,10 @@ deleteOfficer: async (id) => {
 addOfficerUnderOfficer: async ( data) => {
   return new Promise(async (resolve, reject) => {
     try {
-      const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+      if (!ObjectId.isValid(data.officer.officer_id)) {
+        return reject("Invalid officer_id: must be a valid ");
+      }
+      data.officer.officer_id = new ObjectId(data.officer.officer_id);const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
         {
           _id: new ObjectId(data.lead_officer_id),
           "officers.officer_id": { $ne: data.officer.officer_id }  // Avoid duplicates
@@ -288,6 +232,8 @@ addOfficerUnderOfficer: async ( data) => {
 editOfficerLeadPermission: async (data) => {
   return new Promise(async (resolve, reject) => {
     try {
+
+
       const { lead_officer_id, officer } = data;
 
       if (!lead_officer_id || !officer?.officer_id || typeof officer.edit_permission !== "boolean") {
@@ -602,6 +548,76 @@ removeStaffFromRoundRobin: async (data) => {
 
 
 
+//  listOfficers : async () => {
+//   try {
+//     const officers = await db.get().collection(COLLECTION.OFFICERS).aggregate([
+//       {
+//         $lookup: {
+//           from: "config", // ensure this matches your actual collection name
+//           let: { designationCodes: "$designation" },
+//           pipeline: [
+//             { $match: { name: "constants" } },
+//             {
+//               $project: {
+//                 designation: {
+//                   $filter: {
+//                     input: "$designation",
+//                     as: "d",
+//                     cond: { $in: ["$$d.code", "$$designationCodes"] }
+//                   }
+//                 }
+//               }
+//             }
+//           ],
+//           as: "designationData"
+//         }
+//       },
+//        {
+//         $addFields: {
+//           designation: {
+//             $cond: {
+//               if: { $gt: [{ $size: "$designationData" }, 0] },
+//               then: {
+//                 $map: {
+//                   input: {
+//                     $reduce: {
+//                       input: "$designationData.designation",
+//                       initialValue: [],
+//                       in: { $concatArrays: ["$$value", "$$this"] }
+//                     }
+//                   },
+//                   as: "d",
+//                   in: "$$d.name"
+//                 }
+//               },
+//               else: []
+//             }
+//           }
+//         }
+//       },
+//       {
+//         $project: {
+//           officer_id: 1,
+//           name: 1,
+//           status: 1,
+//           gender: 1,
+//           phone: 1,
+//           company_phone_number: 1,
+//           designation: 1, // now contains designation objects
+//           department: 1,
+//           branch: 1,
+//           officers: 1,
+//           created_at: 1
+//         }
+//       }
+//     ]).toArray();
+
+//     return officers;
+//   } catch (error) {
+   
+//     throw new Error("Error processing request");
+//   }
+// },
 
 // listOfficers:async () => {
 //   return new Promise(async (resolve, reject) => {

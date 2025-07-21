@@ -8,6 +8,7 @@ function validatePartial(schema, data) {
     abortEarly: false,
     stripUnknown: true,
   });
+  // console.log("Validation result:", { error, partialSchema, value });
   if (error) {
     const filteredErrors = error.details.filter((d) =>
       keys.includes(d.path[0])

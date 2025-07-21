@@ -3,6 +3,8 @@ let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
 // const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { STATUSES } = require('../constants/enums');
+const { clientValidation, projectValidation, vacancyValidation } = require("../validations/projectValidation");
+const validatePartial = require("../utils/validatePartial");
 // Helper to get next sequence number
 
 module.exports = {
@@ -10,6 +12,10 @@ module.exports = {
     createClient: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
+
+                const { error, value } = clientValidation.validate(details);
+                if (error) return reject("Validation failed: " + error.details[0].message);
+                details = value;
                 const collection = db.get().collection(COLLECTION.CLIENTS);
                 // // Ensure unique index on client_id (run once in your setup/migration scripts)
                 // await collection.createIndex({ client_id: 1 }, { unique: true }); //req
@@ -48,17 +54,13 @@ module.exports = {
                 });
             } catch (err) {
                 console.error(err);
-                reject("Error processing request");
+                reject(err || "Error processing request");
             }
         });
     },
-
     // Edit Client
     editClient: async (clientId, updateFields) => {
-        console.log("Updating client with ID:", clientId, "Fields:", updateFields);
-        const filteredFields = Object.fromEntries(
-            Object.entries(updateFields).filter(([_, v]) => v !== null && v !== undefined)
-        );
+        const filteredFields = validatePartial(clientValidation, updateFields);
         return new Promise(async (resolve, reject) => {
             try {
                 db.get().collection(COLLECTION.CLIENTS).updateOne(
@@ -77,7 +79,7 @@ module.exports = {
                 });
             } catch (err) {
 
-                reject("Error processing request");
+                reject(err || "Error processing request");
             }
         });
     },
@@ -89,9 +91,9 @@ module.exports = {
                 resolve(clients);
             } catch (err) {
                 console.error(err);
-                reject("Error fetching client list");
+                reject(err || "Error fetching client list");
             }
-        }); ``
+        });
     },
     deleteClient: async (clientId) => {
         return new Promise(async (resolve, reject) => {
@@ -106,8 +108,8 @@ module.exports = {
                     reject("Delete failed or client not found");
                 }
             } catch (err) {
-                console.error(err);
-                reject("Error deleting client");
+
+                reject(err || "Error deleting client");
             }
         });
     },
@@ -115,6 +117,9 @@ module.exports = {
     createProject: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
+                const { error, value } = projectValidation.validate(details);
+                if (error) return reject("Validation failed: " + error.details[0].message);
+                details = value;
                 const collection = db.get().collection(COLLECTION.PROJECTS);
                 // const newNumber = await getNextSequence('project_id');
                 // const project_id = `AEPID${String(newNumber).padStart(5, '0')}`;
@@ -138,8 +143,7 @@ module.exports = {
                     reject("Error processing request");
                 });
             } catch (err) {
-                console.error(err);
-                reject("Error processing request");
+                reject(err || "Error processing request");
             }
         });
     },
@@ -148,10 +152,8 @@ module.exports = {
     editProject: async (project_id, updateFields) => {
         return new Promise(async (resolve, reject) => {
             try {
+                const filteredFields = validatePartial(projectValidation, updateFields);
                 // Filter out null or undefined fields
-                const filteredFields = Object.fromEntries(
-                    Object.entries(updateFields).filter(([_, v]) => v !== null && v !== undefined)
-                );
                 db.get().collection(COLLECTION.PROJECTS).updateOne(
                     { _id: ObjectId(project_id) },
                     { $set: filteredFields }
@@ -167,7 +169,7 @@ module.exports = {
                 });
             } catch (err) {
 
-                reject("Error processing request");
+                reject(err || "Error processing request");
             }
         });
     },
@@ -179,7 +181,7 @@ module.exports = {
 
             } catch (err) {
                 console.error(err);
-                reject("Error fetching client list");
+                reject(err || "Error fetching client list");
             }
         });
     },
@@ -201,17 +203,20 @@ module.exports = {
                 });
             } catch (err) {
                 console.error(err);
-                reject("Error deleting client");
+                reject(err || "Error deleting client");
             }
         });
     },
 
-    // // Create Job Vacancy as Project using next unique sequence
     createVacancy: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const { clients = [], ...vacancyData } = details;
-                // Prepare clients with commission history
+                const { error, value } = vacancyValidation.validate(details);
+                if (error) {
+                    return reject(`Validation Error: ${error.message}`);
+                }
+                const { clients = [], ...vacancyData } = value;
+                // Format clients with ObjectId and commission history
                 const formattedClients = clients.map(client => ({
                     client_id: ObjectId(client.client_id),
                     vacancies: client.vacancies,
@@ -222,34 +227,27 @@ module.exports = {
                         }
                     ]
                 }));
-                vacancyData.project_id = ObjectId(vacancyData.project_id);
                 const documentToInsert = {
                     ...vacancyData,
+                    project_id: ObjectId(vacancyData.project_id),
                     clients: formattedClients,
                     created_at: new Date(),
                     status: STATUSES.ACTIVE
                 };
 
-                db.get().collection(COLLECTION.VACANCIES).insertOne(documentToInsert)
-                    .then(result => {
-                        resolve(result.insertedId);
-                    })
-                    .catch(err => {
-                        console.error(err);
-                        reject("Error inserting vacancy");
-                    });
+                const result = await db.get().collection(COLLECTION.VACANCIES).insertOne(documentToInsert);
+                resolve(result.insertedId);
 
             } catch (err) {
                 console.error(err);
-                reject("Error processing request");
+                reject(err?.message || 'Error creating vacancy');
             }
         });
     },
+
     editVacancy: async (_id, data) => {
         return new Promise((resolve, reject) => {
-            const updateFields = Object.fromEntries(
-                Object.entries(data).filter(([_, v]) => v !== null && v !== undefined)
-            );
+            const updateFields = validatePartial(vacancyValidation, data);;
             if (updateFields.project_id != null) {
                 updateFields.project_id = ObjectId(updateFields.project_id);
             }
@@ -265,39 +263,46 @@ module.exports = {
                     reject("No changes made");
                 }
             }).catch(err => {
-                reject("Error updating vacancy");
+                reject(err || "Error updating vacancy");
             });
         });
     },
     insertClientsToVacancy: async (vacancyId, clients) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                if (!Array.isArray(clients) || clients.length === 0) {
-                    return reject("No clients provided");
-                }
+        try {
+            const { clients: validatedClients } = validatePartial(vacancyValidation, { clients });
 
-                const formattedClients = clients.map(client => ({
-                    client_id: ObjectId(client.client_id || client._id),
-                    vacancies: client.vacancies,
+            const vacancy = await db.get().collection(COLLECTION.VACANCIES).findOne(
+                { _id: ObjectId(vacancyId) },
+                { projection: { clients: 1 } }
+            );
+
+            const existingIds = new Set((vacancy?.clients || []).map(c => c.client_id.toString()));
+
+            const newClients = validatedClients
+                .filter(c => !existingIds.has(c.client_id.toString()))
+                .map(c => ({
+                    ...c,
+                    client_id: ObjectId(c.client_id), 
                     commission_history: [
                         {
-                            value: client.commission || client.commision,
+                            value: c.commission,
                             updated_at: new Date()
                         }
                     ]
                 }));
 
+            if (newClients.length > 0) {
                 await db.get().collection(COLLECTION.VACANCIES).updateOne(
                     { _id: ObjectId(vacancyId) },
-                    { $push: { clients: { $each: formattedClients } } }
+                    { $push: { clients: { $each: newClients } } }
                 );
-
-                resolve(true);
-            } catch (err) {
-                console.error(err);
-                reject("Client insert failed");
             }
-        });
+
+            return true;
+        } catch (err) {
+            console.error(err);
+            throw err || "Client insert failed";
+        }
     },
 
     removeClientFromVacancy: async (vacancyId, clientId) => {
@@ -322,16 +327,17 @@ module.exports = {
                     reject("Error removing client");
                 });
             } catch (err) {
-                reject("Error removing client");
+                reject(err || "Error removing client");
             }
         });
     },
-    editClientsInVacancy: async (vacancyId, clientsToUpdate) => {
+    editClientsInVacancy: async (vacancyId, clients) => {
         return new Promise(async (resolve, reject) => {
             try {
-                if (!Array.isArray(clientsToUpdate)) {
-                    return reject("Invalid clients input; expected an array");
-                }
+                // if (!Array.isArray(clientsToUpdate)) {
+                //     return reject("Invalid clients input; expected an array");
+                // }
+             var   clientsToUpdate = validatePartial(vacancyValidation, { clients });
                 const vacancy = await db.get().collection(COLLECTION.VACANCIES).findOne({
                     _id: ObjectId(vacancyId)
                 });
@@ -340,7 +346,7 @@ module.exports = {
 
                 const bulkOps = [];
 
-                for (const updatedClient of clientsToUpdate) {
+                for (const updatedClient of clientsToUpdate.clients) {
                     const clientIndex = vacancy.clients.findIndex(
                         c => c.client_id.toString() === updatedClient.client_id
                     );
@@ -388,7 +394,7 @@ module.exports = {
                 resolve(true);
             } catch (err) {
                 console.error(err);
-                reject("Error updating clients");
+                reject(err || "Error updating clients");
             }
         });
     },
@@ -408,7 +414,7 @@ module.exports = {
                 });
             } catch (err) {
                 console.error(err);
-                reject("Error deleting vacancy");
+                reject(err || "Error deleting vacancy");
             }
         });
     },
@@ -590,7 +596,7 @@ module.exports = {
                 resolve(result);
             } catch (err) {
                 console.error(err);
-                reject("Error fetching vacancy list");
+                reject(err || "Error fetching vacancy list");
             }
         });
     },
@@ -642,7 +648,7 @@ module.exports = {
                 resolve(result);
             } catch (err) {
                 console.error(err);
-                reject("Error fetching client details for vacancy");
+                reject(err || "Error fetching client details for vacancy");
             }
         });
     },
@@ -682,8 +688,8 @@ module.exports = {
                 const combined = [...leads, ...customers];
                 resolve(combined);
             } catch (err) {
-            
-                reject("Error fetching data from leads and customers");
+
+                reject(err || "Error fetching data from leads and customers");
             }
         });
     },

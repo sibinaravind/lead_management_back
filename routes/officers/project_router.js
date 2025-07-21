@@ -51,8 +51,6 @@ app.delete("/deleteProject/:_id", middleware.checkToken, (req, res) => {
     projecthelper.deletePoject(req.params._id)
   );
 });
-
-
 app.post("/createVacancy", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     projecthelper.createVacancy(req.body)

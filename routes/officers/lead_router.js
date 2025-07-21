@@ -10,7 +10,6 @@ app.post("/insertLead", middleware.checkToken, (req, res) => {
     leadHelper.createLead(req.body)
   );
 });
-
 app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.editLead(req.params.id, req.body)
