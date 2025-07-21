@@ -1,4 +1,4 @@
-import { ObjectId } from 'mongodb';
+const { ObjectId } = require('mongodb');
 
 export function safeObjectId(id) {
   if (id instanceof ObjectId) return id;
