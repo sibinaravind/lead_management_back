@@ -8,17 +8,21 @@ const officerValidation = Joi.object({
     .valid('MALE', 'FEMALE', 'OTHER')
     .required(),
   phone: Joi.string()
-    .required()
-    .pattern(/^(\+\d{7,15}|\d{7,15})$/)
-    .messages({
-      'string.pattern.base': 'Invalid phone number format.',
-    }),
-  company_phone_number: Joi.string()
-    .optional()
-    .pattern(/^(\+\d{7,15}|\d{7,15})$/)
-    .messages({
-      'string.pattern.base': 'Company Invalid phone number format',
-    }),
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
+  company_phone_number:Joi.string()
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
   status: Joi.string()
     .valid('ACTIVE', 'INACTIVE', 'PAUSED', 'BLOCKED','DELETED')
     .required(),

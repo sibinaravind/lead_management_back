@@ -4,16 +4,21 @@ const clientValidation = Joi.object({
   name: Joi.string().trim().min(2).max(100).required(),
   email: Joi.string().email().required(),
   phone: Joi.string()
-    .required()
-    .pattern(/^(\+\d{7,15}|\d{7,15})$/)
-    .messages({
-      'string.pattern.base': 'Invalid phone number format.',
-    }),
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
   alternate_phone: Joi.string()
-    .pattern(/^(\+\d{7,15}|\d{7,15})$/)
-    .messages({
-      'string.pattern.base': 'Alternate Invalid phone number format.',
-    }),
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
   address: Joi.string()
     .optional()
     .trim()

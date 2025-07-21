@@ -5,8 +5,22 @@ const leadSchema = Joi.object({
   email: Joi.string().email(),
   phone: Joi.string().required().pattern(/^[0-9]+$/),
   country_code: Joi.string().optional().allow(null, ""),
-  alternate_phone: Joi.string().optional().allow(null, ""),
-  whatsapp: Joi.string().optional().allow(null, ""),
+  alternate_phone: Joi.string()
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
+  whatsapp: Joi.string()
+    .custom((value, helpers) => {
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
+      if (!phoneRegex.test(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'Received Phone Validator'),
   // gender: Joi.string().valid("male", "female", "other").optional().allow(null, ""),
   gender: Joi.string().optional().allow(null, ""),
   dob: Joi.date().optional().allow(null, ""),

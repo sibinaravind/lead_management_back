@@ -95,6 +95,8 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 // Cron job for token refresh
 
 
+
+//https://dev-sejaya-admin.web.app/auth/reset-password?email=sibin.james@gojo.co&code=519778
 // // ACTIVE ,INACTIVE,DELETED,BLOCKED,UNASSIGNED
 
 //  HOT, DEAD, UNASSIGNED,FOLLOWUP, FUTURE

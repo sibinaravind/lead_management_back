@@ -36,14 +36,14 @@ const callActivityValidation = Joi.object({
 });
 
 const mobilecallLogValidation = Joi.object({
-  received_phone: Joi.string()
+  received_phone:Joi.string()
     .custom((value, helpers) => {
-      const phoneRegex = /^\+\d{7,15}$/;
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
       if (!phoneRegex.test(value)) {
         return helpers.error('any.invalid');
       }
       return value;
-    },  'Received Phone Validator'),
+    }, 'Received Phone Validator'),
   officer_id: Joi.string()
     .trim()
     .required()
@@ -53,15 +53,14 @@ const mobilecallLogValidation = Joi.object({
       }
       return value;
     }, 'ObjectId Validator'),
-  phone: Joi.string()
-    .required()
+  phone:Joi.string()
     .custom((value, helpers) => {
-      const phoneRegex = /^\+\d{7,15}$/;
+      const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
       if (!phoneRegex.test(value)) {
         return helpers.error('any.invalid');
       }
       return value;
-    }, 'Phone Validator'),
+    }, 'Received Phone Validator'),
   duration: Joi.number().required(),
   call_type: Joi.string().required().uppercase(),
 });
