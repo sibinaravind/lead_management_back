@@ -1,6 +1,6 @@
 const Joi = require("joi");
 const { stringTodata } = require('../utils/parseDate');
-const registrationValidation = Joi.object({
+const customerBasicInfoValidation = Joi.object({
   name: Joi.string().required(),
   last_name: Joi.string().optional().allow(null, ""),
   email: Joi.string().email(),
@@ -81,6 +81,165 @@ const registrationValidation = Joi.object({
     //   status: Joi.string().optional().allow("", null),
 }).unknown(false);
 
+const academicValidation = Joi.object({
+  qualification: Joi.string().trim().min(1).required(),
+  institution: Joi.string().trim().min(1).required(),
+  university: Joi.string().trim().min(1).required(),
+  start_year: Joi.number().integer().min(1950).max((new Date().getFullYear()) + 3).required(),
+  end_year: Joi.number().integer().min(Joi.ref('start_year')).max((new Date().getFullYear()) + 7).required(),
+  grade: Joi.string().trim().allow('', null),
+  percentage: Joi.number().min(0).max(100).allow(null)
+});
+
+
+const MIN_YEAR = 2000;
+const MAX_YEAR = new Date().getFullYear() + 7;
+const examValidation = Joi.object({
+  exam: Joi.string().trim().required(),
+  status: Joi.string().trim().uppercase().required(),
+  validity_date: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      if (!parsed)
+        return helpers.message('Invalid validity_date format (DD/MM/YYYY expected)');
+      const year = parsed.getFullYear();
+      if (year < MIN_YEAR || year > MAX_YEAR) {
+        return helpers.message(`validity_date year must be between ${MIN_YEAR} and ${MAX_YEAR}`);
+      }
+      return parsed;
+    }, 'Custom Validity Date Validator'),
+
+  exam_date: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      if (!parsed)
+        return helpers.message('Invalid exam_date format (DD/MM/YYYY expected)');
+      const year = parsed.getFullYear();
+      if (year < MIN_YEAR || year > MAX_YEAR) {
+        return helpers.message(`exam_date year must be between ${MIN_YEAR} and ${MAX_YEAR}`);
+      }
+
+      return parsed;
+    }, 'Custom Exam Date Validator'),
+  score: Joi.number().min(0).max(100).optional().allow(null),
+  grade: Joi.string().trim().allow('', null),
+});
+
+
+
+const TRAVEL_MIN_YEAR = 1950;
+const TRAVEL_MAX_YEAR = new Date().getFullYear() + 7;
+const travelHistoryValidation = Joi.object({
+  country: Joi.string().trim().required(),
+
+  visa_type: Joi.string()
+    .trim()
+    .uppercase()
+    .required(),
+
+  departure_date: Joi.string()
+    .allow(null, '')
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      if (!parsed)
+        return helpers.message('Invalid departure_date format (DD/MM/YYYY expected)');
+      const year = parsed.getFullYear();
+      if (year < TRAVEL_MIN_YEAR || year > TRAVEL_MAX_YEAR)
+        return helpers.message(`departure_date year must be between ${TRAVEL_MIN_YEAR} and ${TRAVEL_MAX_YEAR}`);
+      return parsed; // ✅ Return Date object
+    }),
+
+  return_date: Joi.string()
+    .allow(null, '')
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      const departure = stringTodata(helpers.state.ancestors[0].departure_date);
+      if (!parsed)
+        return helpers.message('Invalid return_date format (DD/MM/YYYY expected)');
+      const year = parsed.getFullYear();
+      if (year < TRAVEL_MIN_YEAR || year > TRAVEL_MAX_YEAR)
+        return helpers.message(`return_date year must be between ${TRAVEL_MIN_YEAR} and ${TRAVEL_MAX_YEAR}`);
+      if (departure && parsed < departure)
+        return helpers.message('return_date cannot be before departure_date');
+      return parsed; // ✅ Return Date object
+    }),
+
+  visa_valid_date: Joi.string()
+    .allow(null, '')
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      const departure = stringTodata(helpers.state.ancestors[0].departure_date);
+      if (!parsed)
+        return helpers.message('Invalid visa_valid_date format (DD/MM/YYYY expected)');
+      const year = parsed.getFullYear();
+      if (year < TRAVEL_MIN_YEAR || year > TRAVEL_MAX_YEAR)
+        return helpers.message(`visa_valid_date year must be between ${TRAVEL_MIN_YEAR} and ${TRAVEL_MAX_YEAR}`);
+      if (departure && parsed < departure)
+        return helpers.message('visa_valid_date cannot be before departure_date');
+      return parsed; // ✅ Return Date object
+    }),
+});
+
+
+const WORK_MIN_YEAR = 1950;
+const WORK_MAX_YEAR = new Date().getFullYear() + 2;
+
+const workHistoryValidation = Joi.object({
+  position: Joi.string().trim().required(),
+  department: Joi.string().trim().allow(null, ''),
+  organization: Joi.string().trim().required(),
+  country: Joi.string().trim().required(),
+
+  start_date: Joi.string()
+    .allow(null, '')
+    .custom((value, helpers) => {
+      if (!value) return null;
+      const parsed = stringTodata(value);
+      if (!parsed) {
+        return helpers.message('Invalid start_date format (DD/MM/YYYY expected)');
+      }
+      const year = parsed.getFullYear();
+      if (year < WORK_MIN_YEAR || year > WORK_MAX_YEAR) {
+        return helpers.message(`start_date year must be between ${WORK_MIN_YEAR} and ${WORK_MAX_YEAR}`);
+      }
+      return parsed; // Return original string, not parsed Date
+    }),
+
+  end_date: Joi.string()
+    .allow(null, '')
+    .custom((value, helpers) => {
+      if (!value) return null;
+
+      const parsed = stringTodata(value);
+      if (!parsed) {
+        return helpers.message('Invalid end_date format (DD/MM/YYYY expected)');
+      }
+      const year = parsed.getFullYear();
+      if (year < WORK_MIN_YEAR || year > WORK_MAX_YEAR) {
+        return helpers.message(`end_date year must be between ${WORK_MIN_YEAR} and ${WORK_MAX_YEAR}`);
+      }
+
+      const startStr = helpers?.state?.ancestors?.[0]?.start_date;
+      const startDate = startStr ? stringTodata(startStr) : null;
+
+      if (startDate && parsed < startDate) {
+        return helpers.message('end_date cannot be before start_date');
+      }
+
+      return parsed; // Return original string
+    }),
+});
 module.exports = {
-  registrationValidation,
+  academicValidation,
+  customerBasicInfoValidation,
+  examValidation,
+  travelHistoryValidation,
+  workHistoryValidation
 };

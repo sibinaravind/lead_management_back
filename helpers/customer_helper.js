@@ -4,6 +4,7 @@ const { ObjectId } = require('mongodb');
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
+
 module.exports = {
 
   getCustomer: async (id) => {
@@ -234,7 +235,6 @@ module.exports = {
         //   comment: data.comment || '',
         //   created_at: new Date()
         // };
-
         const logResult = await logActivity({
           type: 'status_update',
           client_id: clientId,
@@ -243,7 +243,6 @@ module.exports = {
           client_status: status,
           comment: data.comment || ''
         });
-
         // const logResult = await customerActivityCollection.insertOne(activityLog);
         if (!logResult.acknowledged) return reject("Client status updated but failed to log activity");
 

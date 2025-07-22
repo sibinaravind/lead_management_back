@@ -29,9 +29,5 @@ app.patch("/updateCustomerStatus", middleware.checkToken, (req, res) => {
 });
 
 
-// app.patch("/updateCustomer/:id", middleware.checkToken, (req, res) => {
-//   return response.handle(res, () =>
-//     customerHelper.updateLead(req.params.id, req.body)
-//   );
-// });
+
 module.exports = app;
