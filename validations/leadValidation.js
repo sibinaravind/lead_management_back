@@ -1,5 +1,5 @@
 const Joi = require("joi");
-
+const { stringTodata } = require('../utils/parseDate');
 const leadSchema = Joi.object({
   name: Joi.string().required(),
   email: Joi.string().email(),
@@ -23,7 +23,13 @@ const leadSchema = Joi.object({
     }, 'Received Phone Validator'),
   // gender: Joi.string().valid("male", "female", "other").optional().allow(null, ""),
   gender: Joi.string().optional().allow(null, ""),
-  dob: Joi.date().optional().allow(null, ""),
+  dob: Joi.string()
+    .required()
+    .custom((value, helpers) => {
+      const parsed = stringTodata(value);
+      if (!parsed) return helpers.error('any.invalid');
+      return value;
+    }, 'Custom Date Validator'),
   matrial_status: Joi.string().optional().allow(null, ""),
   address: Joi.string().optional().allow(null, ""),
   city: Joi.string().optional().allow(null, ""),

@@ -573,6 +573,7 @@ module.exports = {
                             experience: 1,
                             salary_from: 1,
                             salary_to: 1,
+                            status: 1,
                             lastdatetoapply: 1,
                             description: 1,
                             country: 1,

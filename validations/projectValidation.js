@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const clientValidation = Joi.object({
   name: Joi.string().trim().min(2).max(100).required(),
   email: Joi.string().email().required(),
+  status: Joi.string().required().uppercase(),
   phone: Joi.string()
     .custom((value, helpers) => {
       const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
@@ -46,7 +47,8 @@ const clientValidation = Joi.object({
     .min(2)
     .messages({
       'string.min': 'Country must be at least 2 characters long.',
-    })
+    }),
+    
 });
 
 const projectValidation = Joi.object({
@@ -58,6 +60,7 @@ const projectValidation = Joi.object({
     .messages({
       'any.only': 'Organization type must be one of GOV, PRIVATE, NGO, or OTHER.',
     }),
+  status: Joi.string().required().uppercase(),
   organization_category: Joi.string()
     .trim()
     .min(2)
@@ -103,7 +106,7 @@ const vacancyValidation = Joi.object({
         }
         return value;
       }, 'ObjectId Validator'),
-
+  status: Joi.string().required().uppercase(),
   job_title: Joi.string().trim().min(3).max(100).required(),
   job_category: Joi.string().trim().min(2).required(),
   qualifications: Joi.array().items(Joi.string().trim().min(2)).min(1).required(),
