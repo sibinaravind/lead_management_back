@@ -125,7 +125,7 @@ module.exports = {
                 // const project_id = `AEPID${String(newNumber).padStart(5, '0')}`;
                 collection.insertOne({
                     // project_id: project_id,
-                    project_name: details.name,
+                    project_name: details.project_name,
                     organization_type: details.organization_type,
                     organization_category: details.organization_category,
                     organization_name: details.organization_name,
