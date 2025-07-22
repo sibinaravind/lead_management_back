@@ -355,7 +355,7 @@ listLeadOfficers: () => {
                 $project: {
                    _id: { $toString: "$_id" },
                   // officer_id: { $toString: "$_id" },
-                  officer_id: 1,
+                  // officer_id: 0,
                   name: 1,
                   phone: 1,
                   company_phone_number: 1,
@@ -407,7 +407,7 @@ listLeadOfficers: () => {
           }
         }
       ]).toArray();
-      
+    
       const cleanedData = officers.map((item) => {
         const filteredOfficers = (item.officers || []).filter(officer => officer.name);
         return {

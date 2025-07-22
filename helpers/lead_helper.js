@@ -69,7 +69,6 @@ createLead: async (details) => {
           { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
         );
       }
-
       // ✅ Recruiter logic
       let recruiterIdValue = "UNASSIGNED";
       if (
@@ -77,18 +76,16 @@ createLead: async (details) => {
       ) {
         recruiterIdValue = safeObjectId(assignedOfficer._id);
       }
-
       // ✅ Prepare insert data
-
+      value.branch = Array.isArray(assignedOfficer?.branch) && assignedOfficer.branch.length > 0
+        ? assignedOfficer.branch[0]
+        : value.branch || "AFFINIX";
       // ✅ Insert lead
       const result = await leadsCol.insertOne({
         client_id,
         officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
         recruiter_id: recruiterIdValue,
         status: assignedOfficer ? value.status || "HOT" : "UNASSIGNED",
-        branch: Array.isArray(assignedOfficer?.branch)
-          ? assignedOfficer.branch[0] || "AFFINIX"
-          : assignedOfficer?.branch || "AFFINIX",
         ...value,
         created_at: new Date(),
       });
