@@ -197,7 +197,7 @@ const workHistoryValidation = Joi.object({
   organization: Joi.string().trim().required(),
   country: Joi.string().trim().required(),
 
-  start_date: Joi.string()
+  from_date: Joi.string()
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;
@@ -212,7 +212,7 @@ const workHistoryValidation = Joi.object({
       return parsed; // Return original string, not parsed Date
     }),
 
-  end_date: Joi.string()
+  to_date: Joi.string()
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;

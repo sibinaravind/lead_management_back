@@ -270,14 +270,11 @@ module.exports = {
     insertClientsToVacancy: async (vacancyId, clients) => {
         try {
             const { clients: validatedClients } = validatePartial(vacancyValidation, { clients });
-
             const vacancy = await db.get().collection(COLLECTION.VACANCIES).findOne(
                 { _id: ObjectId(vacancyId) },
                 { projection: { clients: 1 } }
             );
-
             const existingIds = new Set((vacancy?.clients || []).map(c => c.client_id.toString()));
-
             const newClients = validatedClients
                 .filter(c => !existingIds.has(c.client_id.toString()))
                 .map(c => ({
@@ -290,7 +287,6 @@ module.exports = {
                         }
                     ]
                 }));
-
             if (newClients.length > 0) {
                 await db.get().collection(COLLECTION.VACANCIES).updateOne(
                     { _id: ObjectId(vacancyId) },
@@ -304,7 +300,6 @@ module.exports = {
             throw err || "Client insert failed";
         }
     },
-
     removeClientFromVacancy: async (vacancyId, clientId) => {
         return new Promise(async (resolve, reject) => {
             try {

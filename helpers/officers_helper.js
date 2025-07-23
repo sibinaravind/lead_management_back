@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 10;
 const  officerValidation= require('../validations/officerValidation');
 const validatePartial = require("../utils/validatePartial");
+const { off } = require('../routes/officers/officers_router');
 
 module.exports = {
 loginOfficer: async (officer_id, password) => {
@@ -354,7 +355,7 @@ listLeadOfficers: () => {
               {
                 $project: {
                    _id: { $toString: "$_id" },
-                  // officer_id: { $toString: "$_id" },
+                  officer_id: { $toString: "$_id" },
                   // officer_id: 0,
                   name: 1,
                   phone: 1,
@@ -403,18 +404,21 @@ listLeadOfficers: () => {
             department: 1,
             branch: 1,
             created_at: 1,
-            officers: 1
+            officers:1,
+            officers_details:1,
+            //  officers: "$officers_details"
           }
         }
       ]).toArray();
-    
-      const cleanedData = officers.map((item) => {
-        const filteredOfficers = (item.officers || []).filter(officer => officer.name);
-        return {
-          ...item,
-          officers: filteredOfficers
-        };
-      });
+        const cleanedData = officers.map((item) => {
+      const filteredOfficers = (item.officers || []).filter(officer => officer.name);
+      const { officers_details, ...rest } = item;
+      return {
+        ...rest,
+        officers: filteredOfficers
+      };
+    });
+// resolve(cleanedData);
       resolve(cleanedData);
     } catch (error) {
       console.error(error);
@@ -425,6 +429,10 @@ listLeadOfficers: () => {
 insertRoundRobin: async (data) => {
   return new Promise(async (resolve, reject) => {
     try {
+      // Convert officer IDs to ObjectId
+      if (Array.isArray(data.officers)) {
+        data.officers = data.officers.map(id => ObjectId(id));
+      }
       const result = await db.get().collection(COLLECTION.ROUNDROBIN).insertOne(data);
       resolve({ success: true, id: result.insertedId });
     } catch (error) {
@@ -507,7 +515,7 @@ insertStaffToRoundRobin: async (data) => {
 
       const result = await  db.get().collection(COLLECTION.ROUNDROBIN).updateOne(
         { _id: ObjectId(round_robin_id) },
-        { $addToSet: { officers: { $each: officers.map(id => new ObjectId(id)) } } }
+        { $addToSet: { officers: { $each: officers.map(id =>  ObjectId(id)) } } }
       );
 
       if (result.modifiedCount > 0) {

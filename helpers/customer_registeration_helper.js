@@ -18,7 +18,6 @@ module.exports = {
                 //         query[key] = filters[key];
                 //     }
                 // });
-
                 // Project only basic information
                 const LEADS = await db.get().collection(COLLECTION.CUSTOMERS).find().project({
                     _id: 1,
@@ -168,18 +167,15 @@ module.exports = {
 
                 return {
                     ...record,
-                    from_date: value.start_date || null,
-                    to_date: value.end_date || null,
+                    from_date: value.from_date || null,
+                    to_date: value.to_date || null,
                 };
             });
-
             // Sort records by from_date (first job date is earliest)
             const sortedByStartDate = [...validatedList].filter(x => x.from_date).sort(
                 (a, b) => new Date(a.from_date) - new Date(b.from_date)
             );
-
             const firstJobDate = sortedByStartDate[0]?.from_date || null;
-
             // Calculate gaps between end of one job and start of next
             const jobGapsInMonths = [];
             for (let i = 1; i < sortedByStartDate.length; i++) {
@@ -197,7 +193,6 @@ module.exports = {
 
                 jobGapsInMonths.push(totalMonths);
             }
-
             // Final update to MongoDB
             const result = await db.get().collection(COLLECTION.CUSTOMERS).updateOne(
                 { _id: ObjectId(id) },
@@ -210,7 +205,6 @@ module.exports = {
                     },
                 }
             );
-
             if (result.matchedCount === 0) {
                 throw new Error("Customer not found");
             }
