@@ -12,27 +12,42 @@ const callActivityValidation = Joi.object({
       }
       return value;
     }, 'ObjectId Validator'),
-  duration: Joi.number().required(),
+  duration: Joi.number().optional(),
   next_schedule: Joi.string()
     .required()
     .custom((value, helpers) => {
       const parsed = stringTodata(value);
       if (!parsed) return helpers.error('any.invalid');
-      return value;
+      return parsed;
     }, 'Custom Date Validator'),
 
   next_shedule_time: Joi.string()
-    .required()
+    .optional()
     .custom((value, helpers) => {
       const time = stringToTime(value);
       if (!time) return helpers.error('any.invalid');
       return time;
     }, 'Custom Time Validator'),
-
+    dead_lead_reason: Joi.string()
+    .trim()
+    .when('client_status', {
+      is: 'DEAD',
+      then: Joi.required(),
+      otherwise: Joi.optional().allow('')
+    }).uppercase(),
     client_status: Joi.string().trim().uppercase().required(),
     comment: Joi.string().optional().allow(''),
     call_type: Joi.string().uppercase(), //.valid('INCOMING', 'OUTGOING')
-    call_status: Joi.string().uppercase() //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY')
+    call_status: Joi.string().uppercase(), //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY'),
+    officer_id: Joi.string()
+    .trim()
+    .optional()
+    .custom((value, helpers) => {
+      if (!mongoose.Types.ObjectId.isValid(value)) {
+        return helpers.error('any.invalid');
+      }
+      return value;
+    }, 'ObjectId Validator'),
 });
 
 const mobilecallLogValidation = Joi.object({

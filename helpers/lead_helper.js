@@ -7,6 +7,7 @@ const validatePartial = require("../utils/validatePartial");
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
 const { safeObjectId } = require('../utils/safeObjectId');
+const {callActivityValidation} = require('../validations/callActivityValidation'); 
 // Helper to get next sequence number
 module.exports = {
 createLead: async (details) => {
@@ -136,79 +137,8 @@ createLead: async (details) => {
             return { success: false, error: err.message };
         }
   },
-
-   restoreClientFromDeadAndAssignOfficer: async (deadClientId, officerId = null,comment) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-            const customersCollection = db.get().collection(COLLECTION.LEADS);
-            const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-
-            // 1. Fetch the dead client
-            const deadClient = await deadCustomersCollection.findOne({ _id: new ObjectId(deadClientId) });
-            if (!deadClient) return reject("Dead client not found");
-
-            // 2. Prepare client for restoration
-            deadClient.status = 'FOLLOWUP';
-            deadClient.updated_at = new Date();
-            // 3. Optional: Assign officer info if officerId is provided
-            let officerObjectId = null;
-            if (officerId) {
-                const officer = await officersCollection.findOne(
-                    { _id: new ObjectId(officerId) },
-                    { projection: { _id: 1, designation: 1 } }
-                );
-
-                if (officer) {
-                    officerObjectId = new ObjectId(officer._id);
-                    deadClient.officer_id = officerObjectId;
-                     if (
-                            officer != null &&
-                            Array.isArray(officer.designation) &&
-                            officer.designation.includes(DESIGNATIONS.COUNSILOR)
-                    )
-                    {
-                        deadClient.recruiter_id = officerObjectId;
-                    }
-                }
-            }
-
-            // 4. Insert back to LEADS
-            const insertResult = await customersCollection.insertOne(deadClient);
-            if (!insertResult.acknowledged) return reject("Failed to restore client");
-
-            // 5. Delete from DEAD_LEADS
-            await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
-
-            // 6. Log activity
-            // await activityCollection.insertOne({
-            //     type: 'client_restored',
-            //     client_id:ObjectId( deadClient._id),
-            //     recruiter_id :ObjectId(deadClient.recruiter_id ) || null,
-            //     officer_id:ObjectId (deadClient.officer_id || null), // Can be null
-            //     created_at: new Date(),
-            //     note: comment
-            // });
-
-            logActivity({   
-                type: 'client_restored',
-                client_id: insertResult.insertedId,
-                recruiter_id: deadClient.recruiter_id || null,
-                officer_id: officerObjectId || null,
-                comment: comment || '',
-            });
-
-            resolve("Client restored successfully");
-
-        } catch (err) {
-            console.error(err);
-            reject("Error restoring client");
-        }
-    });
-    },
-
     // Get all leads/clients with flexible filtering
-    getAllLeads: async (filters) => {
+  getAllLeads: async (filters) => {
         return new Promise(async (resolve, reject) => {
             try {
                 
@@ -323,7 +253,7 @@ createLead: async (details) => {
           console.error("getLeadCountByCategory error:", err);
           throw new Error("Server Error");
         }
-      },
+    },
 
 
 
@@ -496,11 +426,13 @@ createLead: async (details) => {
                       country_code: 1,
                       status: 1,
                       lead_source: 1,
+                      next_schedule: "$lastcall.next_schedule",
+                      feedback: "$lastcall.comment",
                       created_at: 1,
                       officer_id: 1,
                       officer_name: "$officer.name",
                       officer_staff_id: "$officer.officer_id",
-                      lastcall: 1 // Optional: expose if needed for frontend
+                      // lastcall: 0 // Optional: expose if needed for frontend
                     },
                   },
                 ],
@@ -666,14 +598,10 @@ createLead: async (details) => {
         }
       },
 
-
-
-
-     getDeadLeads: async () => {
-        console.log("Fetching all dead leads");
+    getDeadLeads: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-                const LEADS = await db.get().collection(COLLECTION.DEAD_LEADS).find().project( {
+                const LEADS = await db.get().collection(COLLECTION.DEAD_LEADS).find({ status: "DEAD" }).project( {
                     _id: 1,
                     client_id: 1,
                     name: 1,
@@ -684,7 +612,9 @@ createLead: async (details) => {
                     status: 1,
                     lead_source: 1,
                     officer_id: 1,
-                    created_at: 1
+                    created_at: 1,
+                    dead_lead_reason: 1,
+                    moved_to_dead_at: 1,
                 }).toArray();
                 resolve(LEADS);
             } catch (err) {
@@ -693,7 +623,164 @@ createLead: async (details) => {
             }
         });
     },
+
+  restoreClientFromDeadAndAssignOfficer : async (body, req_officer_id) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const {
+        client_id: deadClientId,
+        officer_id,
+        client_status,
+        ...callLogData
+      } = body;
+      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+      const leadsCollection = db.get().collection(COLLECTION.LEADS);
+      const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+      const activityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+      if (!deadClientId || !client_status) {
+        return reject("Missing required fields: client_id or client_status");
+      }
+      const deadClient = await deadCustomersCollection.findOne({ _id: new ObjectId(deadClientId) });
+      if (!deadClient) return reject("Dead client not found");
+      const { error, value } = callActivityValidation.validate({
+        ...callLogData,
+        client_id: deadClientId,
+        client_status,
+      });
+      if (error) return reject("Validation failed: " + error.details[0].message);
+      const validatedData = value;
+      let officerObjectId = null;
+      if (officer_id) {
+        const officer = await officersCollection.findOne(
+          { _id: new ObjectId(officer_id) },
+          { projection: { _id: 1, designation: 1 } }
+        );
+        if (officer) {
+          officerObjectId = new ObjectId(officer._id);
+          if (!deadClient.officer_id) deadClient.officer_id = officerObjectId;
+          if (
+            Array.isArray(officer.designation) &&
+            officer.designation.includes(DESIGNATIONS.COUNSILOR)
+          ) {
+            if (!deadClient.recruiter_id) {
+              deadClient.recruiter_id = officerObjectId;
+            }
+          }
+        }
+      }
+      
+      const callActivity = {
+        type: 'call_event',
+        client_id: new ObjectId(deadClientId),
+        officer_id:  new ObjectId(req_officer_id),
+        duration: validatedData.duration,
+        next_schedule:  validatedData.next_schedule,
+        next_shedule_time: validatedData.next_shedule_time,
+        comment: validatedData.comment || '',
+        call_type: validatedData.call_type || '',
+        call_status: validatedData.call_status || '',
+        created_at: new Date()
+      };
+      const logResult = await activityCollection.insertOne(callActivity);
+      if (!logResult.acknowledged) return reject("Failed to restore client to LEADS");
+      // Update client doc before restore
+      deadClient.status = validatedData.client_status;
+      deadClient.lastcall = { ...callActivity, _id: logResult.insertedId };
+      deadClient.updated_at = new Date();
+      // Insert to LEADS collection
+      const insertResult = await leadsCollection.insertOne(deadClient);
+      if (!insertResult.acknowledged) return reject("Failed to restore client to LEADS");
+      // Remove from DEAD_LEADS
+      await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
+      // Log system activities
+      await logActivity({
+        type: 'client_restored',
+        client_id:  new ObjectId(deadClientId),
+        recruiter_id:deadClient.recruiter_id != null ? new ObjectId(deadClient.recruiter_id ) : null,
+        officer_id:new ObjectId( officerObjectId ||  deadClient.officer_id) || null,
+        client_status: deadClient.client_status,
+        comment: validatedData.comment || comment
+      });
+      resolve("Client restored to LEADS successfully");
+    } catch (err) {
+      console.error("restoreClientFromDeadAndAssignOfficer Error:", err);
+      reject("Error restoring client");
+    }
+  });
+  },
     
+
+
+
+
+  // restoreClientFromDeadAndAssignOfficer: async (deadClientId, officerId = null,comment) => {
+  //   return new Promise(async (resolve, reject) => {
+  //       try {
+  //           const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+  //           const customersCollection = db.get().collection(COLLECTION.LEADS);
+  //           const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+  //           // 1. Fetch the dead client
+  //           const deadClient = await deadCustomersCollection.findOne({ _id: new ObjectId(deadClientId) });
+  //           if (!deadClient) return reject("Dead client not found");
+  //           // 2. Prepare client for restoration
+  //           deadClient.status = 'FOLLOWUP';
+  //           deadClient.updated_at = new Date();
+  //           // 3. Optional: Assign officer info if officerId is provided
+  //           let officerObjectId = null;
+  //           if (officerId) {
+  //               const officer = await officersCollection.findOne(
+  //                   { _id: new ObjectId(officerId) },
+  //                   { projection: { _id: 1, designation: 1 } }
+  //               );
+
+  //               if (officer) {
+  //                   officerObjectId = new ObjectId(officer._id);
+  //                   deadClient.officer_id = officerObjectId;
+  //                    if (
+  //                           officer != null &&
+  //                           Array.isArray(officer.designation) &&
+  //                           officer.designation.includes(DESIGNATIONS.COUNSILOR)
+  //                   )
+  //                   {
+  //                       deadClient.recruiter_id = officerObjectId;
+  //                   }
+  //               }
+  //           }
+
+  //           // 4. Insert back to LEADS
+  //           const insertResult = await customersCollection.insertOne(deadClient);
+  //           if (!insertResult.acknowledged) return reject("Failed to restore client");
+
+  //           // 5. Delete from DEAD_LEADS
+  //           await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
+
+  //           // 6. Log activity
+  //           // await activityCollection.insertOne({
+  //           //     type: 'client_restored',
+  //           //     client_id:ObjectId( deadClient._id),
+  //           //     recruiter_id :ObjectId(deadClient.recruiter_id ) || null,
+  //           //     officer_id:ObjectId (deadClient.officer_id || null), // Can be null
+  //           //     created_at: new Date(),
+  //           //     note: comment
+  //           // });
+
+  //           logActivity({   
+  //               type: 'client_restored',
+  //               client_id: insertResult.insertedId,
+  //               recruiter_id: deadClient.recruiter_id || null,
+  //               officer_id: officerObjectId || null,
+  //               comment: comment || '',
+  //           });
+
+  //           resolve("Client restored successfully");
+
+  //       } catch (err) {
+  //           console.error(err);
+  //           reject("Error restoring client");
+  //       }
+  //   });
+  // },
+
 
     // Get lead/client by ID
   

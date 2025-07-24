@@ -33,7 +33,7 @@ app.get("/metaLead", middleware.checkToken, (req, res) => {
 });
 app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.restoreClientFromDeadAndAssignOfficer(req.body.clientId, req.body.officerId, req.body.comment)
+    leadHelper.restoreClientFromDeadAndAssignOfficer(req.body,req.decoded._id)
   );
 });
 

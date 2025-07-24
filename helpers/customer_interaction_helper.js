@@ -64,13 +64,11 @@ module.exports = {
             throw err; // Re-throw the error for the caller to handle
         }
     },
-
     logCallEvent: async (data, officer_id) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const { error, value } = callActivityValidation.validate(data);
                     if (error) {
-                        console.error("Validation error:", error.details[0].message);
                      return reject("Validation failed: " + error.details[0].message);
                 }
                 data= value; // Use validated data
@@ -98,13 +96,13 @@ module.exports = {
                 if (!clientDoc) return reject("Client not found in any collection");
 
                 // Parse next_schedule (dd/mm/yyyy to ISO)
-                let nextScheduleDate = null;
-                if (data.next_schedule) {
-                    const [day, month, year] = data.next_schedule.split('/');
-                    if (day && month && year) {
-                        nextScheduleDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`);
-                    }
-                }
+                let nextScheduleDate = data.next_schedule;
+                // if (data.next_schedule) {
+                //     const [day, month, year] = data.next_schedule.split('/');
+                //     if (day && month && year) {
+                //         nextScheduleDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`);
+                //     }
+                // }
 
                 // Insert call event
                 const logResult = await customerActivityCollection.insertOne({
@@ -150,10 +148,10 @@ module.exports = {
                             ...clientDoc,
                             status: newStatus,
                             lastcall,
+                            dead_lead_reason: data.dead_lead_reason || '',
                             moved_to_dead_at: new Date(),
                             dead_reason: data.comment || ''
                         });
-
                         if (!insertResult.acknowledged) return reject("Failed to move to DEAD_LEADS");
                         await currentCollection.deleteOne({ _id: clientId });
 
@@ -222,9 +220,6 @@ module.exports = {
             }
         });
     },
-
-
-
     logMobileCallEvent: async (data) => {
         return new Promise(async (resolve, reject) => {
             try {
