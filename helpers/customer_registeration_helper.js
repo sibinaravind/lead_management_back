@@ -4,7 +4,7 @@ const { ObjectId } = require('mongodb');
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { customerBasicInfoValidation, academicValidation, examValidation, travelHistoryValidation, workHistoryValidation, } = require('../validations/registerationValidation');
 const fileUploader = require('../utils/fileUploader');
-
+const path = require('path');
 var fs = require('fs');
 const bcrypt = require('bcrypt');
 module.exports = {
@@ -270,25 +270,26 @@ module.exports = {
 
 
     uploadClientDocument: (id, { doc_type, base64 }) => {
+          let filePath = null;
         return new Promise(async (resolve, reject) => {
             if (!doc_type || !base64) {
                 return reject("Missing required fields for document upload.");
             }
-            const uploadsDir = './uploads/officers_docs';
-            let filePath = null;
+          
             try {
                 const collection = db.get().collection(COLLECTION.CUSTOMERS);
                 // First, save the file
-                filePath = await fileUploader.processAndStoreBase64File(
-                    base64,
-                    doc_type,
-                    `client_${id}`,
-                    uploadsDir
-                );
+                filePath = await fileUploader.processAndStoreBase64File({
+                base64Data: base64,
+                originalName:  doc_type,
+                 clientName:   `client_${id}`,
+                 uploadsDir:  'uploads/client_documents'
+                });
+                console.log("le saved at:", filePath);
                 // Try updating the record
                 const updateResult = await collection.updateOne(
                     {
-                        client_id: ObjectId(id),
+                        _id: ObjectId(id),
                         "documents.doc_type": doc_type
                         // "documents.file_path": { $exists: false }
                     },
@@ -300,7 +301,7 @@ module.exports = {
                         }
                     }
                 );
-
+                console.log("Update Result:", updateResult);
                 if (updateResult.matchedCount === 0) {
                     // Remove the uploaded file if DB update fails
                     if (filePath) {
@@ -308,16 +309,14 @@ module.exports = {
                     }
                     return reject(`No matching and empty document slot found for "${doc_type}".`);
                 }
-
                 resolve({ success: true, file_path: filePath });
             } catch (err) {
-                console.error("Error uploading document:", err);
-                if (filePath) {
+               if (filePath) {
                     try {
-                         fs.unlink(path.resolve(filePath));
-                    } catch (_) {
+                        await fs.promises.unlink(path.resolve(filePath));
+                    } catch (err) {
                     }
-                }
+                    }
                 reject("Error uploading document: " + (err.message || err));
             }
         });
