@@ -40,6 +40,16 @@ app.post("/work_history_records/:id", middleware.checkToken, (req, res) => {
   );
 });
 
+app.post("/setRequiredDocuments/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    customerHelper.updateClientRequiredDocuments(req.params.id, req.body)
+  );
+});
+app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    customerHelper.uploadClientDocument(req.params.id, req.body)
+  );
+});
 
 
 

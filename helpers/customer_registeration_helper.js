@@ -3,7 +3,10 @@ let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
 const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { customerBasicInfoValidation, academicValidation, examValidation, travelHistoryValidation, workHistoryValidation, } = require('../validations/registerationValidation');
+const fileUploader = require('../utils/fileUploader');
 
+var fs = require('fs');
+const bcrypt = require('bcrypt');
 module.exports = {
     getRegisterdCustomers: async (filters) => {
         return new Promise(async (resolve, reject) => {
@@ -124,7 +127,6 @@ module.exports = {
         }
 
     },
-
     updateCustomerTravelHistoryRecords: async (id, travelList) => {
         try {
             // Validate each travel record and build new validated list
@@ -156,7 +158,7 @@ module.exports = {
             throw new Error("Error updating travel history records: " + (err.message || err));
         }
     },
-     updateCustomerWorkHistoryRecords : async (id, workList) => {
+    updateCustomerWorkHistoryRecords: async (id, workList) => {
         try {
             // Validate all work records and convert date fields
             const validatedList = workList.map((record) => {
@@ -216,5 +218,109 @@ module.exports = {
         }
     },
 
+    updateClientRequiredDocuments: (id, documentList) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+
+                const collection = db.get().collection(COLLECTION.CUSTOMERS);
+                const existing = await collection.findOne({ _id: ObjectId(id) });
+                if (!existing) {
+                    return reject("Client not found.");
+                }
+                const updatedDocs = [...(existing.documents ?? [])];
+                for (const newDoc of documentList) {
+                    const existingDoc = updatedDocs.find(doc => doc.doc_type === newDoc.doc_type);
+                    if (existingDoc) {
+                        if (existingDoc.required !== newDoc.required) {
+                            existingDoc.required = newDoc.required;
+                        }
+                    } else {
+                        updatedDocs.push({
+                            doc_type: newDoc.doc_type,
+                            required: newDoc.required,
+                            file_path: null,
+                            uploaded_at: null
+                        });
+                    }
+                }
+
+                collection.updateOne(
+                    { _id: ObjectId(id) },
+                    {
+                        $set: {
+                            documents: updatedDocs,
+                            updated_at: new Date()
+                        }
+                    }
+                ).then((result) => {
+                    if (result.matchedCount === 0) {
+                        return reject("No client found with the provided ID.");
+                    }
+                    resolve({ success: true, message: "Document requirements updated successfully" });
+                }).catch(err => {
+                    reject("Error updating required documents: " + (err.message || err));
+                });
+
+            } catch (err) {
+                console.error(err);
+                reject("Error updating required documents: " + (err.message || err));
+            }
+        });
+    },
+
+
+    uploadClientDocument: (id, { doc_type, base64 }) => {
+        return new Promise(async (resolve, reject) => {
+            if (!doc_type || !base64) {
+                return reject("Missing required fields for document upload.");
+            }
+            const uploadsDir = './uploads/officers_docs';
+            let filePath = null;
+            try {
+                const collection = db.get().collection(COLLECTION.CUSTOMERS);
+                // First, save the file
+                filePath = await fileUploader.processAndStoreBase64File(
+                    base64,
+                    doc_type,
+                    `client_${id}`,
+                    uploadsDir
+                );
+                // Try updating the record
+                const updateResult = await collection.updateOne(
+                    {
+                        client_id: ObjectId(id),
+                        "documents.doc_type": doc_type
+                        // "documents.file_path": { $exists: false }
+                    },
+                    {
+                        $set: {
+                            "documents.$.file_path": filePath,
+                            "documents.$.uploaded_at": new Date(),
+                            updated_at: new Date()
+                        }
+                    }
+                );
+
+                if (updateResult.matchedCount === 0) {
+                    // Remove the uploaded file if DB update fails
+                    if (filePath) {
+                         fs.unlink(path.resolve(filePath));
+                    }
+                    return reject(`No matching and empty document slot found for "${doc_type}".`);
+                }
+
+                resolve({ success: true, file_path: filePath });
+            } catch (err) {
+                console.error("Error uploading document:", err);
+                if (filePath) {
+                    try {
+                         fs.unlink(path.resolve(filePath));
+                    } catch (_) {
+                    }
+                }
+                reject("Error uploading document: " + (err.message || err));
+            }
+        });
+    }
 
 }
