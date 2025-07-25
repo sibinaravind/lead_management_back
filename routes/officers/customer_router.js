@@ -28,6 +28,13 @@ app.patch("/updateCustomerStatus", middleware.checkToken, (req, res) => {
   );
 });
 
+app.get("/getCustomerInteraction/:_id", middleware.checkToken, (req, res) => {
+      return response.handle(res, () =>
+        customerHelper.getCustomerInteraction(req.params._id)
+  );
+});
+
+
 
 
 module.exports = app;

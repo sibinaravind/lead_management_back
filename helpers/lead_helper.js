@@ -178,22 +178,46 @@ createLead: async (details) => {
     // db.leads.createIndex({ status: 1 });
     // db.leads.createIndex({ service_type: 1 });
     // db.leads.createIndex({ created_at: -1 });
- 
-   getLeadCountByCategory: async (decoded) => {
+
+   getLeadCountByCategory: async (decoded, query) => {
+        const { designation, employee } = query;
         try {
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
-
-          let officerIds = [];
-          if (!isAdmin) {
-            officerIds = Array.isArray(decoded?.officers)
+          const filter = {};
+           if (employee) {
+          
+              filter.officer_id = safeObjectId(employee);
+           } else if (!isAdmin) {
+             filter.officer_id = Array.isArray(decoded?.officers)
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
+           }else if (isAdmin) {
+               if (designation && typeof designation === 'string') {
+                let matchDesignations = [];
+                if (designation === 'CRE') {
+                  matchDesignations = [DESIGNATIONS.CRE];
+                } else if (designation === 'RECRUITER') {
+                  matchDesignations = [DESIGNATIONS.COUNSILOR ,DESIGNATIONS.ADMIN];
+                }
+
+                if (matchDesignations.length > 0) {
+                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                    .project({ _id: 1 })
+                    .toArray();
+
+                  const officerIds = officerList.map(officer => officer._id);
+                  filter.officer_id = { $in: officerIds };
+                }
+            
           }
-          const officerFilter = () => {
-            if (isAdmin) return {};
-            const ids = [safeObjectId(decoded?._id), ...officerIds].filter(Boolean);
-            return { officer_id: { $in: ids } };
-          };
+        }
+        // console.log("Filter for lead count:", filter);
+            // if (isAdmin) return {};
+            // const ids = [safeObjectId(decoded?._id), ...officerIds].filter(Boolean);
+            // console.log("Officer IDs for filter:", ids);
+            // filter.officer_id = { $in: ids };
+
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const tomorrow = new Date(today);
@@ -201,9 +225,8 @@ createLead: async (details) => {
           const dayAfterTomorrow = new Date(tomorrow);
           dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
           const dateField = "lastcall.next_schedule";
-
           const leadResult = await  db.get().collection(COLLECTION.LEADS).aggregate( [
-            { $match: officerFilter() },
+            { $match: filter },
             {
               $facet: {
                 TOTAL: [{ $count: "count" }],
@@ -231,13 +254,13 @@ createLead: async (details) => {
               }
             }
           ]).toArray();
+          // console.log("Lead count result:", leadResult);
           const counts = leadResult[0] || {};
-
           const getCountVal = (key) => (counts[key]?.[0]?.count ?? 0);
           // ✅ Replace expensive distinct with fast countDocuments
           const historyCount = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).countDocuments({
             created_at: { $gte: today, $lt: tomorrow },
-            ...officerFilter()
+            ...filter
           });
           return {
             TOTAL: getCountVal("TOTAL"),
@@ -248,16 +271,13 @@ createLead: async (details) => {
             PENDING: getCountVal("PENDING"),
             HISTORY: historyCount
           };
-
         } catch (err) {
           console.error("getLeadCountByCategory error:", err);
           throw new Error("Server Error");
         }
     },
 
-
-
-    getFilteredLeads: async (query, decoded) => {
+    getFilteredDeadLeads: async (query, decoded) => {
         try {
           const {
             filterCategory,
@@ -272,14 +292,13 @@ createLead: async (details) => {
             campagin,
             startDate,
             endDate,
-            searchString
+            searchString,
+            designation
           } = query;
-
           const parsedPage = parseInt(page);
           const parsedLimit = parseInt(limit);
           const skip = (parsedPage - 1) * parsedLimit;
           const filter = {};
-
           // Officer filtering
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
           let officerIdList = [];
@@ -289,22 +308,60 @@ createLead: async (details) => {
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
           }
-
-          if (filterCategory === 'UNASSIGNED') {
+        if (filterCategory === 'UNASSIGNED') {
             filter.officer_id = 'UNASSIGNED';
+
           } else if (employee) {
-            filter.officer_id = safeObjectId(employee);
+              filter.officer_id = safeObjectId(employee);
+            // const empId = safeObjectId(employee);
+            // filter.$or = [
+            //   { officer_id: empId },
+            //   { recruiter_id: empId }
+            // ];
           } else if (isAdmin) {
-            // Admins see all
+              if (designation && typeof designation === 'string') {
+                let matchDesignations = [];
+                if (designation === 'CRE') {
+                  matchDesignations = ['CRE'];
+                } else if (designation === 'RECRUITER') {
+                  matchDesignations = ['COUNSILOR'];
+                }
+
+                if (matchDesignations.length > 0) {
+                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                    .project({ _id: 1 })
+                    .toArray();
+
+                  const officerIds = officerList.map(officer => officer._id);
+                  filter.officer_id = { $in: officerIds };
+                }
+            
+          }
           } else if (officerIdList.length > 0) {
-            filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+            // const ids = [safeObjectId(decoded?._id), ...officerIdList];
+
+            // filter.$or = [
+            //   { officer_id: { $in: ids } },
+            //   { recruiter_id: { $in: ids } }
+            // ];
+
           } else {
-            filter.officer_id = safeObjectId(decoded?._id);
+             filter.officer_id = safeObjectId(decoded?._id);
+            // const userId = safeObjectId(decoded?._id);
+
+            // filter.$or = [
+            //   { officer_id: userId },
+            //   { recruiter_id: userId }
+            // ];
           }
 
+
           if (filterCategory === 'NEW') {
-            filter.status = 'HOT';
-          } else if (status) {
+            filter.status =  STATUSES.HOT;
+          } 
+          else if (status) {
             filter.status = status;
           }
 
@@ -460,8 +517,7 @@ createLead: async (details) => {
         }
   },  
 
-
-   getCallHistoryWithFilters: async (query, decoded) => {
+   getCallHistoryWithFilters: async (query, decoded, ) => {
         try {
           const {
             page = 1,
@@ -471,24 +527,22 @@ createLead: async (details) => {
             employee,
             startDate,
             endDate,
-            searchString
+            searchString,
+            status,
+            designation
           } = query;
 
           const parsedPage = parseInt(page);
           const parsedLimit = parseInt(limit);
           const skip = (parsedPage - 1) * parsedLimit;
-
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
           let officerIdList = [];
-
           if (!isAdmin) {
             officerIdList = Array.isArray(decoded?.officers)
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
           }
-
-          const filter = { };
-
+           const filter = { };
           // Officer filtering
           if (employee) {
             filter.officer_id = safeObjectId(employee);
@@ -498,12 +552,31 @@ createLead: async (details) => {
             } else {
               filter.officer_id = safeObjectId(decoded?._id);
             }
-          }
+          }else if (isAdmin) {
+              if (designation && typeof designation === 'string') {
+                let matchDesignations = [];
+                if (designation === 'CRE') {
+                  matchDesignations = ['CRE'];
+                } else if (designation === 'RECRUITER') {
+                  matchDesignations = ['COUNSILOR'];
+                }
 
+                if (matchDesignations.length > 0) {
+                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                    .project({ _id: 1 })
+                    .toArray();
+
+                  const officerIds = officerList.map(officer => officer._id);
+                  filter.officer_id = { $in: officerIds };
+                }
+              }
+          }
           // Additional filters
+         
           if (callType) filter.call_type = callType;
           if (callStatus) filter.call_status = callStatus;
-
+           if (status) filter.status = status;
           // Date range filtering
           if (startDate || endDate) {
             const parseDate = (str) => {
@@ -535,57 +608,89 @@ createLead: async (details) => {
             ];
           }
 
-          const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+        const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+       const result = await callLogCollection.aggregate([
+        { $match: filter },
+        {
+          $facet: {
+            data: [
+              { $sort: { created_at: -1 } },
+              { $skip: skip },
+              { $limit: parsedLimit },
 
-          const result = await callLogCollection.aggregate([
-            { $match: filter },
-            {
-              $facet: {
-                data: [
-                  { $sort: { created_at: -1 } },
-                  { $skip: skip },
-                  { $limit: parsedLimit },
-                  {
-                    $lookup: {
-                      from: COLLECTION.OFFICERS,
-                      localField: "officer_id",
-                      foreignField: "_id",
-                      as: "officer"
-                    }
-                  },
-                  {
-                    $unwind: {
-                      path: "$officer",
-                      preserveNullAndEmptyArrays: true
-                    }
-                  },
-                  {
-                    $project: {
-                      _id: 1,
-                      client_id: 1,
-                      officer_id: 1,
-                      recruiter_id: 1,
-                      call_type: 1,
-                      call_status: 1,
-                      comment: 1,
-                      duration: 1,
-                      next_schedule: 1,
-                      created_at: 1,
-                      officer_name: "$officer.name",
-                      officer_staff_id: "$officer.officer_id"
-                    }
-                  }
-                ],
+              // Lookup Officer Details
+              {
+                $lookup: {
+                  from: COLLECTION.OFFICERS,
+                  localField: "officer_id",
+                  foreignField: "_id",
+                  as: "officer"
+                }
+              },
+              {
+                $unwind: {
+                  path: "$officer",
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+
+              // Lookup Client Details
+              {
+                $lookup: {
+                  from: COLLECTION.LEADS,
+                  localField: "client_id",
+                  foreignField: "_id", // Assuming client_id is an ObjectId
+                  as: "client"
+                }
+              },
+              {
+                $unwind: {
+                  path: "$client",
+                  preserveNullAndEmptyArrays: true
+                }
+              },
+
+              // Final Project
+              {
+                $project: {
+                  _id: 1,
+                  type: 1,
+                  client_id: 1,
+                  officer_id: 1,
+                  recruiter_id: 1,
+                  duration: 1,
+                  next_schedule: 1,
+                  comment: 1,
+                  call_type: 1,
+                  call_status: 1,
+                  created_at: 1,
+
+                  // Officer Info
+                  officer_name: "$officer.name",
+                  officer_staff_id: "$officer.officer_id",
+                  officer_email: "$officer.email",
+
+                  // Client Info
+                  client_name: "$client.name",
+                  client_email: "$client.email",
+                  client_phone: "$client.phone",
+                  client_status: "$client.status",
+                  client_branch: "$client.branch",
+                  client_lead_source: "$client.lead_source",
+                  client_service_type: "$client.service_type"
+                }
+              }
+            ],
+                // Total count (for pagination)
                 totalCount: [{ $count: "count" }]
               }
             }
           ]).toArray();
-
           const callData = result[0]?.data || [];
           const totalCount = result[0]?.totalCount?.[0]?.count || 0;
 
           return {
-            calls: callData,
+            leads: callData,
             limit: parsedLimit,
             page: parsedPage,
             totalMatch: totalCount,
@@ -596,8 +701,7 @@ createLead: async (details) => {
           console.error("getCallHistoryWithFilters error:", err);
           throw new Error("Server Error");
         }
-      },
-
+    },
     getDeadLeads: async () => {
         return new Promise(async (resolve, reject) => {
             try {
@@ -623,6 +727,197 @@ createLead: async (details) => {
             }
         });
     },
+     getFilteredDeadLeads: async (query, decoded) => {
+        try {
+          const {
+            filterCategory,
+            page = 1,
+            limit = 10,
+            branch,
+            employee,
+            serviceType,
+            profession,
+            leadSource,
+            campagin,
+            startDate,
+            endDate,
+            searchString,
+          } = query;
+
+          const parsedPage = parseInt(page);
+          const parsedLimit = parseInt(limit);
+          const skip = (parsedPage - 1) * parsedLimit;
+          const filter = {};
+
+          // Officer filtering
+          const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+          let officerIdList = [];
+
+          if (!isAdmin) {
+            officerIdList = Array.isArray(decoded?.officers)
+              ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+              : [];
+          }
+        if (filterCategory === 'UNASSIGNED') {
+            filter.officer_id = 'UNASSIGNED';
+          } else if (employee) {
+              filter.officer_id = safeObjectId(employee);
+          } else if (isAdmin) {
+            
+          } else if (officerIdList.length > 0) {
+             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+          
+          } else {
+             filter.officer_id = safeObjectId(decoded?._id);
+          }
+        
+          filter.status = STATUSES.DEAD;
+          
+          // Additional filters
+          if (branch) filter.branch = branch;
+          if (serviceType) filter.service_type = serviceType;
+          if (profession) filter.profession = profession;
+          if (leadSource) filter.lead_source = leadSource;
+          if (campagin) filter.campagin = campagin;
+
+          // Date filters: created_at or lastcall.next_schedule
+          let dateField = 'moved_to_dead_at';
+          let start = null;
+          let end = null;
+          const parseDate = (str) => {
+          if (!str) return null;
+          const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+          if (match) {
+            return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+          }
+          return new Date(str);
+        };
+          // Override for filterCategory
+          if (['TODAY', 'TOMORROW', 'PENDING', 'UPCOMING'].includes(filterCategory)) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(today);
+            tomorrow.setDate(today.getDate() + 1);
+            const dayAfterTomorrow = new Date(tomorrow);
+            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+            dateField = 'lastcall.next_schedule';
+            if (filterCategory === 'TODAY') {
+              start = new Date(today);
+              end = new Date(tomorrow);
+              end.setMilliseconds(-1);
+            } else if (filterCategory === 'TOMORROW') {
+              start = new Date(tomorrow);
+              end = new Date(dayAfterTomorrow);
+              end.setMilliseconds(-1);
+            } else if (filterCategory === 'PENDING') {
+
+                start = startDate ? parseDate(startDate) : null;
+                end = endDate ? parseDate(endDate) : new Date(today);
+
+                if (end && !isNaN(end)) {
+                  end.setHours(23, 59, 59, 999);
+                }
+              } else if (filterCategory === 'UPCOMING') {
+                start = startDate ? parseDate(startDate) : new Date(dayAfterTomorrow);
+                end = endDate ? parseDate(endDate) : null;
+                if (end && !isNaN(end)) {
+                  end.setHours(23, 59, 59, 999);
+                }
+            }
+          } else if (startDate || endDate) {
+            // Parse date from DD/MM/YYYY or ISO
+            start = startDate ? parseDate(startDate) : null;
+            end = endDate ? parseDate(endDate) : null;
+            if (end && !isNaN(end)) end.setHours(23, 59, 59, 999);
+          }
+          if (start || end) {
+            filter[dateField] = {};
+            if (start && !isNaN(start)) filter[dateField].$gte = start;
+            if (end && !isNaN(end)) filter[dateField].$lte = end;
+            // Cleanup if empty
+            if (Object.keys(filter[dateField]).length === 0) {
+              delete filter[dateField];
+            }
+          }
+          // Search text match
+          if (searchString) {
+            const searchRegex = new RegExp(searchString, "i");
+            filter.$or = [
+              { phone: { $regex: searchRegex } },
+              { name: { $regex: searchRegex } },
+              { client_id: { $regex: searchRegex } },
+              { email: { $regex: searchRegex } }
+            ];
+          }
+          const leadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+
+          const result = await leadsCollection.aggregate([
+            { $match: filter },
+            {
+              $facet: {
+                data: [
+                  { $sort: { created_at: -1 } },
+                  { $skip: skip },
+                  { $limit: parsedLimit },
+                  {
+                    $lookup: {
+                      from: COLLECTION.OFFICERS,
+                      localField: "officer_id",
+                      foreignField: "_id",
+                      as: "officer",
+                    },
+                  },
+                  {
+                    $unwind: {
+                      path: "$officer",
+                      preserveNullAndEmptyArrays: true,
+                    },
+                  },
+                  {
+                    $project: {
+                      _id: 1,
+                      client_id: 1,
+                      name: 1,
+                      email: 1,
+                      phone: 1,
+                      branch: 1,
+                      service_type: 1,
+                      country_code: 1,
+                      status: 1,
+                      lead_source: 1,
+                      dead_lead_reason:1,
+                      moved_to_dead_at: 1,
+                      next_schedule: "$lastcall.next_schedule",
+                      feedback: "$lastcall.comment",
+                      created_at: 1,
+                      officer_id: 1,
+                      officer_name: "$officer.name",
+                      officer_staff_id: "$officer.officer_id",
+                      // lastcall: 0 // Optional: expose if needed for frontend
+                    },
+                  },
+                ],
+                totalCount: [
+                  { $count: "count" },
+                ],
+              },
+            },
+          ]).toArray();
+          const leadsData = result[0]?.data || [];
+          const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+          return {
+            leads: leadsData,
+            limit: parsedLimit,
+            page: parsedPage,
+            totalMatch: totalCount,
+            totalPages: Math.ceil(totalCount / parsedLimit),
+          };
+
+        } catch (error) {
+          console.error('getFilteredLeads error:', error);
+          throw new Error('Server Error');
+        }
+  },  
 
   restoreClientFromDeadAndAssignOfficer : async (body, req_officer_id) => {
   return new Promise(async (resolve, reject) => {
@@ -708,7 +1003,83 @@ createLead: async (details) => {
     }
   });
   },
+
+ permanentlyCloseDeadLead: (body, req_officer_id) => {
+  return new Promise(async (resolve, reject) => {
+    try {
+      const {
+        client_id: deadClientId,
+        // ...callLogData
+      } = body;
+      if (!deadClientId) return reject("Missing required field: client_id");
+      const clientObjectId = new ObjectId(deadClientId);
+      const officerObjectId = new ObjectId(req_officer_id);
+      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
+      const activityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+      const customerEventCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
+      // Validate input first before any DB operation
+      const validatedData = validatePartial(callActivityValidation, body);
+      const callActivity = {
+        type: 'call_event',
+        client_id: clientObjectId,
+        officer_id: officerObjectId,
+        duration: validatedData.duration,
+        comment: validatedData.comment || '',
+        call_type: validatedData.call_type || '',
+        call_status: validatedData.call_status || '',
+        created_at:  new Date(),
+      };
+
+      // Use findOneAndUpdate to verify existence and update status
+      const updateResult = await deadCustomersCollection.findOneAndUpdate(
+        { _id: clientObjectId },
+        {
+          $set: {
+            status: 'CLOSED',
+            updated_at: new Date()
+          }
+        },
+        { returnDocument: 'after', projection: { recruiter_id: 1 } }
+      );
+      if (!updateResult.value) return reject("Dead client not found");
+
+      // Insert call activity and get its ID
+      const logResult = await activityCollection.insertOne(callActivity);
     
+      if (!logResult.acknowledged) return reject("Failed to log call activity");
+
+      // Update lastcall field with the new call log
+      await deadCustomersCollection.updateOne(
+        { _id: clientObjectId },
+        {
+          $set: {
+            lastcall: { ...callActivity, _id: logResult.insertedId }
+          }
+        }
+      );
+      // Insert customer activity event
+      await customerEventCollection.insertOne({
+        client_id: clientObjectId,
+        type: 'status_update',
+        status: 'CLOSED',
+        comment: validatedData.comment || '',
+        recruiter_id: (updateResult.value.recruiter_id && updateResult.value.recruiter_id !== 'UNASSIGNED' && updateResult.value.recruiter_id !== null)
+          ? new ObjectId(updateResult.value.recruiter_id)
+          : null,
+        officer_id: officerObjectId,
+        created_at: new Date(),
+      });
+
+      resolve("Dead lead marked as CLOSED successfully");
+    } catch (err) {
+      console.error("permanentlyCloseDeadLead Error:", err);
+      reject(err.message || err || "Error closing dead lead");
+    }
+  });
+  },
+    // Get lead/client by ID
+  
+}
 
 
 
@@ -781,10 +1152,6 @@ createLead: async (details) => {
   //   });
   // },
 
-
-    // Get lead/client by ID
-  
-}
 
 
    // getFilteredLeads: async (query, decoded) => {

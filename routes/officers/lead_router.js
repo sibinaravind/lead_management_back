@@ -37,6 +37,14 @@ app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
   );
 });
 
+
+app.patch("/closeDeadLead", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.permanentlyCloseDeadLead(req.body,req.decoded._id)
+  );
+});
+
+
 app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
   if (req.query.filterCategory == 'HISTORY') {
       return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
@@ -47,8 +55,22 @@ app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
   }
 });
 
+app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
+ 
+    return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
+  
+});
+
+app.get("/getAllFilterdHistory", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
+});
+
 app.get("/getLeadCount", middleware.checkToken, async (req, res) => {
-      return response.handle(res, () =>   leadHelper.getLeadCountByCategory(req.decoded));
+      return response.handle(res, () =>   leadHelper.getLeadCountByCategory(req.decoded, req.query));
+});
+
+app.get("/getFilteredDeadLeads", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getFilteredDeadLeads( req.query, req.decoded,));
 });
 
 

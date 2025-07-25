@@ -10,7 +10,11 @@ app.post("/logCallEvent", middleware.checkToken, (req, res) => {
     leadHelper.logCallEvent(req.body ,req.decoded._id)
   );
 });
-
+app.post("/CRETeamCallEvent", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.CRETeamCallEvent(req.body, req.decoded._id, )
+  );
+});
 app.post("/add_mobile_call_log", (req, res) => {
   return response.handle(res, () =>
     leadHelper.logMobileCallEvent(req.body)
@@ -31,4 +35,6 @@ app.patch("/updatelog/:id", middleware.checkToken, (req, res) => {
     leadHelper.updateCallLog(req.params.id, req.body)
   );
 });
+
+
 module.exports = app;

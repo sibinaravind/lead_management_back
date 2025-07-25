@@ -6,7 +6,6 @@ const { logActivity } = require('./customer_interaction_helper');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 
 module.exports = {
-
   getCustomer: async (id) => {
     return new Promise(async (resolve, reject) => {
       try {
@@ -188,16 +187,13 @@ module.exports = {
         if (!clientDoc) {
           return reject("Client not found");
         }
-
         if (status === STATUSES.DEAD) {
           clientDoc.status = status;
-
           const insertResult = await deadLeadsCollection.insertOne({
             ...clientDoc,
             moved_to_dead_at: new Date(),
             dead_reason: data.comment || ''
           });
-
           if (!insertResult.acknowledged) return reject("Failed to move to DEAD_LEADS");
 
           await currentCollection.deleteOne({ _id: clientId });
@@ -207,7 +203,6 @@ module.exports = {
           const client_id = `AECID${String(await getNextSequence("customer_id")).padStart(5, "0")}`;
           clientDoc.client_id = client_id;
           clientDoc.status = status;
-
           const insertResult = await customersCollection.insertOne({
             ...clientDoc
           });
@@ -239,13 +234,12 @@ module.exports = {
           type: 'status_update',
           client_id: clientId,
           recruiter_id: clientDoc.recruiter_id || null,
-          officer_id: clientDoc.officer_id || null,
+          officer_id: ObjectId(officerId) || null,
           client_status: status,
           comment: data.comment || ''
         });
         // const logResult = await customerActivityCollection.insertOne(activityLog);
         if (!logResult.acknowledged) return reject("Client status updated but failed to log activity");
-
         resolve("Client status updated and logged");
       } catch (err) {
         console.error(err);
@@ -254,4 +248,54 @@ module.exports = {
     });
   },
 
+  getCustomerInteraction: async (id) => {
+      try {
+              const result = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).aggregate([
+                  { $match: { client_id: ObjectId(id) } },
+                  { $sort: { created_at: -1 } },
+                  {
+                      $lookup: {
+                          from: COLLECTION.OFFICERS,
+                          localField: "officer_id",
+                          foreignField: "_id",
+                          as: "officer_details"
+                      }
+                  },
+                  { $unwind: { path: "$officer_details", preserveNullAndEmptyArrays: true } },
+                  {
+                      $project: {
+                          _id: 1,
+                          type: 1,
+                          client_id: 1,
+                          duration: 1,
+                          next_schedule: 1,
+                          next_shedule_time: 1,
+                          comment: 1,
+                          call_type: 1,
+                          call_status: 1,
+                          created_at: 1,
+                          officer: {
+                              $ifNull: [
+                                  {
+                                      _id: "$officer_details._id",
+                                      name: "$officer_details.name",
+                                      email: "$officer_details.email",
+                                      phone: "$officer_details.phone",
+                                      officer_id: "$officer_details.officer_id",
+                                      designation: "$officer_details.designation",
+                                      // Add other officer fields you need
+                                  },
+                                  null
+                              ]
+                          }
+                      }
+                  }
+              ]).toArray();
+  
+              return result;
+          } catch (err) {
+              console.error("Error fetching call logs with officer details:", err);
+              throw new Error("Error fetching call logs with officer details");
+          }
+      },
 }

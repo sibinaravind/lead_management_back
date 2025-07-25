@@ -69,6 +69,7 @@ const routes = [
   {path: '/customer', route: require("./routes/officers/customer_router") },
   {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
   {path: '/announcement', route: require("./routes/officers/announcement_router") },
+  {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -105,6 +106,7 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 // thinsg to do
 /*** 
  check dead lead while insert lead
+ filter admin call history with department like now admin will see all officers call history without cre or recruiter filter
  *    ***/
 
 
@@ -129,25 +131,3 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
   */
 
 
-                /***. 
-_id
-6867a96d0d60d184707e25c7
-leadId
-"1261308965352408"
-formId
-"1360534075016407"
-createdAt
-2025-05-04T19:35:43.000+00:00
-
-fields
-Object
-full_name
-"Sanjay Bunch"
-city
-"Lucknow"
-phone_number
-"+919236280588"
-job_title
-"i want a job supervision warehouse  and supervision site office work l…"
-email
-"sanjaybunch0@gmail.com" */
