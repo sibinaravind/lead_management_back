@@ -32,7 +32,8 @@ loginOfficer: async (officer_id, password) => {
       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });
       // Exclude password from response
       const { password: pwd, ...officerData } = officer;
-      resolve({ officer: officerData, token });
+      officerData.token = token;
+      resolve({ officer: officerData });
     } catch (error) {
       reject("Error processing request");
     }
