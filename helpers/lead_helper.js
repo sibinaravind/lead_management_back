@@ -277,7 +277,7 @@ createLead: async (details) => {
         }
     },
 
-    getFilteredDeadLeads: async (query, decoded) => {
+    getFilteredLeads: async (query, decoded) => {
         try {
           const {
             filterCategory,

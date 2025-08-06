@@ -60,21 +60,21 @@ app.patch("/editOfficerToLead", middleware.checkToken, (req, res) => {
 });  
 app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    officersHelper.deleteOfficerUnderOfficer(
+    officersHelper.removeOfficerUnderOfficer(
       req.body.lead_officer_id,
       req.body.officer_id
     )
   );
 });  
 
-app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    officersHelper.deleteOfficerUnderOfficer(
-      req.body.lead_officer_id,
-      req.body.officer_id
-    )
-  );
-});  
+// app.patch("/deleteOfficerFromLead", middleware.checkToken, (req, res) => {
+//   return response.handle(res, () =>
+//     officersHelper.deleteOfficerUnderOfficer(
+//       req.body.lead_officer_id,
+//       req.body.officer_id
+//     )
+//   );
+// });  
 
 app.post("/insertRoundRobin", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>

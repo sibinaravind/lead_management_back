@@ -7,7 +7,6 @@ let projecthelper=require('../../helpers/project_helper');
 const response = require("../../utils/responseManager");
 
 app.post("/clientCreate", middleware.checkToken, (req, res) => {
-
   return response.handle(res, () =>
     projecthelper.createClient(req.body)
   );
@@ -28,7 +27,6 @@ app.delete("/deleteClient/:_id", middleware.checkToken, (req, res) => {
     projecthelper.deleteClient(req.params._id)
   );
 });
-
 
 app.post("/createProject", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
@@ -61,7 +59,6 @@ app.patch("/editVacancy/:_id", middleware.checkToken, (req, res) => {
     projecthelper.editVacancy(req.params._id, req.body)
   );
 });
-
 app.post("/insertClient/:vacancyId", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     projecthelper.insertClientsToVacancy(req.params.vacancyId, req.body.clients)
@@ -102,11 +99,26 @@ app.get("/vacancyListByClient/:clientId", middleware.checkToken, (req, res) => {
   );
 });
 
-app.get("/getVacancyMatchingProfiles/:vacancy_id", middleware.checkToken, (req, res) => {
+app.get("/getMatchingProfiles", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    projecthelper.getVacancyMatchingProfiles(req.params.vacancy_id)
+    projecthelper.getMatchingClients(req.query , req.decoded)
   );
 });
 
+app.post("/addClientToFavourites", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.addClientToFavourites( req.body.vacancyId,req.body.clientId,)
+  );
+});
 
+app.patch("/removeClientFromFavourites", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.removeClientFromFavourites( req.body.vacancyId,req.body.clientId,)
+  );
+});
+app.get("/getFavouriteClients/:vacancyId", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    projecthelper.getFavouriteClients(req.params.vacancyId)
+  );
+});
 module.exports = app;

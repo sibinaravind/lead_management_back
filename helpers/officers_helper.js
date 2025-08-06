@@ -88,7 +88,6 @@ createOfficer : async (details) => {
 listOfficers: () => {
   return new Promise(async (resolve, reject) => {
     try {
-      console.log("Fetching officers list");
       resolve(await db.get().collection(COLLECTION.OFFICERS)
         .find(
         {},
@@ -128,7 +127,6 @@ editOfficer : async (id, details) => {
       //     return reject("Invalid status.");
       //   }
       // }
-      console.log("Update Data:", updateData);
       if (details.password) {
         updateData.password = await bcrypt.hash(details.password.toString(), SALT_ROUNDS);
       } else {
@@ -202,39 +200,79 @@ deleteOfficer: async (id) => {
 },
 
 
-addOfficerUnderOfficer: async ( data) => {
+// addOfficerUnderOfficer: async ( data) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (!ObjectId.isValid(data.officer.officer_id)) {
+//         return reject("Invalid officer_id: must be a valid ");
+//       }
+//       data.officer.officer_id = new ObjectId(data.officer.officer_id);const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+//         {
+//           _id: new ObjectId(data.lead_officer_id),
+//           "officers.officer_id": { $ne: data.officer.officer_id }  // Avoid duplicates
+//         },
+//         {
+//           $addToSet: { officers: data.officer }  // Add only if not present
+//         }
+//       );
+
+//       console.log("Update result:", result);
+
+//       if (result.modifiedCount > 0) {
+//         resolve("Officer added under officer");
+//       } else {
+//         reject("Officer already exists under this officer or lead officer not found");
+//       }
+//     } catch (error) {
+//       reject(error);
+//     }
+//   });
+// },
+
+addOfficerUnderOfficer: async (data) => {
   return new Promise(async (resolve, reject) => {
     try {
-      if (!ObjectId.isValid(data.officer.officer_id)) {
-        return reject("Invalid officer_id: must be a valid ");
+      if (!ObjectId.isValid(data.lead_officer_id)) {
+        return reject("Invalid lead_officer_id: must be a valid ObjectId");
       }
-      data.officer.officer_id = new ObjectId(data.officer.officer_id);const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
-        {
-          _id: new ObjectId(data.lead_officer_id),
-          "officers.officer_id": { $ne: data.officer.officer_id }  // Avoid duplicates
-        },
-        {
-          $addToSet: { officers: data.officer }  // Add only if not present
+      const leadOfficerId = new ObjectId(data.lead_officer_id);
+      // Validate officers array
+      if (!Array.isArray(data.officer) || data.officer.length === 0) {
+        return reject("officer must be a non-empty array");
+      }
+      // Convert all officer_id to ObjectId
+      const officersToInsert = data.officer.map(officer => {
+        if (!ObjectId.isValid(officer.officer_id)) {
+          throw new Error(`Invalid officer_id: ${officer.officer_id}`);
         }
+        return {
+          ...officer,
+          officer_id: new ObjectId(officer.officer_id)
+        };
+      });
+
+      // Use $addToSet with $each to skip duplicates automatically
+      const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+        { _id: leadOfficerId },
+        { $addToSet: { officers: { $each: officersToInsert } } }
       );
 
-      console.log("Update result:", result);
-
       if (result.modifiedCount > 0) {
-        resolve("Officer added under officer");
+        resolve(`Added new officers under lead officer`);
       } else {
-        reject("Officer already exists under this officer or lead officer not found");
+        resolve("All officers already exist under this lead officer or lead officer not found");
       }
+
     } catch (error) {
       reject(error);
     }
   });
 },
 
+
 editOfficerLeadPermission: async (data) => {
   return new Promise(async (resolve, reject) => {
     try {
-
 
       const { lead_officer_id, officer } = data;
 
@@ -266,52 +304,46 @@ editOfficerLeadPermission: async (data) => {
   });
 },
 
-deleteOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      if (!lead_officer_id || !officer_id) {
-        return reject("Missing lead_officer_id or officer_id");
-      }
-      const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
-        {
-          _id: new ObjectId(lead_officer_id)
-        },
-        {
-          $pull: {
-            officers: { officer_id: officer_id }
-          }
-        }
-      );
+// deleteOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (!lead_officer_id || !officer_id) {
+//         return reject("Missing lead_officer_id or officer_id");
+//       }
+//       const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+//         {
+//           _id: new ObjectId(lead_officer_id)
+//         },
+//         {
+//           $pull: {
+//             officers: { officer_id: officer_id }
+//           }
+//         }
+//       );
 
-      if (result.modifiedCount > 0) {
-        resolve("Officer removed successfully.");
-      } else {
-        reject("Officer not found under this lead officer.");
-      }
-    } catch (error) {
-      console.error("Error removing officer:", error);
-      reject("Failed to remove officer.");
-    }
-  });
-},
-
-
+//       if (result.modifiedCount > 0) {
+//         resolve("Officer removed successfully.");
+//       } else {
+//         reject("Officer not found under this lead officer.");
+//       }
+//     } catch (error) {
+//       console.error("Error removing officer:", error);
+//       reject("Failed to remove officer.");
+//     }
+//   });
+// },
 
 removeOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
   return new Promise(async (resolve, reject) => {
     try {
-      const collection = db.get().collection(COLLECTION.OFFICERS);
-
-      const result = await collection.updateOne(
-        {
-          officer_id:lead_officer_id,
-          officers: officer_id 
-        },
-        {
-          $pull: { officers: officer_id }
-        }
+      if (!ObjectId.isValid(lead_officer_id)) {
+        return reject("Invalid lead_officer_id");
+      }
+      // officer_id may be string, but in officers array it's stored as ObjectId
+      const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+        { _id: new ObjectId(lead_officer_id) },
+        { $pull: { officers: { officer_id: new ObjectId(officer_id) } } }
       );
-
       if (result.modifiedCount > 0) {
         resolve("Officer removed from under officer");
       } else {
@@ -323,6 +355,7 @@ removeOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
     }
   });
 },
+
 listLeadOfficers: () => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -356,13 +389,13 @@ listLeadOfficers: () => {
               {
                 $project: {
                    _id: { $toString: "$_id" },
-                  officer_id: { $toString: "$_id" },
+                  officer_id: { $toString: "$officer_id" },
                   // officer_id: 0,
                   name: 1,
                   phone: 1,
                   company_phone_number: 1,
-                  branch: { $arrayElemAt: ["$branch", 0] },
-                  designation: { $arrayElemAt: ["$designation", 0] }
+                  branch: 1,
+                  designation:1
                 }
               }
             ],
@@ -403,6 +436,7 @@ listLeadOfficers: () => {
             company_phone_number: 1,
             designation: 1,
             department: 1,
+            
             branch: 1,
             created_at: 1,
             officers:1,
@@ -412,7 +446,7 @@ listLeadOfficers: () => {
         }
       ]).toArray();
         const cleanedData = officers.map((item) => {
-      const filteredOfficers = (item.officers || []).filter(officer => officer.name);
+      const filteredOfficers = (item.officers_details || []).filter(officers_details => officers_details.name);
       const { officers_details, ...rest } = item;
       return {
         ...rest,
