@@ -40,13 +40,12 @@ createLead: async (details) => {
       const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
 
       // ✅ Officer assignment
-      let assignedOfficer = null;
-
+      let assignedOfficer = 'UNASSIGNED';
       if (!value.officer_id && value.service_type) {
         const rrConfig = await dbInstance
           .collection(COLLECTION.ROUNDROBIN)
           .findOne({ name: value.service_type });
-
+  
         if (rrConfig?.officers?.length > 0) {
           const { value: counter } = await dbInstance
             .collection(COLLECTION.COUNTER)
@@ -58,7 +57,6 @@ createLead: async (details) => {
 
           const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
           const selectedOfficerId = rrConfig.officers[officerIndex];
-
           assignedOfficer = await officersCol.findOne(
             { _id: safeObjectId(selectedOfficerId) },
             { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
@@ -82,11 +80,15 @@ createLead: async (details) => {
         ? assignedOfficer.branch[0]
         : value.branch || "AFFINIX";
       // ✅ Insert lead
+      value.officer_id = assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED";
+      value.status =  assignedOfficer
+          ? (value.status !== undefined && value.status !== null && value.status !== "" ? value.status : "HOT")
+          : "UNASSIGNED"
       const result = await leadsCol.insertOne({
         client_id,
-        officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
+        // officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
         recruiter_id: recruiterIdValue,
-        status: assignedOfficer ? value.status || "HOT" : "UNASSIGNED",
+      
         ...value,
         created_at: new Date(),
       });

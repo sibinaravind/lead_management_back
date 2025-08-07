@@ -35,7 +35,16 @@ module.exports = {
                     officer_id: 1,
                     created_at: 1
                 }).toArray();
-                resolve(LEADS);
+                resolve(
+                     {
+            leads: LEADS,
+            limit: LEADS.length,
+            page: 1,
+            totalMatch: LEADS.length,
+            totalPages: 1,
+          }
+                    
+                    );
             } catch (err) {
                 console.error(err);
                 reject("Error fetching LEADS");
