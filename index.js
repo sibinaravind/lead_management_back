@@ -12,7 +12,7 @@ const fs = require('fs');
 const cron = require('node-cron');
 const http = require('http');
 const cors = require('cors');
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 // const functions = require("firebase-functions");
 const compression = require('compression');
 
