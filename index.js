@@ -12,7 +12,7 @@ const fs = require('fs');
 const cron = require('node-cron');
 const http = require('http');
 const cors = require('cors');
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 // const functions = require("firebase-functions");
 const compression = require('compression');
 
@@ -24,8 +24,8 @@ const server = http.createServer(app);
 https.createServer({
   key: fs.readFileSync('key.pem'),
   cert: fs.readFileSync('cert.pem')
-}, app).listen(3000, () => {
-  console.log('HTTPS server running on port 3000');
+}, app).listen(PORT, () => {
+  console.log(`HTTPS server running on port ${PORT}`);
 });
 // Database connections
 db.connect(err => {
@@ -101,7 +101,7 @@ app.use((req, res, next) => {
 // exports.app = functions.https.onRequest(app);
 
 // Start the server
-server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
+// server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
 
 // Cron job for token refresh
 
