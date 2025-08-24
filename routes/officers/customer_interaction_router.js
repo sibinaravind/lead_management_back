@@ -36,5 +36,11 @@ app.patch("/updatelog/:id", middleware.checkToken, (req, res) => {
   );
 });
 
+app.get("/customerActivity/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getCustomerActivityLogs(req.params.id)
+  );
+});
+
 
 module.exports = app;

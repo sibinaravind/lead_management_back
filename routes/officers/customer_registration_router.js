@@ -45,10 +45,16 @@ app.post("/setRequiredDocuments/:id", middleware.checkToken, (req, res) => {
     customerHelper.updateClientRequiredDocuments(req.params.id, req.body)
   );
 });
-app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    customerHelper.uploadClientDocument(req.params.id, req.body)
-  );
+app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, async (req, res) => {
+  try {
+    console.log("Updating client required documents");
+    const result = await response.handle(res, () =>
+      customerHelper.uploadClientDocument(req.params.id, req.body)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
 });
 
 

@@ -83,8 +83,9 @@ const customerBasicInfoValidation = Joi.object({
 
 const academicValidation = Joi.object({
   qualification: Joi.string().trim().min(1).required(),
+  course: Joi.string().trim().min(1).required(),
   institution: Joi.string().trim().min(1).required(),
-  university: Joi.string().trim().min(1).required(),
+  university: Joi.string().trim().min(1).optional().allow(null, ""),
   start_year: Joi.number().integer().min(1950).max((new Date().getFullYear()) + 3).required(),
   end_year: Joi.number().integer().min(Joi.ref('start_year')).max((new Date().getFullYear()) + 7).required(),
   grade: Joi.string().trim().allow('', null),
@@ -98,7 +99,7 @@ const examValidation = Joi.object({
   exam: Joi.string().trim().required(),
   status: Joi.string().trim().uppercase().required(),
   validity_date: Joi.string()
-    .required()
+    .optional().allow(null, "")
     .custom((value, helpers) => {
       if (!value) return null;
       const parsed = stringTodata(value);
@@ -112,7 +113,7 @@ const examValidation = Joi.object({
     }, 'Custom Validity Date Validator'),
 
   exam_date: Joi.string()
-    .required()
+    .optional().allow(null, "")
     .custom((value, helpers) => {
       if (!value) return null;
       const parsed = stringTodata(value);
@@ -195,8 +196,7 @@ const workHistoryValidation = Joi.object({
   position: Joi.string().trim().required(),
   department: Joi.string().trim().allow(null, ''),
   organization: Joi.string().trim().required(),
-  country: Joi.string().trim().required(),
-
+  country: Joi.string().trim().optional().allow(null, ''),
   from_date: Joi.string()
     .allow(null, '')
     .custom((value, helpers) => {

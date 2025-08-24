@@ -36,15 +36,15 @@ module.exports = {
                     created_at: 1
                 }).toArray();
                 resolve(
-                     {
-            leads: LEADS,
-            limit: LEADS.length,
-            page: 1,
-            totalMatch: LEADS.length,
-            totalPages: 1,
-          }
-                    
-                    );
+                    {
+                        leads: LEADS,
+                        limit: LEADS.length,
+                        page: 1,
+                        totalMatch: LEADS.length,
+                        totalPages: 1,
+                    }
+
+                );
             } catch (err) {
                 console.error(err);
                 reject("Error fetching LEADS");
@@ -277,58 +277,95 @@ module.exports = {
         });
     },
 
-
     uploadClientDocument: (id, { doc_type, base64 }) => {
-          let filePath = null;
+        let filePath = null;
         return new Promise(async (resolve, reject) => {
-            if (!doc_type || !base64) {
-                return reject("Missing required fields for document upload.");
-            }
-          
             try {
-                const collection = db.get().collection(COLLECTION.CUSTOMERS);
-                // First, save the file
-                filePath = await fileUploader.processAndStoreBase64File({
-                base64Data: base64,
-                originalName:  doc_type,
-                 clientName:   `client_${id}`,
-                 uploadsDir:  'uploads/client_documents'
-                });
-                console.log("le saved at:", filePath);
-                // Try updating the record
-                const updateResult = await collection.updateOne(
-                    {
-                        _id: ObjectId(id),
-                        "documents.doc_type": doc_type
-                        // "documents.file_path": { $exists: false }
-                    },
-                    {
-                        $set: {
-                            "documents.$.file_path": filePath,
-                            "documents.$.uploaded_at": new Date(),
-                            updated_at: new Date()
-                        }
-                    }
-                );
-                console.log("Update Result:", updateResult);
-                if (updateResult.matchedCount === 0) {
-                    // Remove the uploaded file if DB update fails
-                    if (filePath) {
-                         fs.unlink(path.resolve(filePath));
-                    }
-                    return reject(`No matching and empty document slot found for "${doc_type}".`);
+                if (!doc_type || !base64) {
+                    return reject("Missing required fields for document upload.");
                 }
+
+                const collection = db.get().collection(COLLECTION.CUSTOMERS);
+
+                // 🔍 Check if document with this type already exists
+                const existing = await collection.findOne(
+                    { _id: ObjectId(id), "documents.doc_type": doc_type },
+                    { projection: { "documents.$": 1 } }
+                );
+
+                let oldFilePath = null;
+                if (existing?.documents?.[0]?.file_path) {
+                    oldFilePath = existing.documents[0].file_path;
+                }
+
+                // 📂 Save the new file
+                filePath = await fileUploader.processAndStoreBase64File({
+                    base64Data: base64,
+                    originalName: doc_type,
+                    clientName: `client_${id}`,
+                    uploadsDir: "uploads/client_documents"
+                });
+
+                let updateResult;
+
+                if (existing) {
+                    // 📝 Update existing document
+                    updateResult = await collection.updateOne(
+                        { _id: ObjectId(id), "documents.doc_type": doc_type },
+                        {
+                            $set: {
+                                "documents.$.file_path": filePath,
+                                "documents.$.uploaded_at": new Date(),
+                                updated_at: new Date()
+                            }
+                        }
+                    );
+                } else {
+                    // ➕ Add new document entry if it doesn't exist
+                    updateResult = await collection.updateOne(
+                        { _id: ObjectId(id) },
+                        {
+                            $push: {
+                                documents: {
+                                    doc_type,
+                                    file_path: filePath,
+                                    uploaded_at: new Date()
+                                }
+                            },
+                            $set: { updated_at: new Date() }
+                        }
+                    );
+                }
+
+                console.log("Update Result:", updateResult);
+
+                if (updateResult.matchedCount === 0) {
+                    // Rollback uploaded file if DB update fails
+                    if (filePath) {
+                        await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                    }
+                    return reject(`Failed to update or add document for "${doc_type}".`);
+                }
+
+                // 🗑️ Remove old file if replaced
+                if (oldFilePath) {
+                    await fs.promises.unlink(path.resolve(oldFilePath)).catch((err) => {
+                        console.warn("Failed to remove old file:", err.message);
+                    });
+                }
+
                 resolve({ success: true, file_path: filePath });
             } catch (err) {
-               if (filePath) {
-                    try {
-                        await fs.promises.unlink(path.resolve(filePath));
-                    } catch (err) {
-                    }
-                    }
+                console.log("Error occurred while uploading document:", err);
+                // Rollback uploaded file if error
+                if (filePath) {
+                    await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                }
                 reject("Error uploading document: " + (err.message || err));
             }
         });
     }
+
+
 
 }

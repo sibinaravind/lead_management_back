@@ -1,5 +1,7 @@
 module.exports = {
   handle: async (res, handler) => {
+   
+
     try {
       const result = await handler();
       if (result) {
@@ -8,6 +10,7 @@ module.exports = {
         return res.status(500).json({ success: false, message: "Unexpected error" });
       }
     } catch (error) {
+     
       return res.status(500).json({
         success: false,
         message: typeof error === "string" ? error :  (error.message || error.error || "Unexpected error")

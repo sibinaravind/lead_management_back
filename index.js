@@ -15,18 +15,18 @@ const cors = require('cors');
 const PORT = process.env.PORT || 3000;
 // const functions = require("firebase-functions");
 const compression = require('compression');
-
+const functions = require('firebase-functions');
 const { createWriteStream } = require('fs');
 const app = express();
 const server = http.createServer(app);
 
 
-https.createServer({
-  key: fs.readFileSync('key.pem'),
-  cert: fs.readFileSync('cert.pem')
-}, app).listen(PORT, () => {
-  console.log(`HTTPS server running on port ${PORT}`);
-});
+// https.createServer({
+//   key: fs.readFileSync('key.pem'),
+//   cert: fs.readFileSync('cert.pem')
+// }, app).listen(PORT, () => {
+//   console.log(`HTTPS server running on port ${PORT}`);
+// });
 // Database connections
 db.connect(err => {
   if (err) console.log("Mongo connection error: " + err);
@@ -104,10 +104,10 @@ app.use((req, res, next) => {
 });
 
 
-// exports.app = functions.https.onRequest(app);
+exports.api = functions.https.onRequest(app);
 
 // Start the server
-// server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
 
 // Cron job for token refresh
 

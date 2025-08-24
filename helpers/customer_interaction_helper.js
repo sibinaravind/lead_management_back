@@ -440,6 +440,8 @@ module.exports = {
             throw new Error("Error fetching call logs with officer details");
         }
     },
+
+    
     updateCallLog: async (logId, updateData) => {
         return new Promise(async (resolve, reject) => {
             try {
@@ -511,7 +513,61 @@ module.exports = {
                 reject({ success: false, error: err.message || err });
             }
         });
-    }
+    },
+
+
+     getCustomerActivityLogs: async (id) => {
+        try {
+
+            const result = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).aggregate([
+                { $match: { client_id: ObjectId(id) } },
+                // { $sort: { created_at: 1 } },
+                {
+                    $lookup: {
+                        from: COLLECTION.OFFICERS,
+                        localField: "officer_id",
+                        foreignField: "_id",
+                        as: "officer_details"
+                    }
+                },
+                { $unwind: { path: "$officer_details", preserveNullAndEmptyArrays: true } },
+                {
+                    $project: {
+                        _id: 1,
+                        type: 1,
+                        client_id: 1,
+                        duration: 1,
+                        next_schedule: 1,
+                        next_shedule_time: 1,
+                        comment: 1,
+                        call_type: 1,
+                        call_status: 1,
+                        created_at: 1,
+                        officer: {
+                            $ifNull: [
+                                {
+                                    _id: "$officer_details._id",
+                                    name: "$officer_details.name",
+                                    email: "$officer_details.email",
+                                    phone: "$officer_details.phone",
+                                    officer_id: "$officer_details.officer_id",
+                                    designation: "$officer_details.designation",
+                                    // Add other officer fields you need
+                                },
+                                null
+                            ]
+                        }
+                    }
+                }
+              
+            ]).toArray();
+
+            return result;
+        } catch (err) {
+            console.error("Error fetching call logs with officer details:", err);
+            throw new Error("Error fetching call logs with officer details");
+        }
+    },
 }
 
 
