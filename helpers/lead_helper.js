@@ -25,7 +25,6 @@ createLead: async (details) => {
         dbInstance.collection(COLLECTION.CUSTOMERS),
         dbInstance.collection(COLLECTION.DEAD_LEADS),
       ];
-
       for (const col of collectionsToCheck) {
         const query = value.email?.trim()
           ? { $or: [{ email: value.email }, { phone: value.phone }] }
@@ -34,7 +33,6 @@ createLead: async (details) => {
         const exists = await col.findOne(query);
         // if (exists) return reject("Client already exists");
       }
-
       // ✅ Generate client ID
       const leadIdSeq = await getNextSequence("lead_id");
       const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;

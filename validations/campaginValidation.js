@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { stringTodata } = require('../utils/parseDate');
+const { stringTodate } = require('../utils/parseDate');
 
 const campaignValidation = Joi.object({
   title: Joi.string().trim().min(1).max(255).required(),
@@ -7,8 +7,10 @@ const campaignValidation = Joi.object({
     .required()
     .allow(null, '')
     .custom((value, helpers) => {
+       console.log("date");
       if (!value) return null;
-      const date = stringTodata(value);
+      const date = stringTodate(value);
+    console.log(date);
       if (!date) return helpers.error('any.invalid');
       return date;
     }, 'Custom Date Parser'),

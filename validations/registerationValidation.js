@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { stringTodata } = require('../utils/parseDate');
+const { stringTodate } = require('../utils/parseDate');
 const customerBasicInfoValidation = Joi.object({
   name: Joi.string().required(),
   last_name: Joi.string().optional().allow(null, ""),
@@ -41,7 +41,7 @@ const customerBasicInfoValidation = Joi.object({
   dob: Joi.string()
       .required()
       .custom((value, helpers) => {
-        const parsed = stringTodata(value);
+        const parsed = stringTodate(value);
         if (!parsed) return helpers.error('any.invalid');
         return value;
       }, 'Custom Date Validator'),
@@ -53,7 +53,7 @@ const customerBasicInfoValidation = Joi.object({
   passport_expiry_date:Joi.string()
       .required()
       .custom((value, helpers) => {
-        const parsed = stringTodata(value);
+        const parsed = stringTodate(value);
         if (!parsed) return helpers.error('any.invalid');
         return value;
       }, 'Custom Date Validator'),
@@ -102,7 +102,7 @@ const examValidation = Joi.object({
     .optional().allow(null, "")
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed)
         return helpers.message('Invalid validity_date format (DD/MM/YYYY expected)');
       const year = parsed.getFullYear();
@@ -116,7 +116,7 @@ const examValidation = Joi.object({
     .optional().allow(null, "")
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed)
         return helpers.message('Invalid exam_date format (DD/MM/YYYY expected)');
       const year = parsed.getFullYear();
@@ -146,7 +146,7 @@ const travelHistoryValidation = Joi.object({
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed)
         return helpers.message('Invalid departure_date format (DD/MM/YYYY expected)');
       const year = parsed.getFullYear();
@@ -159,8 +159,8 @@ const travelHistoryValidation = Joi.object({
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
-      const departure = stringTodata(helpers.state.ancestors[0].departure_date);
+      const parsed = stringTodate(value);
+      const departure = stringTodate(helpers.state.ancestors[0].departure_date);
       if (!parsed)
         return helpers.message('Invalid return_date format (DD/MM/YYYY expected)');
       const year = parsed.getFullYear();
@@ -175,8 +175,8 @@ const travelHistoryValidation = Joi.object({
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
-      const departure = stringTodata(helpers.state.ancestors[0].departure_date);
+      const parsed = stringTodate(value);
+      const departure = stringTodate(helpers.state.ancestors[0].departure_date);
       if (!parsed)
         return helpers.message('Invalid visa_valid_date format (DD/MM/YYYY expected)');
       const year = parsed.getFullYear();
@@ -201,7 +201,7 @@ const workHistoryValidation = Joi.object({
     .allow(null, '')
     .custom((value, helpers) => {
       if (!value) return null;
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed) {
         return helpers.message('Invalid start_date format (DD/MM/YYYY expected)');
       }
@@ -217,7 +217,7 @@ const workHistoryValidation = Joi.object({
     .custom((value, helpers) => {
       if (!value) return null;
 
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed) {
         return helpers.message('Invalid end_date format (DD/MM/YYYY expected)');
       }
@@ -227,7 +227,7 @@ const workHistoryValidation = Joi.object({
       }
 
       const startStr = helpers?.state?.ancestors?.[0]?.start_date;
-      const startDate = startStr ? stringTodata(startStr) : null;
+      const startDate = startStr ? stringTodate(startStr) : null;
 
       if (startDate && parsed < startDate) {
         return helpers.message('end_date cannot be before start_date');

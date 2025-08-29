@@ -15,7 +15,7 @@ const officerValidation = Joi.object({
       }
       return value;
     }, 'Received Phone Validator'),
-  company_phone_number:Joi.string()
+  company_phone_number:Joi.string().allow(null, '')
     .custom((value, helpers) => {
       const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
       if (!phoneRegex.test(value)) {
@@ -35,7 +35,7 @@ const officerValidation = Joi.object({
     .min(1)
     .required(),
   password: Joi.string()
-    .required()
+    .required().allow(null, '')
     .custom((value, helpers) => {
       if (
         typeof value !== 'string' ||

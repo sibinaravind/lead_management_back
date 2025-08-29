@@ -22,11 +22,11 @@ module.exports = {
                 // Check for duplicate client (by email or phone)
                 const existingClient = await collection.findOne({
                     $or: [
-                        { email: details.email },
+                       
                         { phone: details.phone }
                     ]
                 });
-                if (existingClient) return reject("Client already exists with this email or phone");
+                if (existingClient) return reject("Client already exists with this phone");
                 // Get next client number atomically
                 // const newNumber = await getNextSequence('client_id');
                 // const client_id = `AECID${String(newNumber).padStart(5, '0')}`;

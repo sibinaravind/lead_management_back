@@ -1,6 +1,6 @@
 // announcementSchema.js
 const Joi = require('joi');
-const { stringTodata } = require('../utils/parseDate');
+const { stringTodate } = require('../utils/parseDate');
 
 const announcementValidation = Joi.object({
   title: Joi.string().trim().min(1).required(),
@@ -8,7 +8,7 @@ const announcementValidation = Joi.object({
   expire_on: Joi.string()
     .required()
     .custom((value, helpers) => {
-      const date = stringTodata(value);
+      const date = stringTodate(value);
       if (!date) return helpers.error('any.invalid');
       return date;
     }, 'Custom Date Parser')

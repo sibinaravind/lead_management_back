@@ -1,5 +1,5 @@
 const Joi = require('joi');
-const { stringTodata, stringToTime } = require('../utils/parseDate');
+const { stringTodate, stringToTime } = require('../utils/parseDate');
 const mongoose = require('mongoose');
 
 const callActivityValidation = Joi.object({
@@ -16,7 +16,7 @@ const callActivityValidation = Joi.object({
   next_schedule: Joi.string()
     .required()
     .custom((value, helpers) => {
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed) return helpers.error('any.invalid');
       return parsed;
     }, 'Custom Date Validator'),

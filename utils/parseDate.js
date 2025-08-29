@@ -1,6 +1,6 @@
 
 
-function stringTodata(dateStr) {
+function stringTodate(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') return null;
 
   const [day, month, year] = dateStr.split('/');
@@ -9,7 +9,6 @@ function stringTodata(dateStr) {
 
   const isoString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`;
   const date = new Date(isoString);
-
   return isNaN(date.getTime()) ? null : date;
 }
 function stringToTime(timeStr) {
@@ -45,4 +44,4 @@ function stringToTime(timeStr) {
 
 
 
-module.exports = { stringTodata ,stringToTime };
+module.exports = { stringTodate ,stringToTime };

@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { stringTodata } = require('../utils/parseDate');
+const { stringTodate } = require('../utils/parseDate');
 const leadSchema = Joi.object({
   name: Joi.string().required(),
   email: Joi.string().email().allow(null, ""),
@@ -28,7 +28,7 @@ const leadSchema = Joi.object({
   gender: Joi.string().optional().allow(null, ""),
   dob: Joi.alternatives().try(
     Joi.string().custom((value, helpers) => {
-      const parsed = stringTodata(value);
+      const parsed = stringTodate(value);
       if (!parsed) return helpers.error('any.invalid');
       return value;
     }, 'Custom Date Validator'),

@@ -9,7 +9,8 @@ const campaignValidation = require('../validations/campaginValidation');
 module.exports = {
     createCampaign: async ( title, startDate, image ) => {
         // Validate input
-        const { error } = campaignValidation.validate({ title, startDate, image });
+
+        const { error, value } = campaignValidation.validate({ title, startDate, image });
         if (error) {
             throw new Error('Validation error: ' + error.details[0].message);
         }
@@ -26,7 +27,7 @@ module.exports = {
 
             const result = await collection.insertOne({
                 title,
-                startDate: startDate ? new Date(startDate) : null,
+                startDate: value.startDate,
                 image: imagePath || null,
                 createdAt: new Date()
             });
