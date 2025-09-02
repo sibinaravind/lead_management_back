@@ -22,7 +22,7 @@ module.exports = {
                 // Check for duplicate client (by email or phone)
                 const existingClient = await collection.findOne({
                     $or: [
-                       
+
                         { phone: details.phone }
                     ]
                 });
@@ -700,22 +700,160 @@ module.exports = {
 
 
 
+    // getMatchingClients: async (query, decoded) => {
+    //     try {
+    //         const {
+    //             page = 1,
+    //             limit = 10,
+    //             status,
+    //             qualifications ,
+    //             country,
+    //             searchString,
+    //             spe
+
+    //         } = query;
+    //         const parsedPage = parseInt(page);
+    //         const parsedLimit = parseInt(limit);
+    //         const skip = (parsedPage - 1) * parsedLimit;
+    //         const filter = {};
+    //         // Officer filtering
+    //         const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+    //         let officerIdList = [];
+
+    //         if (!isAdmin) {
+    //             officerIdList = Array.isArray(decoded?.officers)
+    //                 ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+    //                 : [];
+    //         }
+    //         if (isAdmin) {
+    //             // Admin: do not filter by officer_id (access all data)
+    //         } else if (officerIdList.length > 0) {
+    //             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+    //         } else {
+    //             filter.officer_id = safeObjectId(decoded?._id);
+    //         }
+
+    //         // Additional filters
+    //         if (status) filter.status = status;
+    //         // if (profession) filter.profession = profession;
+    //         if (qualifications) filter.qualification = qualifications;
+    //         if (country) {
+    //             if (Array.isArray(country)) {
+    //                 filter.country_interested = Array.isArray(country) ? { $in: country } : country;
+    //             } else {
+    //                 filter.country_interested = country;
+    //             }
+    //         }
+
+    //         // Date filters: created_at or lastcall.next_schedule
+
+    //         // Search text match
+    //         if (searchString) {
+    //             const searchRegex = new RegExp(searchString, "i");
+    //             filter.$or = [
+    //                 { phone: { $regex: searchRegex } },
+    //                 { name: { $regex: searchRegex } },
+    //                 { client_id: { $regex: searchRegex } },
+    //                 { email: { $regex: searchRegex } }
+    //             ];
+    //         }
+    //         const result = await db.get().collection(COLLECTION.LEADS).aggregate([
+    //             { $match: filter },
+    //             {
+    //                 $unionWith: {
+    //                 coll: COLLECTION.CUSTOMERS, // second collection name
+    //                 pipeline: [
+    //                     { $match: filter }
+    //                 ]
+    //                 }
+    //             },
+    //             {
+    //                 $facet: {
+    //                     data: [
+    //                         { $sort: { created_at: -1 } },
+    //                         { $skip: skip },
+    //                         { $limit: parsedLimit },
+    //                         {
+    //                             $lookup: {
+    //                                 from: COLLECTION.OFFICERS,
+    //                                 localField: "officer_id",
+    //                                 foreignField: "_id",
+    //                                 as: "officer",
+    //                             },
+    //                         },
+    //                         {
+    //                             $unwind: {
+    //                                 path: "$officer",
+    //                                 preserveNullAndEmptyArrays: true,
+    //                             },
+    //                         },
+    //                         {
+    //                             $project: {
+    //                                 _id: 1,
+    //                                 client_id: 1,
+    //                                 name: 1,
+    //                                 email: 1,
+    //                                 phone: 1,
+    //                                 branch: 1,
+    //                                 service_type: 1,
+    //                                 country_code: 1,
+    //                                 qualification:1,
+    //                                 status: 1,
+    //                                 lead_source: 1,
+    //                                 next_schedule: "$lastcall.next_schedule",
+    //                                 feedback: "$lastcall.comment",
+    //                                 created_at: 1,
+    //                                 officer_id: 1,
+    //                                 country_interested:1,
+    //                                 officer_name: "$officer.name",
+    //                                 officer_staff_id: "$officer.officer_id",
+
+    //                                 // lastcall: 0 // Optional: expose if needed for frontend
+    //                             },
+    //                         },
+    //                     ],
+    //                     totalCount: [
+    //                         { $count: "count" },
+    //                     ],
+    //                 },
+    //             },
+    //         ]).toArray();
+
+    //         const leadsData = result[0]?.data || [];
+    //         const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+    //         return {
+    //             leads: leadsData,
+    //             limit: parsedLimit,
+    //             page: parsedPage,
+    //             totalMatch: totalCount,
+    //             totalPages: Math.ceil(totalCount / parsedLimit),
+    //         };
+
+    //     } catch (error) {
+    //         console.error('getFilteredLeads error:', error);
+    //         throw new Error('Server Error');
+    //     }
+    // },
+
     getMatchingClients: async (query, decoded) => {
         try {
             const {
                 page = 1,
                 limit = 10,
                 status,
-                qualifications ,
+                qualifications,
                 country,
                 searchString,
                 spe
-                
             } = query;
+
             const parsedPage = parseInt(page);
             const parsedLimit = parseInt(limit);
             const skip = (parsedPage - 1) * parsedLimit;
+
             const filter = {};
+
             // Officer filtering
             const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
             let officerIdList = [];
@@ -725,27 +863,24 @@ module.exports = {
                     ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
                     : [];
             }
-            if (isAdmin) {
-                // Admin: do not filter by officer_id (access all data)
-            } else if (officerIdList.length > 0) {
-                filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-            } else {
-                filter.officer_id = safeObjectId(decoded?._id);
+            if (!isAdmin) {
+                if (officerIdList.length > 0) {
+                    filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+                } else {
+                    filter.officer_id = safeObjectId(decoded?._id);
+                }
             }
 
             // Additional filters
             if (status) filter.status = status;
-            // if (profession) filter.profession = profession;
             if (qualifications) filter.qualification = qualifications;
             if (country) {
                 if (Array.isArray(country)) {
-                    filter.country_interested = Array.isArray(country) ? { $in: country } : country;
+                    filter.country_interested = { $in: country };
                 } else {
                     filter.country_interested = country;
                 }
             }
-
-            // Date filters: created_at or lastcall.next_schedule
 
             // Search text match
             if (searchString) {
@@ -757,14 +892,38 @@ module.exports = {
                     { email: { $regex: searchRegex } }
                 ];
             }
+
             const result = await db.get().collection(COLLECTION.LEADS).aggregate([
                 { $match: filter },
                 {
                     $unionWith: {
-                    coll: COLLECTION.CUSTOMERS, // second collection name
-                    pipeline: [
-                        { $match: filter }
-                    ]
+                        coll: COLLECTION.CUSTOMERS,
+                        pipeline: [{ $match: filter }]
+                    }
+                },
+                // 🔹 Lookup favourites across all vacancies
+                {
+                    $lookup: {
+                        from: COLLECTION.VACANCIES,
+                        let: { clientId: "$_id" },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $in: ["$$clientId", { $ifNull: ["$favList", []] }]
+                                    }
+                                }
+                            },
+
+                            { $project: { _id: 1 } }
+                        ],
+                        as: "favourites"
+                    }
+                },
+                // 🔹 Exclude clients who are in favList
+                {
+                    $match: {
+                        favourites: { $size: 0 }
                     }
                 },
                 {
@@ -797,24 +956,20 @@ module.exports = {
                                     branch: 1,
                                     service_type: 1,
                                     country_code: 1,
-                                    qualification:1,
+                                    qualification: 1,
                                     status: 1,
                                     lead_source: 1,
                                     next_schedule: "$lastcall.next_schedule",
                                     feedback: "$lastcall.comment",
                                     created_at: 1,
                                     officer_id: 1,
-                                    country_interested:1,
+                                    country_interested: 1,
                                     officer_name: "$officer.name",
                                     officer_staff_id: "$officer.officer_id",
-
-                                    // lastcall: 0 // Optional: expose if needed for frontend
                                 },
                             },
                         ],
-                        totalCount: [
-                            { $count: "count" },
-                        ],
+                        totalCount: [{ $count: "count" }],
                     },
                 },
             ]).toArray();
@@ -835,29 +990,28 @@ module.exports = {
             throw new Error('Server Error');
         }
     },
-   addClientToFavourites: (vacancyId, clientId) => {
+
+    addClientToFavourites: (vacancyId, clientId) => {
         const collection = db.get().collection(COLLECTION.VACANCIES);
         return new Promise((resolve, reject) => {
             collection.updateOne(
                 { _id: ObjectId(vacancyId) },
                 { $addToSet: { favList: ObjectId(clientId) } }
             )
-            .then(result =>{
+                .then(result => {
 
-                if(result.modifiedCount > 0)
-                {
-                    resolve(true); 
+                    if (result.modifiedCount > 0) {
+                        resolve(true);
+                    }
+                    else {
+                        reject("Error adding client to favourites");
+                    }
                 }
-                else
-                {
-                  reject("Error adding client to favourites");
-                }
-            }
-            )
-            .catch(err => {
-                console.error(err);
-                reject("Error adding client to favourites");
-            });
+                )
+                .catch(err => {
+                    console.error(err);
+                    reject("Error adding client to favourites");
+                });
         });
     },
 
@@ -868,106 +1022,104 @@ module.exports = {
                 { _id: ObjectId(vacancyId) },
                 { $pull: { favList: ObjectId(clientId) } }
             )
-            .then(result  =>{
+                .then(result => {
 
-                if(result.modifiedCount > 0)
-                {
-                    resolve(true); 
+                    if (result.modifiedCount > 0) {
+                        resolve(true);
+                    }
+                    else {
+                        reject("Error removing client from favourites");
+                    }
                 }
-                else
-                {
-                  reject("Error removing client from favourites");
-                }
-            }
-            ) // true if removed, false if not found
-            .catch(err => {
-                console.error(err);
-                reject("Error removing client from favourites");
-            });
+                ) // true if removed, false if not found
+                .catch(err => {
+                    console.error(err);
+                    reject("Error removing client from favourites");
+                });
         });
     },
 
     getFavouriteClients: (vacancyId) => {
-    const vacanciesCollection = db.get().collection(COLLECTION.VACANCIES);
-    return new Promise((resolve, reject) => {
-        vacanciesCollection.aggregate([
-            { $match: { _id: ObjectId(vacancyId) } },
-            { $project: { favList: 1 } },
-            { $unwind: "$favList" },
-            {
-                $lookup: {
-                    from: COLLECTION.LEADS,
-                    localField: "favList",
-                    foreignField: "_id",
-                    as: "leadMatch"
-                }
-            },
-            { $unwind: { path: "$leadMatch", preserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: COLLECTION.CUSTOMERS,
-                    localField: "favList",
-                    foreignField: "_id",
-                    as: "customerMatch"
-                }
-            },
-            { $unwind: { path: "$customerMatch", preserveNullAndEmptyArrays: true } },
-            {
-                $addFields: {
-                    client: {
-                        $cond: [
-                            { $ifNull: ["$leadMatch", false] },
-                            "$leadMatch",
-                            "$customerMatch"
-                        ]
+        const vacanciesCollection = db.get().collection(COLLECTION.VACANCIES);
+        return new Promise((resolve, reject) => {
+            vacanciesCollection.aggregate([
+                { $match: { _id: ObjectId(vacancyId) } },
+                { $project: { favList: 1 } },
+                { $unwind: "$favList" },
+                {
+                    $lookup: {
+                        from: COLLECTION.LEADS,
+                        localField: "favList",
+                        foreignField: "_id",
+                        as: "leadMatch"
                     }
-                }
-            },
-            { $match: { client: { $ne: null } } },
-            { $addFields: {reserveNullAndEmptyArrays: true } },
-            {
-                $lookup: {
-                    from: COLLECTION.OFFICERS,
-                    localField: "client.officer_id",
-                    foreignField: "_id",
-                    as: "officer"
-                }
-            },
-            { $unwind: { path: "$officer", preserveNullAndEmptyArrays: true } },
-            // Final projection
-            {
-                $project: {
-                    _id: "$client._id",
-                    client_id: "$client.client_id",
-                    name: "$client.name",
-                    email: "$client.email",
-                    phone: "$client.phone",
-                    branch: "$client.branch",
-                    service_type: "$client.service_type",
-                    country_code: "$client.country_code",
-                    qualification: "$client.qualification",
-                    status: "$client.status",
-                    lead_source: "$client.lead_source",
-                    next_schedule: "$lastcall.next_schedule",
-                    feedback: "$lastcall.comment",
-                    created_at: "$client.created_at",
-                    officer_id: "$client.officer_id",
-                    country_interested: "$client.country_interested",
-                    officer_name: "$officer.name",
-                    officer_staff_id: "$officer.officer_id"
-                }
-            },
-            // Sort newest first
-            { $sort: { created_at: -1 } }
-        ])
-        .toArray()
-        .then(result => resolve(result))
-        .catch(err => {
-            console.error(err);
-            reject("Error fetching favourite clients");
+                },
+                { $unwind: { path: "$leadMatch", preserveNullAndEmptyArrays: true } },
+                {
+                    $lookup: {
+                        from: COLLECTION.CUSTOMERS,
+                        localField: "favList",
+                        foreignField: "_id",
+                        as: "customerMatch"
+                    }
+                },
+                { $unwind: { path: "$customerMatch", preserveNullAndEmptyArrays: true } },
+                {
+                    $addFields: {
+                        client: {
+                            $cond: [
+                                { $ifNull: ["$leadMatch", false] },
+                                "$leadMatch",
+                                "$customerMatch"
+                            ]
+                        }
+                    }
+                },
+                { $match: { client: { $ne: null } } },
+                { $addFields: { reserveNullAndEmptyArrays: true } },
+                {
+                    $lookup: {
+                        from: COLLECTION.OFFICERS,
+                        localField: "client.officer_id",
+                        foreignField: "_id",
+                        as: "officer"
+                    }
+                },
+                { $unwind: { path: "$officer", preserveNullAndEmptyArrays: true } },
+                // Final projection
+                {
+                    $project: {
+                        _id: "$client._id",
+                        client_id: "$client.client_id",
+                        name: "$client.name",
+                        email: "$client.email",
+                        phone: "$client.phone",
+                        branch: "$client.branch",
+                        service_type: "$client.service_type",
+                        country_code: "$client.country_code",
+                        qualification: "$client.qualification",
+                        status: "$client.status",
+                        lead_source: "$client.lead_source",
+                        next_schedule: "$lastcall.next_schedule",
+                        feedback: "$lastcall.comment",
+                        created_at: "$client.created_at",
+                        officer_id: "$client.officer_id",
+                        country_interested: "$client.country_interested",
+                        officer_name: "$officer.name",
+                        officer_staff_id: "$officer.officer_id"
+                    }
+                },
+                // Sort newest first
+                { $sort: { created_at: -1 } }
+            ])
+                .toArray()
+                .then(result => resolve(result))
+                .catch(err => {
+                    console.error(err);
+                    reject("Error fetching favourite clients");
+                });
         });
-    });
-}
+    }
 
 
     // getFavouriteClients: (vacancyId) => {
