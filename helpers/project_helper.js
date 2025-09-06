@@ -706,16 +706,18 @@ module.exports = {
     //             page = 1,
     //             limit = 10,
     //             status,
-    //             qualifications ,
+    //             qualifications,
     //             country,
     //             searchString,
-    //             spe
-
+    //             totalexperience
     //         } = query;
+
     //         const parsedPage = parseInt(page);
     //         const parsedLimit = parseInt(limit);
     //         const skip = (parsedPage - 1) * parsedLimit;
+
     //         const filter = {};
+
     //         // Officer filtering
     //         const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
     //         let officerIdList = [];
@@ -725,27 +727,24 @@ module.exports = {
     //                 ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
     //                 : [];
     //         }
-    //         if (isAdmin) {
-    //             // Admin: do not filter by officer_id (access all data)
-    //         } else if (officerIdList.length > 0) {
-    //             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-    //         } else {
-    //             filter.officer_id = safeObjectId(decoded?._id);
+    //         if (!isAdmin) {
+    //             if (officerIdList.length > 0) {
+    //                 filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+    //             } else {
+    //                 filter.officer_id = safeObjectId(decoded?._id);
+    //             }
     //         }
 
     //         // Additional filters
     //         if (status) filter.status = status;
-    //         // if (profession) filter.profession = profession;
     //         if (qualifications) filter.qualification = qualifications;
     //         if (country) {
     //             if (Array.isArray(country)) {
-    //                 filter.country_interested = Array.isArray(country) ? { $in: country } : country;
+    //                 filter.country_interested = { $in: country };
     //             } else {
     //                 filter.country_interested = country;
     //             }
     //         }
-
-    //         // Date filters: created_at or lastcall.next_schedule
 
     //         // Search text match
     //         if (searchString) {
@@ -757,14 +756,38 @@ module.exports = {
     //                 { email: { $regex: searchRegex } }
     //             ];
     //         }
+
     //         const result = await db.get().collection(COLLECTION.LEADS).aggregate([
     //             { $match: filter },
     //             {
     //                 $unionWith: {
-    //                 coll: COLLECTION.CUSTOMERS, // second collection name
-    //                 pipeline: [
-    //                     { $match: filter }
-    //                 ]
+    //                     coll: COLLECTION.CUSTOMERS,
+    //                     pipeline: [{ $match: filter }]
+    //                 }
+    //             },
+    //             // 🔹 Lookup favourites across all vacancies
+    //             {
+    //                 $lookup: {
+    //                     from: COLLECTION.VACANCIES,
+    //                     let: { clientId: "$_id" },
+    //                     pipeline: [
+    //                         {
+    //                             $match: {
+    //                                 $expr: {
+    //                                     $in: ["$$clientId", { $ifNull: ["$favList", []] }]
+    //                                 }
+    //                             }
+    //                         },
+
+    //                         { $project: { _id: 1 } }
+    //                     ],
+    //                     as: "favourites"
+    //                 }
+    //             },
+    //             // 🔹 Exclude clients who are in favList
+    //             {
+    //                 $match: {
+    //                     favourites: { $size: 0 }
     //                 }
     //             },
     //             {
@@ -797,24 +820,20 @@ module.exports = {
     //                                 branch: 1,
     //                                 service_type: 1,
     //                                 country_code: 1,
-    //                                 qualification:1,
+    //                                 qualification: 1,
     //                                 status: 1,
     //                                 lead_source: 1,
     //                                 next_schedule: "$lastcall.next_schedule",
     //                                 feedback: "$lastcall.comment",
     //                                 created_at: 1,
     //                                 officer_id: 1,
-    //                                 country_interested:1,
+    //                                 country_interested: 1,
     //                                 officer_name: "$officer.name",
     //                                 officer_staff_id: "$officer.officer_id",
-
-    //                                 // lastcall: 0 // Optional: expose if needed for frontend
     //                             },
     //                         },
     //                     ],
-    //                     totalCount: [
-    //                         { $count: "count" },
-    //                     ],
+    //                     totalCount: [{ $count: "count" }],
     //                 },
     //             },
     //         ]).toArray();
@@ -845,63 +864,132 @@ module.exports = {
                 qualifications,
                 country,
                 searchString,
-                spe
+                totalexperience,
             } = query;
 
             const parsedPage = parseInt(page);
             const parsedLimit = parseInt(limit);
             const skip = (parsedPage - 1) * parsedLimit;
 
-            const filter = {};
+            // ========== COMMON FILTERS ==========
+            const commonFilters = {};
 
-            // Officer filtering
-            const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
-            let officerIdList = [];
-
-            if (!isAdmin) {
-                officerIdList = Array.isArray(decoded?.officers)
-                    ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
-                    : [];
+            if (status) {
+                commonFilters.status = status;
             }
-            if (!isAdmin) {
-                if (officerIdList.length > 0) {
-                    filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-                } else {
-                    filter.officer_id = safeObjectId(decoded?._id);
-                }
+            if (qualifications) {
+                commonFilters.qualification = qualifications;
             }
-
-            // Additional filters
-            if (status) filter.status = status;
-            if (qualifications) filter.qualification = qualifications;
             if (country) {
-                if (Array.isArray(country)) {
-                    filter.country_interested = { $in: country };
-                } else {
-                    filter.country_interested = country;
-                }
+                commonFilters.country_interested = Array.isArray(country) ? { $in: country } : country;
             }
-
-            // Search text match
             if (searchString) {
                 const searchRegex = new RegExp(searchString, "i");
-                filter.$or = [
+                commonFilters.$or = [
                     { phone: { $regex: searchRegex } },
                     { name: { $regex: searchRegex } },
                     { client_id: { $regex: searchRegex } },
-                    { email: { $regex: searchRegex } }
+                    { email: { $regex: searchRegex } },
                 ];
             }
+            // ========== LEADS SPECIFIC FILTERS ==========
+            const leadsFilters = { ...commonFilters };
+            // Officer filtering for leads only
+            const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
+            if (!isAdmin) {
+                const officerIdList = Array.isArray(decoded?.officers)
+                    ? decoded.officers.map((o) => safeObjectId(o?.officer_id)).filter(Boolean)
+                    : [];
+                if (officerIdList.length > 0) {
+                    leadsFilters.officer_id = {
+                        $in: [safeObjectId(decoded?._id), ...officerIdList],
+                    };
+                } else {
+                    leadsFilters.officer_id = safeObjectId(decoded?._id);
+                }
+            }
+        
+            // Experience filter for leads (direct field)
+            if (totalexperience) {
+                leadsFilters.experience = { $gte: parseInt(totalexperience) };
+            }
 
-            const result = await db.get().collection(COLLECTION.LEADS).aggregate([
-                { $match: filter },
+            // ========== CUSTOMERS SPECIFIC FILTERS ==========
+            const customersFilters = { ...commonFilters };
+            // No officer filtering for customers
+            // Experience filtering will be handled after calculation
+
+            // ========== AGGREGATION PIPELINE ==========
+            const pipeline = [
+
+                { $match: leadsFilters },
+                {
+                    $addFields: {
+                        data_source: "LEADS",
+                        total_experience_years: { $ifNull: ["$experience", 0] }
+                    }
+                },
+
+                // Union with CUSTOMERS collection
                 {
                     $unionWith: {
                         coll: COLLECTION.CUSTOMERS,
-                        pipeline: [{ $match: filter }]
+                        pipeline: [
+                            { $match: customersFilters },
+                            {
+                                $addFields: {
+                                    data_source: "CUSTOMERS",
+                                    // officer_id: null, // Customers don't have officers
+                                    // Calculate experience from first_job_date minus job gaps
+                                    total_experience_years: {
+                                        $cond: [
+                                            {
+                                                $and: [
+                                                    { $ne: ["$first_job_date", null] },
+                                                    { $ne: ["$first_job_date", ""] }
+                                                ]
+                                            },
+                                            {
+                                                $max: [
+                                                    {
+                                                        $floor: {
+                                                            $divide: [
+                                                                {
+                                                                    $subtract: [
+                                                                        // Total months worked
+                                                                        {
+                                                                            $divide: [
+                                                                                { $subtract: [new Date(), "$first_job_date"] },
+                                                                                1000 * 60 * 60 * 24 * 30.44 // Convert to months (average month)
+                                                                            ]
+                                                                        },
+                                                                        // Subtract job gap months
+                                                                        { $ifNull: ["$job_gap_months", 0] }
+                                                                    ]
+                                                                },
+                                                                12 // Convert months to years
+                                                            ]
+                                                        }
+                                                    },
+                                                    0 // Minimum 0 years
+                                                ]
+                                            },
+                                            0 // Default to 0 if no first_job_date
+                                        ]
+                                    }
+                                }
+                            },
+                            // Apply experience filter for customers after calculation
+                            ...(totalexperience ? [{
+                                $match: {
+                                    total_experience_years: { $gte: parseInt(totalexperience) }
+                                }
+                            }] : [])
+                        ]
                     }
                 },
-                // 🔹 Lookup favourites across all vacancies
+
+                //   // Remove records that are in favourites list
                 {
                     $lookup: {
                         from: COLLECTION.VACANCIES,
@@ -914,38 +1002,36 @@ module.exports = {
                                     }
                                 }
                             },
-
                             { $project: { _id: 1 } }
                         ],
                         as: "favourites"
                     }
                 },
-                // 🔹 Exclude clients who are in favList
-                {
-                    $match: {
-                        favourites: { $size: 0 }
-                    }
-                },
+                //   { $match: { favourites: { $size: 0 } } },
+
+                // Get paginated data and total count
                 {
                     $facet: {
                         data: [
                             { $sort: { created_at: -1 } },
                             { $skip: skip },
                             { $limit: parsedLimit },
+                            // Lookup officer details (will be null for customers)
                             {
                                 $lookup: {
                                     from: COLLECTION.OFFICERS,
                                     localField: "officer_id",
                                     foreignField: "_id",
-                                    as: "officer",
-                                },
+                                    as: "officer"
+                                }
                             },
                             {
                                 $unwind: {
                                     path: "$officer",
-                                    preserveNullAndEmptyArrays: true,
-                                },
+                                    preserveNullAndEmptyArrays: true
+                                }
                             },
+                            // Project final fields
                             {
                                 $project: {
                                     _id: 1,
@@ -964,32 +1050,52 @@ module.exports = {
                                     created_at: 1,
                                     officer_id: 1,
                                     country_interested: 1,
-                                    officer_name: "$officer.name",
-                                    officer_staff_id: "$officer.officer_id",
-                                },
-                            },
+                                    officer_name: { $ifNull: ["$officer.name", null] },
+                                    officer_staff_id: { $ifNull: ["$officer.officer_id", null] },
+                                    experience: "$total_experience_years",
+                                    data_source: 1,
+                                    // Include customer-specific fields for reference
+                                    first_job_date: 1,
+                                    job_gap_months: 1
+                                }
+                            }
                         ],
-                        totalCount: [{ $count: "count" }],
-                    },
-                },
-            ]).toArray();
+                        totalCount: [{ $count: "count" }]
+                    }
+                }
+            ];
 
-            const leadsData = result[0]?.data || [];
+            // ========== EXECUTE QUERY ==========
+            const result = await db
+                .get()
+                .collection(COLLECTION.LEADS)
+                .aggregate(pipeline)
+                .toArray();
+
+            const combinedData = result[0]?.data || [];
             const totalCount = result[0]?.totalCount?.[0]?.count || 0;
 
+            // ========== RETURN COMBINED RESULTS ==========
             return {
-                leads: leadsData,
+                leads: combinedData, // Contains both leads and customers
                 limit: parsedLimit,
                 page: parsedPage,
                 totalMatch: totalCount,
                 totalPages: Math.ceil(totalCount / parsedLimit),
+                summary: {
+                    leadsCount: combinedData.filter(item => item.data_source === "LEADS").length,
+                    customersCount: combinedData.filter(item => item.data_source === "CUSTOMERS").length
+                }
             };
 
         } catch (error) {
-            console.error('getFilteredLeads error:', error);
-            throw new Error('Server Error');
+            console.error("getMatchingClients error:", error);
+            throw new Error("Server Error");
         }
     },
+
+
+
 
     addClientToFavourites: (vacancyId, clientId) => {
         const collection = db.get().collection(COLLECTION.VACANCIES);
