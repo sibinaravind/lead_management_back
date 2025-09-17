@@ -34,7 +34,7 @@ const leadSchema = Joi.object({
     }, 'Custom Date Validator'),
     Joi.valid(null, "")
   ).required(),
-  matrial_status: Joi.string().optional().allow(null, ""),
+  marital_status: Joi.string().optional().allow(null, ""),
   address: Joi.string().optional().allow(null, ""),
   city: Joi.string().optional().allow(null, ""),
   state: Joi.string().optional().allow(null, ""),

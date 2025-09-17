@@ -646,7 +646,7 @@ createLead: async (details) => {
               {
                 $unwind: {
                   path: "$client",
-                  preserveNullAndEmptyArrays: true
+                  preserveNullAndEmptyArrays: false
                 }
               },
 
@@ -655,7 +655,7 @@ createLead: async (details) => {
                 $project: {
                   _id: 1,
                   type: 1,
-                  client_id: 1,
+                  client_id: "$client.client_id",
                   officer_id: 1,
                   recruiter_id: 1,
                   duration: 1,
@@ -664,20 +664,20 @@ createLead: async (details) => {
                   call_type: 1,
                   call_status: 1,
                   created_at: 1,
-
+                 
                   // Officer Info
                   officer_name: "$officer.name",
                   officer_staff_id: "$officer.officer_id",
                   officer_email: "$officer.email",
 
                   // Client Info
-                  client_name: "$client.name",
-                  client_email: "$client.email",
-                  client_phone: "$client.phone",
-                  client_status: "$client.status",
-                  client_branch: "$client.branch",
-                  client_lead_source: "$client.lead_source",
-                  client_service_type: "$client.service_type"
+                  name: "$client.name",
+                  email: "$client.email",
+                  phone: "$client.phone",
+                  status: "$client.status",
+                  branch: "$client.branch",
+                  lead_source: "$client.lead_source",
+                  service_type: "$client.service_type"
                 }
               }
             ],
