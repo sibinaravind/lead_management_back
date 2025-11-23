@@ -10,6 +10,22 @@ app.post("/insertLead", middleware.checkToken, (req, res) => {
     leadHelper.createLead(req.body)
   );
 });
+app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, async (req, res) => {
+  try {
+    console.log("Updating client required documents");
+    const result = await response.handle(res, () =>
+      leadHelper.uploadClientDocument(req.params.id, req.body)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+app.post("/bulkInsertLeads", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.bulkInsertLeads(req.body)
+  );
+});
 app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.editLead(req.params.id, req.body)
@@ -20,9 +36,16 @@ app.get("/getAllLeads", middleware.checkToken, (req, res) => {
     leadHelper.getAllLeads()
   );
 });
-app.get("/getAllDeadLeads", middleware.checkToken, (req, res) => {
+
+app.patch("/addProductInterested/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.getDeadLeads()
+    leadHelper.addProductInterested(req.params.id, req.body,req.decoded._id)
+  );
+});
+
+app.patch("/assign_officer", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.assignOfficerToLead(req.body.client_id, req.body.officer_id,req.body.comment, req.decoded._id)
   );
 });
 
@@ -31,37 +54,48 @@ app.get("/metaLead", middleware.checkToken, (req, res) => {
     metalead.fetchFormsAndLeadsInsert()
   );
 });
-app.patch("/restoreClientFromDead", middleware.checkToken, (req, res) => {
+
+app.get("/getLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.restoreClientFromDeadAndAssignOfficer(req.body,req.decoded._id)
+    leadHelper.getLeadDetails(req.params.id)
+  );
+});
+
+app.get("/search/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.searchLead(req.params.id)
   );
 });
 
 
-app.patch("/closeDeadLead", middleware.checkToken, (req, res) => {
+app.get("/interactions/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.permanentlyCloseDeadLead(req.body,req.decoded._id)
+    leadHelper.getLeadInteraction(req.params.id)
   );
 });
 
 
-app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
-  if (req.query.filterCategory == 'HISTORY') {
-      return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
-  }
-  else
-  {
-    return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
-  }
-});
+
+
+
+
+
+// app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
+//   if (req.query.filterCategory == 'HISTORY') {
+//       return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
+//   }
+//   else
+//   {
+//     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
+//   }
+// });
 
 app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
- 
     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
   
 });
 
-app.get("/getAllFilterdHistory", middleware.checkToken, async (req, res) => {
+app.get("/getCallFilteredHistory", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
 });
 

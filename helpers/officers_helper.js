@@ -7,8 +7,8 @@ const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 10;
 const  officerValidation= require('../validations/officerValidation');
 const validatePartial = require("../utils/validatePartial");
-const { off } = require('../routes/officers/officers_router');
-
+// const { off } = require('../routes/officers/officers_router');
+const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 module.exports = {
 loginOfficer: async (officer_id, password) => {
   const JWT_SECRET = process.env.JWT_SECRET ;
@@ -29,7 +29,7 @@ loginOfficer: async (officer_id, password) => {
         branch: officer.branch,
         officers: officer.officers || [],
       };
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '30m' });
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '300m' });
       // Exclude password from response
       const { password: pwd, ...officerData } = officer;
       officerData.token = token;
@@ -53,6 +53,13 @@ createOfficer : async (details) => {
           { phone: details.phone }
         ]
       });
+      var officerId = details.officer_id;
+      if (!officerId || officerId.trim() === "") {
+
+      const officerIdSeq = await getNextSequence("officer_id");
+      officerId = `AEOID${String(officerIdSeq).padStart(5, "0")}`;
+
+      }
       if (existingOfficer) return reject("Officer already exists with this officer id or phone")
       const allowedStatuses = ['ACTIVE', 'INACTIVE', 'BLOCKED'];
       if (!allowedStatuses.includes(details.status)) {
@@ -60,7 +67,7 @@ createOfficer : async (details) => {
       }
       const hashedPassword = await bcrypt.hash(details.password.toString(), SALT_ROUNDS);
       const officerData = {
-        officer_id: details.officer_id,
+        officer_id:officerId,
         name: details.name,
         status: details.status,
         phone: details.phone,
@@ -80,6 +87,7 @@ createOfficer : async (details) => {
       }
 
     } catch (err) {
+      console.error("Error inserting officer:", err);
       reject("Error processing request");
     }
   });
@@ -200,35 +208,6 @@ deleteOfficer: async (id) => {
 },
 
 
-// addOfficerUnderOfficer: async ( data) => {
-//   return new Promise(async (resolve, reject) => {
-//     try {
-//       if (!ObjectId.isValid(data.officer.officer_id)) {
-//         return reject("Invalid officer_id: must be a valid ");
-//       }
-//       data.officer.officer_id = new ObjectId(data.officer.officer_id);const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
-//         {
-//           _id: new ObjectId(data.lead_officer_id),
-//           "officers.officer_id": { $ne: data.officer.officer_id }  // Avoid duplicates
-//         },
-//         {
-//           $addToSet: { officers: data.officer }  // Add only if not present
-//         }
-//       );
-
-//       console.log("Update result:", result);
-
-//       if (result.modifiedCount > 0) {
-//         resolve("Officer added under officer");
-//       } else {
-//         reject("Officer already exists under this officer or lead officer not found");
-//       }
-//     } catch (error) {
-//       reject(error);
-//     }
-//   });
-// },
-
 addOfficerUnderOfficer: async (data) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -268,70 +247,6 @@ addOfficerUnderOfficer: async (data) => {
     }
   });
 },
-
-
-editOfficerLeadPermission: async (data) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-
-      const { lead_officer_id, officer } = data;
-
-      if (!lead_officer_id || !officer?.officer_id || typeof officer.edit_permission !== "boolean") {
-        return reject("Invalid input: lead_officer_id, officer_id, or edit_permission is missing or invalid.");
-      }
-
-      const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
-        {
-          _id: new ObjectId(lead_officer_id),
-          "officers.officer_id": officer.officer_id
-        },
-        {
-          $set: {
-            "officers.$.edit_permission": officer.edit_permission
-          }
-        }
-      );
-
-      if (result.modifiedCount > 0) {
-        resolve("Officer permission updated successfully.");
-      } else {
-        reject("Officer not found under this lead officer or permission unchanged.");
-      }
-    } catch (error) {
-      console.error("Error updating permission:", error);
-      reject("Failed to update officer permission.");
-    }
-  });
-},
-
-// deleteOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
-//   return new Promise(async (resolve, reject) => {
-//     try {
-//       if (!lead_officer_id || !officer_id) {
-//         return reject("Missing lead_officer_id or officer_id");
-//       }
-//       const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
-//         {
-//           _id: new ObjectId(lead_officer_id)
-//         },
-//         {
-//           $pull: {
-//             officers: { officer_id: officer_id }
-//           }
-//         }
-//       );
-
-//       if (result.modifiedCount > 0) {
-//         resolve("Officer removed successfully.");
-//       } else {
-//         reject("Officer not found under this lead officer.");
-//       }
-//     } catch (error) {
-//       console.error("Error removing officer:", error);
-//       reject("Failed to remove officer.");
-//     }
-//   });
-// },
 
 removeOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
   return new Promise(async (resolve, reject) => {
@@ -490,16 +405,6 @@ deleteRoundRobin: async (id) => {
     }
   });
 },
-// listAllRoundRobin: async () => {
-//   return new Promise(async (resolve, reject) => {
-//     try {
-//       const roundRobins = await db.get().collection(COLLECTION.ROUNDROBIN).find({}).toArray();
-//       resolve(roundRobins);
-//     } catch (error) {
-//       reject("Error fetching round robin data");
-//     }
-//   });
-// },
 
 listAllRoundRobin: async () => {
   return new Promise(async (resolve, reject) => {
@@ -589,6 +494,108 @@ removeStaffFromRoundRobin: async (data) => {
 
 }
 
+// addOfficerUnderOfficer: async ( data) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (!ObjectId.isValid(data.officer.officer_id)) {
+//         return reject("Invalid officer_id: must be a valid ");
+//       }
+//       data.officer.officer_id = new ObjectId(data.officer.officer_id);const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+//         {
+//           _id: new ObjectId(data.lead_officer_id),
+//           "officers.officer_id": { $ne: data.officer.officer_id }  // Avoid duplicates
+//         },
+//         {
+//           $addToSet: { officers: data.officer }  // Add only if not present
+//         }
+//       );
+
+//       console.log("Update result:", result);
+
+//       if (result.modifiedCount > 0) {
+//         resolve("Officer added under officer");
+//       } else {
+//         reject("Officer already exists under this officer or lead officer not found");
+//       }
+//     } catch (error) {
+//       reject(error);
+//     }
+//   });
+// },
+// listAllRoundRobin: async () => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       const roundRobins = await db.get().collection(COLLECTION.ROUNDROBIN).find({}).toArray();
+//       resolve(roundRobins);
+//     } catch (error) {
+//       reject("Error fetching round robin data");
+//     }
+//   });
+// },
+
+
+// editOfficerLeadPermission: async (data) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+
+//       const { lead_officer_id, officer } = data;
+
+//       if (!lead_officer_id || !officer?.officer_id || typeof officer.edit_permission !== "boolean") {
+//         return reject("Invalid input: lead_officer_id, officer_id, or edit_permission is missing or invalid.");
+//       }
+
+//       const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+//         {
+//           _id: new ObjectId(lead_officer_id),
+//           "officers.officer_id": officer.officer_id
+//         },
+//         {
+//           $set: {
+//             "officers.$.edit_permission": officer.edit_permission
+//           }
+//         }
+//       );
+
+//       if (result.modifiedCount > 0) {
+//         resolve("Officer permission updated successfully.");
+//       } else {
+//         reject("Officer not found under this lead officer or permission unchanged.");
+//       }
+//     } catch (error) {
+//       console.error("Error updating permission:", error);
+//       reject("Failed to update officer permission.");
+//     }
+//   });
+// },
+
+// deleteOfficerUnderOfficer: async (lead_officer_id, officer_id) => {
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       if (!lead_officer_id || !officer_id) {
+//         return reject("Missing lead_officer_id or officer_id");
+//       }
+//       const result = await db.get().collection(COLLECTION.OFFICERS).updateOne(
+//         {
+//           _id: new ObjectId(lead_officer_id)
+//         },
+//         {
+//           $pull: {
+//             officers: { officer_id: officer_id }
+//           }
+//         }
+//       );
+
+//       if (result.modifiedCount > 0) {
+//         resolve("Officer removed successfully.");
+//       } else {
+//         reject("Officer not found under this lead officer.");
+//       }
+//     } catch (error) {
+//       console.error("Error removing officer:", error);
+//       reject("Failed to remove officer.");
+//     }
+//   });
+// },
 
 
 //  listOfficers : async () => {

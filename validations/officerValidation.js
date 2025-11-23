@@ -2,7 +2,7 @@ const Joi = require('joi');
 
 const officerValidation = Joi.object({
   officer_id: Joi.string()
-    .required(),
+    .optional(),
   name: Joi.string().required(),
   gender: Joi.string().uppercase()
     .valid('MALE', 'FEMALE', 'OTHER')

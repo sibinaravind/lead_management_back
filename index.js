@@ -80,10 +80,10 @@ const routes = [
   { path: '/lead', route: require("./routes/officers/lead_router") },
   {path: '/campaign', route: require("./routes/officers/campaign_router") },
   {path: '/customer', route: require("./routes/officers/customer_interaction_router") },
-  {path: '/customer', route: require("./routes/officers/customer_router") },
-  {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
+  // {path: '/customer', route: require("./routes/officers/customer_router") },
+  // {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
   {path: '/announcement', route: require("./routes/officers/announcement_router") },
-  {path: '/cre', route: require("./routes/officers/cre_router") },
+  // {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") }
 ];
 
@@ -121,6 +121,10 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 
 // thinsg to do
 /*** 
+ billing page need registartion for non existing client 
+ will add tag to leads that they can add different tag to filter leads in future
+
+ need to convert unknown( got a call ) lead to lead with officer 
  check dead lead while insert lead
  filter admin call history with department like now admin will see all officers call history without cre or recruiter filter
  *    ***/

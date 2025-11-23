@@ -8,43 +8,55 @@ const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
 const { safeObjectId } = require('../utils/safeObjectId');
 const {callActivityValidation} = require('../validations/callActivityValidation'); 
+const removeEmptyFields = require('../utils/removeEmptyFields').removeEmptyFields; 
+const fileUploader = require('../utils/fileUploader');
+const path = require('path');
+var fs = require('fs');
 // Helper to get next sequence number
 module.exports = {
 createLead: async (details) => {
   return new Promise(async (resolve, reject) => {
     try {
-      // ✅ Validate input
-      const { error, value } = leadSchema.validate(details);
+      // Only validate and use fields that are present in details
+      var { error, value } = leadSchema.validate(details ) ;
+
       if (error) return reject("Validation failed: " + error.details[0].message);
+
+        value = Object.fromEntries(
+        Object.entries(value || {}).filter(([_, v]) =>
+          v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")
+        )
+      );
+
       const dbInstance = db.get();
       const leadsCol = dbInstance.collection(COLLECTION.LEADS);
       const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
       // ✅ Check for duplicates
       const collectionsToCheck = [
         leadsCol,
-        dbInstance.collection(COLLECTION.CUSTOMERS),
-        dbInstance.collection(COLLECTION.DEAD_LEADS),
+        // dbInstance.collection(COLLECTION.CUSTOMERS),
+        // dbInstance.collection(COLLECTION.DEAD_LEADS),
       ];
       for (const col of collectionsToCheck) {
-        const query = value.email?.trim()
-          ? { $or: [{ email: value.email }, { phone: value.phone }] }
-          : { phone: value.phone };
+        // const query = value.email?.trim()
+        //   ? { $or: [{ email: value.email }, { phone: value.phone }] }
+        //   : { phone: value.phone };
+
+            const query = { phone: value.phone };
 
         const exists = await col.findOne(query);
-        // if (exists) return reject("Client already exists");
+         if (exists) return reject("Client already exists");
       }
       // ✅ Generate client ID
       const leadIdSeq = await getNextSequence("lead_id");
       const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
-
       // ✅ Officer assignment
-      let assignedOfficer = 'UNASSIGNED';
-      if (!value.officer_id && value.service_type) {
+      let assignedOfficer = null;
+      if ((!value.officer_id || value.officer_id.trim() === "") && value.service_type) {
         const rrConfig = await dbInstance
           .collection(COLLECTION.ROUNDROBIN)
           .findOne({ name: value.service_type });
-  
-        if (rrConfig?.officers?.length > 0) {
+         if (rrConfig?.officers?.length > 0) {
           const { value: counter } = await dbInstance
             .collection(COLLECTION.COUNTER)
             .findOneAndUpdate(
@@ -52,7 +64,6 @@ createLead: async (details) => {
               { $inc: { sequence: 1 } },
               { upsert: true, returnDocument: "after" }
             );
-
           const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
           const selectedOfficerId = rrConfig.officers[officerIndex];
           assignedOfficer = await officersCol.findOne(
@@ -66,46 +77,30 @@ createLead: async (details) => {
           { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
         );
       }
-      // ✅ Recruiter logic
-      let recruiterIdValue = "UNASSIGNED";
-      if (
-        assignedOfficer?.designation?.includes(DESIGNATIONS.COUNSILOR)
-      ) {
-        recruiterIdValue = safeObjectId(assignedOfficer._id);
-      }
-      // ✅ Prepare insert data
-      value.branch = Array.isArray(assignedOfficer?.branch) && assignedOfficer.branch.length > 0
-        ? assignedOfficer.branch[0]
-        : value.branch || "AFFINIX";
       // ✅ Insert lead
       value.officer_id = assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED";
       value.status =  assignedOfficer
-          ? (value.status !== undefined && value.status !== null && value.status !== "" ? value.status : "HOT")
+          ? (value.status !== undefined && value.status !== null && value.status !== "" ? value.status : "NEW")
           : "UNASSIGNED"
       const result = await leadsCol.insertOne({
         client_id,
-        // officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
-        recruiter_id: recruiterIdValue,
-      
         ...value,
         created_at: new Date(),
+        updated_at: new Date(),
       });
-
       if (result.acknowledged) {
             if(value.officer_id) //for fix the error when officer_id not settting as ObjectId
             {
                 leadsCol.updateOne({ _id: result.insertedId }, { $set: { officer_id: safeObjectId(value.officer_id) } });
             }
-
-        await logActivity({
-          type: "customer_created",
-          client_id: result.insertedId,
-          recruiter_id: recruiterIdValue,
-          officer_id: assignedOfficer
-            ? safeObjectId(assignedOfficer._id)
-            : "UNASSIGNED",
-          comment: value.note || "",
-        });
+            await logActivity({
+              type: "customer_created",
+              client_id: result.insertedId,
+              officer_id: assignedOfficer
+                ? safeObjectId(assignedOfficer._id)
+                : "UNASSIGNED",
+              comment: value.note || "",
+            });
         return resolve(result.insertedId);
       } else {
         return reject("Insert failed");
@@ -118,7 +113,95 @@ createLead: async (details) => {
   });
   },
 
-  
+  bulkInsertLeads: async (leadsArray) => {
+    try {
+      if (!Array.isArray(leadsArray) || leadsArray.length === 0) {
+        throw new Error("Input must be a non-empty array");
+      }
+      const dbInstance = db.get();
+      const leadsCol = dbInstance.collection(COLLECTION.LEADS);
+      const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
+
+      const insertedIds = [];
+      for (const details of leadsArray) {
+        // Validate each lead
+        const { error, value } = leadSchema.validate(details);
+        if (error) continue; // Skip invalid leads
+
+        // Remove empty fields
+        const cleanValue = Object.fromEntries(
+          Object.entries(value || {}).filter(([_, v]) =>
+            v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")
+          )
+        );
+        // Check for duplicates by phone
+        const exists = await leadsCol.findOne({ phone: cleanValue.phone });
+        if (exists) continue; // Skip duplicates
+
+        // Generate client ID
+        const leadIdSeq = await getNextSequence("lead_id");
+        const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+
+        // Officer assignment
+        let assignedOfficer = null;
+        if ((!cleanValue.officer_id || cleanValue.officer_id.trim() === "") && cleanValue.service_type) {
+          const rrConfig = await dbInstance
+            .collection(COLLECTION.ROUNDROBIN)
+            .findOne({ name: cleanValue.service_type });
+          if (rrConfig?.officers?.length > 0) {
+            const { value: counter } = await dbInstance
+              .collection(COLLECTION.COUNTER)
+              .findOneAndUpdate(
+                { _id: `lead_roundrobin_${cleanValue.service_type}` },
+                { $inc: { sequence: 1 } },
+                { upsert: true, returnDocument: "after" }
+              );
+            const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
+            const selectedOfficerId = rrConfig.officers[officerIndex];
+            assignedOfficer = await officersCol.findOne(
+              { _id: safeObjectId(selectedOfficerId) },
+              { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+            );
+          }
+        } else if (cleanValue.officer_id) {
+          assignedOfficer = await officersCol.findOne(
+            { _id: safeObjectId(cleanValue.officer_id) },
+            { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+          );
+        }
+
+        cleanValue.officer_id = assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED";
+        cleanValue.status = assignedOfficer
+          ? (cleanValue.status !== undefined && cleanValue.status !== null && cleanValue.status !== "" ? cleanValue.status : "NEW")
+          : "UNASSIGNED";
+
+        const result = await leadsCol.insertOne({
+          client_id,
+          ...cleanValue,
+          created_at: new Date(),
+          updated_at: new Date(),
+        });
+
+        if (result.acknowledged) {
+          if (cleanValue.officer_id) {
+            leadsCol.updateOne({ _id: result.insertedId }, { $set: { officer_id: safeObjectId(cleanValue.officer_id) } });
+          }
+          await logActivity({
+            type: "customer_created",
+            client_id: result.insertedId,
+            officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
+            comment: cleanValue.note || "",
+          });
+          insertedIds.push(result.insertedId);
+        }
+      }
+      return { success: true, insertedIds };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  },
+
+
   editLead : async (leadId, updateData) => {
         try {
             // Validate input
@@ -130,29 +213,105 @@ createLead: async (details) => {
             if (updateResult.matchedCount === 0) {
             throw new Error("Lead not found");
             }
-
             return { success: true, message: "Lead updated successfully" };
-
         } catch (err) {
             return { success: false, error: err.message };
         }
   },
+
+
+  uploadClientDocument: (id, { doc_type, base64 }) => {
+          let filePath = null;
+          console.log("Starting document upload for lead ID:", id);
+          return new Promise(async (resolve, reject) => {
+              try {
+                  if (!doc_type || !base64) {
+                      return reject("Missing required fields for document upload.");
+                  }
+                  const collection = db.get().collection(COLLECTION.LEADS);
+                  // 🔍 Check if document with this type already exists
+                  const existing = await collection.findOne(
+                      { _id: ObjectId(id), "documents.doc_type": doc_type },
+                      { projection: { "documents.$": 1 } }
+                  );
+
+                  let oldFilePath = null;
+                  if (existing?.documents?.[0]?.file_path) {
+                      oldFilePath = existing.documents[0].file_path;
+                  }
+  
+                  // 📂 Save the new file
+                  filePath = await fileUploader.processAndStoreBase64File({
+                      base64Data: base64,
+                      originalName: doc_type,
+                      clientName: `client_${id}`,
+                      uploadsDir: "uploads/client_documents"
+                  });
+  
+                  let updateResult;
+  
+                  if (existing) {
+                      // 📝 Update existing document
+                      updateResult = await collection.updateOne(
+                          { _id: ObjectId(id), "documents.doc_type": doc_type },
+                          {
+                              $set: {
+                                  "documents.$.file_path": filePath,
+                                  "documents.$.uploaded_at": new Date(),
+                                  updated_at: new Date()
+                              }
+                          }
+                      );
+                  } else {
+                    console.log("Adding new document entry for doc_type:", doc_type);
+                      // ➕ Add new document entry if it doesn't exist
+                      updateResult = await collection.updateOne(
+                          { _id: ObjectId(id) },
+                          {
+                              $push: {
+                                  documents: {
+                                      doc_type,
+                                      file_path: filePath,
+                                      uploaded_at: new Date()
+                                  }
+                              },
+                              $set: { updated_at: new Date() }
+                          }
+                      );
+                  }
+  
+                  console.log("Update Result:", updateResult);
+  
+                  if (updateResult.matchedCount === 0) {
+                      // Rollback uploaded file if DB update fails
+                      if (filePath) {
+                          await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                      }
+                      return reject(`Failed to update or add document for "${doc_type}".`);
+                  }
+  
+                  // 🗑️ Remove old file if replaced
+                  if (oldFilePath) {
+                      await fs.promises.unlink(path.resolve(oldFilePath)).catch((err) => {
+                          console.warn("Failed to remove old file:", err.message);
+                      });
+                  }
+  
+                  resolve({ success: true, file_path: filePath });
+              } catch (err) {
+                  console.log("Error occurred while uploading document:", err);
+                  // Rollback uploaded file if error
+                  if (filePath) {
+                      await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                  }
+                  reject("Error uploading document: " + (err.message || err));
+              }
+          });
+      },
     // Get all leads/clients with flexible filtering
   getAllLeads: async (filters) => {
         return new Promise(async (resolve, reject) => {
-            try {
-                
-                // const query = {};
-                // Object.keys(filters).forEach(key => {
-                //     if (Array.isArray(filters[key]) && filters[key].length > 0) {
-                //         // If the filter value is an array, use $in operator
-                //         query[key] = { $in: filters[key] };
-                //     } else if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
-                //         // For single value filters
-                //         query[key] = filters[key];
-                //     }
-                // });
-
+            try {   
                 // Project only basic information
                 const LEADS = await db.get().collection(COLLECTION.LEADS).find().project( {
                     _id: 1,
@@ -173,14 +332,233 @@ createLead: async (details) => {
             }
         });
     },
+
+    getLeadDetails: async (leadId) => {
+      try {
+        const lead = await db.get().collection(COLLECTION.LEADS).findOne({ _id: ObjectId(leadId) });
+        if (!lead) throw new Error("Lead not found");
+        return lead;
+      } catch (err) {
+        throw new Error("Error fetching lead details");
+      }
+    },
+
+    searchLead: async (query) => {
+        try {
+          if (!query) {
+            return [];
+          }
+          const searchQuery = {
+            $or: [
+              { phone: { $regex: query, $options: 'i' } },
+              { name: { $regex: query, $options: 'i' } },
+              { email: { $regex: query, $options: 'i' } },
+              { client_id: { $regex: query, $options: 'i' } }
+            ]
+          };
+          const projection = {
+            _id: 1,
+            client_id: 1,
+            name: 1,
+            email: 1,
+            phone: 1,
+            service_type: 1,
+            country_code: 1,
+            status: 1,
+            lead_source: 1,
+            officer_id: 1,
+            created_at: 1
+          };
     
+          // Search all collections in parallel
+          const [leads] = await Promise.all([
+            db.get().collection(COLLECTION.LEADS).find(searchQuery, { projection }).toArray(),
+         
+          ]);
+    
+          // Combine and return all results
+          return [...leads];
+        } catch (err) {
+          console.error("Error searching customer:", err);
+          throw new Error("Error searching customer");
+        }
+      },
+
+
+      getLeadInteraction: async (id) => {
+            try {
+                    const result = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).aggregate([
+                        { $match: { client_id: ObjectId(id) } },
+                        { $sort: { created_at: -1 } },
+                        {
+                            $lookup: {
+                                from: COLLECTION.OFFICERS,
+                                localField: "officer_id",
+                                foreignField: "_id",
+                                as: "officer_details"
+                            }
+                        },
+                        { $unwind: { path: "$officer_details", preserveNullAndEmptyArrays: true } },
+                        {
+                            $project: {
+                                _id: 1,
+                                type: 1,
+                                client_id: 1,
+                                duration: 1,
+                                next_schedule: 1,
+                                referrer_id: 1,
+                                next_shedule_time: 1,
+                                comment: 1,
+                                call_type: 1,
+                                call_status: 1,
+                                created_at: 1,
+                                officer: {
+                                    $ifNull: [
+                                        {
+                                            _id: "$officer_details._id",
+                                            name: "$officer_details.name",
+                                            email: "$officer_details.email",
+                                            phone: "$officer_details.phone",
+                                            officer_id: "$officer_details.officer_id",
+                                            designation: "$officer_details.designation",
+                                            // Add other officer fields you need
+                                        },
+                                        null
+                                    ]
+                                }
+                            }
+                        }
+                    ]).toArray();
+        
+                    return result;
+                } catch (err) {
+                    console.error("Error fetching call logs with officer details:", err);
+                    throw new Error("Error fetching call logs with officer details");
+                }
+    },
+
+
+     assignOfficerToLead: async (clientId, officerId, comment, assignedby) => {
+        return new Promise(async (resolve, reject) => {
+          try {
+            if (!clientId || !officerId) {
+              return reject("Client ID and Officer ID are required");
+            }
+            const clientObjectId = new ObjectId(clientId);
+            const officerObjectId = new ObjectId(officerId);
+            const leadsCollection = db.get().collection(COLLECTION.LEADS);
+            const officersCollection = db.get().collection(COLLECTION.OFFICERS);
+    
+            // Fetch officer details
+            const assignedOfficer = await officersCollection.findOne(
+              { _id: officerObjectId },
+              {
+                projection: {
+                  name: 1,
+                  officer_id: 1,
+                  email: 1,
+                  designation: 1,
+                  branch: 1
+                }
+              }
+            );
+    
+            if (!assignedOfficer) {
+              return reject("Assigned officer not found");
+            }
+
+            // Try updating in LEADS collection
+            let updateResult = await leadsCollection.findOneAndUpdate(
+              { _id: clientObjectId },
+              { $set: {
+              officer_id: officerObjectId
+             } }  ,
+              { returnDocument: 'after' }
+            );
+           
+            if (!updateResult.value) {
+              return reject("Client not found in  LEADS");
+            }
+            await logActivity({
+              type: 'assign_officer',
+              client_id: clientObjectId,
+              assigned_by: assignedby,
+              officer_id: officerObjectId,
+              comment: comment || null
+            });
+            return resolve("Officer assigned successfully");
+    
+          } catch (err) {
+            console.error(err);
+            return reject("Error assigning officer to lead");
+          }
+        });
+    },
+    
+     
+
+    addProductInterested: async (leadId, productData ,officer_id) => {
+      try {
+        const leadsCol = db.get().collection(COLLECTION.LEADS);
+        // Check if product already exists for this lead
+        const lead = await leadsCol.findOne({ _id: ObjectId(leadId) });
+        if (!lead) throw new Error("Lead not found");
+        let updateQuery;
+        const existingProduct = (lead.product_interested || []).find(
+          p => p.product_id === productData.product_id
+        );
+        if (existingProduct) {
+          updateQuery = {
+            $push: {
+              "product_interested.$[prod].offers": { ...productData.offers[0] }
+            }
+          };
+          const arrayFilters = [{ "prod.product_id": productData.product_id }];
+          await leadsCol.updateOne(
+            { _id: ObjectId(leadId) },
+            updateQuery,
+            { arrayFilters }
+          );
+        } else {
+          // If product not exists, add new product_interested entry
+          await leadsCol.updateOne(
+            { _id: ObjectId(leadId) },
+            {
+              $push: {
+                product_interested: {
+                  product_id: productData.product_id,
+                  product_name: productData.product_name,
+                  offers: productData.offers
+                }
+              }
+            }
+          );
+        }
+        logActivity({
+            type: "showed_product_interest",
+            client_id:safeObjectId(lead._id),
+            officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
+            referrer_id:safeObjectId(productData.product_id),
+            comment:" Interested in product: " + productData.product_name + " , offered: " + (productData.offers[0]?.offer_price || "") + " Negotiating to " + (productData.offers[0]?.demanding_price || ""),
+        });
+
+        return { success: true, message: "Product interested updated" };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    },
+
+
+
+    
+
     // db.leads.createIndex({ officer_id: 1 }); //tst add index to all  primary fields
     // db.leads.createIndex({ status: 1 });
     // db.leads.createIndex({ service_type: 1 });
     // db.leads.createIndex({ created_at: -1 });
 
-   getLeadCountByCategory: async (decoded, query) => {
-        const { designation, employee } = query;
+   getLeadCountByCategory: async (decoded, query) => { // will show count of leads based on categories like all, new, today, tomorrow, Negotiating ,upcoming, unallocated, dead , converted
+        const {  employee } = query;
         try {
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
           const filter = {};
@@ -192,25 +570,13 @@ createLead: async (details) => {
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
            }else if (isAdmin) {
-               if (designation && typeof designation === 'string') {
-                let matchDesignations = [];
-                if (designation === 'CRE') {
-                  matchDesignations = [DESIGNATIONS.CRE];
-                } else if (designation === 'RECRUITER') {
-                  matchDesignations = [DESIGNATIONS.COUNSILOR ,DESIGNATIONS.ADMIN];
-                }
-
-                if (matchDesignations.length > 0) {
-                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                    .find() 
                     .project({ _id: 1 })
                     .toArray();
-
                   const officerIds = officerList.map(officer => officer._id);
                   filter.officer_id = { $in: officerIds };
-                }
-            
-          }
+ 
         }
         // console.log("Filter for lead count:", filter);
             // if (isAdmin) return {};
@@ -231,6 +597,10 @@ createLead: async (details) => {
               $facet: {
                 TOTAL: [{ $count: "count" }],
                 NEW: [{ $match: { status: "HOT" } }, { $count: "count" }],
+                UNASSIGNED: [{ $match: { status: "UNASSIGNED" } }, { $count: "count" }],
+                NEGOTIATING: [{ $match: { status: "NEGOTIATING" } }, { $count: "count" }],
+                DEAD: [{ $match: { status: "DEAD" } }, { $count: "count" }],
+                CONVERTED: [{ $match: { status: "CONVERTED" } }, { $count: "count" }],
                 TODAY: [{
                   $match: {
                     [dateField]: { $gte: today, $lt: tomorrow }
@@ -258,10 +628,10 @@ createLead: async (details) => {
           const counts = leadResult[0] || {};
           const getCountVal = (key) => (counts[key]?.[0]?.count ?? 0);
           // ✅ Replace expensive distinct with fast countDocuments
-          const historyCount = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).countDocuments({
-            created_at: { $gte: today, $lt: tomorrow },
-            ...filter
-          });
+          // const historyCount = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).countDocuments({
+          //   created_at: { $gte: today, $lt: tomorrow },
+          //   ...filter
+          // });
           return {
             TOTAL: getCountVal("TOTAL"),
             NEW: getCountVal("NEW"),
@@ -269,15 +639,19 @@ createLead: async (details) => {
             TOMORROW: getCountVal("TOMORROW"),
             UPCOMING: getCountVal("UPCOMING"),
             PENDING: getCountVal("PENDING"),
-            HISTORY: historyCount
+            UNASSIGNED: getCountVal("UNASSIGNED"),
+            NEGOTIATING: getCountVal("NEGOTIATING"),
+            DEAD: getCountVal("DEAD"),
+            CONVERTED: getCountVal("CONVERTED"),
+            // HISTORY: historyCount
           };
         } catch (err) {
           console.error("getLeadCountByCategory error:", err);
           throw new Error("Server Error");
         }
-    },
+  },
 
-    getFilteredLeads: async (query, decoded) => {
+  getFilteredLeads: async (query, decoded) => { //  all, new, today, tomorrow, Negotiating ,upcoming, unallocated, dead , converted
         try {
           const {
             filterCategory,
@@ -287,13 +661,12 @@ createLead: async (details) => {
             branch,
             employee,
             serviceType,
-            profession,
+            intrestedIn,
             leadSource,
             campagin,
             startDate,
             endDate,
             searchString,
-            designation
           } = query;
           const parsedPage = parseInt(page);
           const parsedLimit = parseInt(limit);
@@ -302,7 +675,6 @@ createLead: async (details) => {
           // Officer filtering
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
           let officerIdList = [];
-
           if (!isAdmin) {
             officerIdList = Array.isArray(decoded?.officers)
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
@@ -310,70 +682,35 @@ createLead: async (details) => {
           }
         if (filterCategory === 'UNASSIGNED') {
             filter.officer_id = 'UNASSIGNED';
-
           } else if (employee) {
               filter.officer_id = safeObjectId(employee);
-            // const empId = safeObjectId(employee);
-            // filter.$or = [
-            //   { officer_id: empId },
-            //   { recruiter_id: empId }
-            // ];
           } else if (isAdmin) {
-              if (designation && typeof designation === 'string') {
-                let matchDesignations = [];
-                if (designation === 'CRE') {
-                  matchDesignations = ['CRE'];
-                } else if (designation === 'RECRUITER') {
-                  matchDesignations = ['COUNSILOR'];
-                }
-
-                if (matchDesignations.length > 0) {
                   const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                    .find() // works if designation is an array
                     .project({ _id: 1 })
                     .toArray();
-
                   const officerIds = officerList.map(officer => officer._id);
                   filter.officer_id = { $in: officerIds };
-                }
-            
-          }
           } else if (officerIdList.length > 0) {
              filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-            // const ids = [safeObjectId(decoded?._id), ...officerIdList];
-
-            // filter.$or = [
-            //   { officer_id: { $in: ids } },
-            //   { recruiter_id: { $in: ids } }
-            // ];
-
           } else {
              filter.officer_id = safeObjectId(decoded?._id);
-            // const userId = safeObjectId(decoded?._id);
-
-            // filter.$or = [
-            //   { officer_id: userId },
-            //   { recruiter_id: userId }
-            // ];
           }
-
-
-          if (filterCategory === 'NEW') {
-            filter.status =  STATUSES.HOT;
-          } 
-          else if (status) {
+           if (['NEW', 'CONVERTED', 'DEAD', 'NEGOTIATING'].includes(filterCategory)) { 
+             filter.status = filterCategory;
+           }
+           else if(status)
+           {
             filter.status = status;
-          }
-
+           }
           // Additional filters
           if (branch) filter.branch = branch;
           if (serviceType) filter.service_type = serviceType;
-          if (profession) filter.profession = profession;
+          if (intrestedIn) filter.interested_in = { $in: Array.isArray(intrestedIn) ? intrestedIn : [intrestedIn] };
           if (leadSource) filter.lead_source = leadSource;
-          if (campagin) filter.campagin = campagin;
+          if (campagin) filter.source_campaign = campagin;
 
           // Date filters: created_at or lastcall.next_schedule
-       
 
           let dateField = 'created_at';
           let start = null;
@@ -404,17 +741,14 @@ createLead: async (details) => {
               end = new Date(dayAfterTomorrow);
               end.setMilliseconds(-1);
             } else if (filterCategory === 'PENDING') {
-
                 start = startDate ? parseDate(startDate) : null;
                 end = endDate ? parseDate(endDate) : new Date(today);
-
                 if (end && !isNaN(end)) {
                   end.setHours(23, 59, 59, 999);
                 }
-              } else if (filterCategory === 'UPCOMING') {
+            } else if (filterCategory === 'UPCOMING') {
                 start = startDate ? parseDate(startDate) : new Date(dayAfterTomorrow);
                 end = endDate ? parseDate(endDate) : null;
-
                 if (end && !isNaN(end)) {
                   end.setHours(23, 59, 59, 999);
                 }
@@ -483,12 +817,16 @@ createLead: async (details) => {
                       country_code: 1,
                       status: 1,
                       lead_source: 1,
+                      interested_in: 1,
                       next_schedule: "$lastcall.next_schedule",
-                      feedback: "$lastcall.comment",
+                      last_call_comment: "$lastcall.comment",
+                      feedback:1,
                       created_at: 1,
                       officer_id: 1,
                       officer_name: "$officer.name",
                       officer_staff_id: "$officer.officer_id",
+                      dead_lead_reason: 1,
+                      source_campaign: 1,
                       // lastcall: 0 // Optional: expose if needed for frontend
                     },
                   },
@@ -512,12 +850,11 @@ createLead: async (details) => {
           };
 
         } catch (error) {
-          console.error('getFilteredLeads error:', error);
           throw new Error('Server Error');
         }
   },  
 
-   getCallHistoryWithFilters: async (query, decoded, ) => {
+   getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
         try {
           const {
             page = 1,
@@ -529,7 +866,6 @@ createLead: async (details) => {
             endDate,
             searchString,
             status,
-            designation
           } = query;
 
           const parsedPage = parseInt(page);
@@ -553,30 +889,17 @@ createLead: async (details) => {
               filter.officer_id = safeObjectId(decoded?._id);
             }
           }else if (isAdmin) {
-              if (designation && typeof designation === 'string') {
-                let matchDesignations = [];
-                if (designation === 'CRE') {
-                  matchDesignations = ['CRE'];
-                } else if (designation === 'RECRUITER') {
-                  matchDesignations = ['COUNSILOR'];
-                }
-
-                if (matchDesignations.length > 0) {
-                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find({ designation: { $in: matchDesignations } }) // works if designation is an array
+                const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                    .find() // works if designation is an array
                     .project({ _id: 1 })
                     .toArray();
-
                   const officerIds = officerList.map(officer => officer._id);
                   filter.officer_id = { $in: officerIds };
-                }
-              }
           }
           // Additional filters
-         
           if (callType) filter.call_type = callType;
           if (callStatus) filter.call_status = callStatus;
-           if (status) filter.status = status;
+           
           // Date range filtering
           if (startDate || endDate) {
             const parseDate = (str) => {
@@ -598,14 +921,6 @@ createLead: async (details) => {
                 filter.created_at.$lte = end;
               }
             }
-          }
-          // Search
-          if (searchString) {
-            const regex = new RegExp(searchString, 'i');
-            filter.$or = [
-              { phone: { $regex: regex } },
-              { client_id: { $regex: regex } }
-            ];
           }
 
         const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
@@ -635,25 +950,45 @@ createLead: async (details) => {
               },
 
               // Lookup Client Details
-              {
+                {
                 $lookup: {
                   from: COLLECTION.LEADS,
                   localField: "client_id",
                   foreignField: "_id", // Assuming client_id is an ObjectId
-                  as: "client"
-                }
-              },
-              {
-                $unwind: {
-                  path: "$client",
-                  preserveNullAndEmptyArrays: false
-                }
-              },
+                    pipeline: [
+                    //for status
+                    ...(status
+                      ? [{ $match: { status: status } }]
+                      : []
+                    ),
+                    //for search
+                    ...(searchString
+                      ? [{
+                        $match: {
+                        $or: [
+                          { phone: { $regex: new RegExp(searchString, 'i') } },
+                          { client_id: { $regex: new RegExp(searchString, 'i') } }
+                        ]
+                        }
+                      }]
+                      : []
+                    )
+                    ],
+                    as: "client"
+                    }
+                    },
+                    {
+                    $unwind: {
+                    path: "$client",
+                    preserveNullAndEmptyArrays: false
+                    }
+                    },
+               
 
               // Final Project
               {
                 $project: {
-                  _id: 1,
+                  _id:"$client._id",
                   type: 1,
                   client_id: "$client.client_id",
                   officer_id: 1,
@@ -664,12 +999,10 @@ createLead: async (details) => {
                   call_type: 1,
                   call_status: 1,
                   created_at: 1,
-                 
                   // Officer Info
                   officer_name: "$officer.name",
                   officer_staff_id: "$officer.officer_id",
                   officer_email: "$officer.email",
-
                   // Client Info
                   name: "$client.name",
                   email: "$client.email",
@@ -677,7 +1010,8 @@ createLead: async (details) => {
                   status: "$client.status",
                   branch: "$client.branch",
                   lead_source: "$client.lead_source",
-                  service_type: "$client.service_type"
+                  service_type: "$client.service_type",
+                  interested_in: "$client.interested_in",
                 }
               }
             ],
@@ -702,381 +1036,6 @@ createLead: async (details) => {
           throw new Error("Server Error");
         }
     },
-    getDeadLeads: async () => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const LEADS = await db.get().collection(COLLECTION.DEAD_LEADS).find({ status: "DEAD" }).project( {
-                    _id: 1,
-                    client_id: 1,
-                    name: 1,
-                    email: 1,
-                    country_code: 1,
-                    phone: 1,
-                    service_type: 1,
-                    status: 1,
-                    lead_source: 1,
-                    officer_id: 1,
-                    created_at: 1,
-                    dead_lead_reason: 1,
-                    moved_to_dead_at: 1,
-                }).toArray();
-                resolve(LEADS);
-            } catch (err) {
-                console.error(err);
-                reject("Error fetching LEADS");
-            }
-        });
-    },
-     getFilteredDeadLeads: async (query, decoded) => {
-        try {
-          const {
-            filterCategory,
-            page = 1,
-            limit = 10,
-            branch,
-            employee,
-            serviceType,
-            profession,
-            leadSource,
-            campagin,
-            startDate,
-            endDate,
-            searchString,
-          } = query;
-
-          const parsedPage = parseInt(page);
-          const parsedLimit = parseInt(limit);
-          const skip = (parsedPage - 1) * parsedLimit;
-          const filter = {};
-
-          // Officer filtering
-          const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
-          let officerIdList = [];
-
-          if (!isAdmin) {
-            officerIdList = Array.isArray(decoded?.officers)
-              ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
-              : [];
-          }
-        if (filterCategory === 'UNASSIGNED') {
-            filter.officer_id = 'UNASSIGNED';
-          } else if (employee) {
-              filter.officer_id = safeObjectId(employee);
-          } else if (isAdmin) {
-            
-          } else if (officerIdList.length > 0) {
-             filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-          
-          } else {
-             filter.officer_id = safeObjectId(decoded?._id);
-          }
-        
-          filter.status = STATUSES.DEAD;
-          
-          // Additional filters
-          if (branch) filter.branch = branch;
-          if (serviceType) filter.service_type = serviceType;
-          if (profession) filter.profession = profession;
-          if (leadSource) filter.lead_source = leadSource;
-          if (campagin) filter.campagin = campagin;
-
-          // Date filters: created_at or lastcall.next_schedule
-          let dateField = 'moved_to_dead_at';
-          let start = null;
-          let end = null;
-          const parseDate = (str) => {
-          if (!str) return null;
-          const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
-          if (match) {
-            return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
-          }
-          return new Date(str);
-        };
-          // Override for filterCategory
-          if (['TODAY', 'TOMORROW', 'PENDING', 'UPCOMING'].includes(filterCategory)) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const tomorrow = new Date(today);
-            tomorrow.setDate(today.getDate() + 1);
-            const dayAfterTomorrow = new Date(tomorrow);
-            dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
-            dateField = 'lastcall.next_schedule';
-            if (filterCategory === 'TODAY') {
-              start = new Date(today);
-              end = new Date(tomorrow);
-              end.setMilliseconds(-1);
-            } else if (filterCategory === 'TOMORROW') {
-              start = new Date(tomorrow);
-              end = new Date(dayAfterTomorrow);
-              end.setMilliseconds(-1);
-            } else if (filterCategory === 'PENDING') {
-
-                start = startDate ? parseDate(startDate) : null;
-                end = endDate ? parseDate(endDate) : new Date(today);
-
-                if (end && !isNaN(end)) {
-                  end.setHours(23, 59, 59, 999);
-                }
-              } else if (filterCategory === 'UPCOMING') {
-                start = startDate ? parseDate(startDate) : new Date(dayAfterTomorrow);
-                end = endDate ? parseDate(endDate) : null;
-                if (end && !isNaN(end)) {
-                  end.setHours(23, 59, 59, 999);
-                }
-            }
-          } else if (startDate || endDate) {
-            // Parse date from DD/MM/YYYY or ISO
-            start = startDate ? parseDate(startDate) : null;
-            end = endDate ? parseDate(endDate) : null;
-            if (end && !isNaN(end)) end.setHours(23, 59, 59, 999);
-          }
-          if (start || end) {
-            filter[dateField] = {};
-            if (start && !isNaN(start)) filter[dateField].$gte = start;
-            if (end && !isNaN(end)) filter[dateField].$lte = end;
-            // Cleanup if empty
-            if (Object.keys(filter[dateField]).length === 0) {
-              delete filter[dateField];
-            }
-          }
-          // Search text match
-          if (searchString) {
-            const searchRegex = new RegExp(searchString, "i");
-            filter.$or = [
-              { phone: { $regex: searchRegex } },
-              { name: { $regex: searchRegex } },
-              { client_id: { $regex: searchRegex } },
-              { email: { $regex: searchRegex } }
-            ];
-          }
-          const leadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-
-          const result = await leadsCollection.aggregate([
-            { $match: filter },
-            {
-              $facet: {
-                data: [
-                  { $sort: { created_at: -1 } },
-                  { $skip: skip },
-                  { $limit: parsedLimit },
-                  {
-                    $lookup: {
-                      from: COLLECTION.OFFICERS,
-                      localField: "officer_id",
-                      foreignField: "_id",
-                      as: "officer",
-                    },
-                  },
-                  {
-                    $unwind: {
-                      path: "$officer",
-                      preserveNullAndEmptyArrays: true,
-                    },
-                  },
-                  {
-                    $project: {
-                      _id: 1,
-                      client_id: 1,
-                      name: 1,
-                      email: 1,
-                      phone: 1,
-                      branch: 1,
-                      service_type: 1,
-                      country_code: 1,
-                      status: 1,
-                      lead_source: 1,
-                      dead_lead_reason:1,
-                      moved_to_dead_at: 1,
-                      next_schedule: "$lastcall.next_schedule",
-                      feedback: "$lastcall.comment",
-                      created_at: 1,
-                      officer_id: 1,
-                      officer_name: "$officer.name",
-                      officer_staff_id: "$officer.officer_id",
-                      // lastcall: 0 // Optional: expose if needed for frontend
-                    },
-                  },
-                ],
-                totalCount: [
-                  { $count: "count" },
-                ],
-              },
-            },
-          ]).toArray();
-          const leadsData = result[0]?.data || [];
-          const totalCount = result[0]?.totalCount?.[0]?.count || 0;
-          return {
-            leads: leadsData,
-            limit: parsedLimit,
-            page: parsedPage,
-            totalMatch: totalCount,
-            totalPages: Math.ceil(totalCount / parsedLimit),
-          };
-
-        } catch (error) {
-          console.error('getFilteredLeads error:', error);
-          throw new Error('Server Error');
-        }
-  },  
-
-  restoreClientFromDeadAndAssignOfficer : async (body, req_officer_id) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const {
-        client_id: deadClientId,
-        officer_id,
-        client_status,
-        ...callLogData
-      } = body;
-      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-      const leadsCollection = db.get().collection(COLLECTION.LEADS);
-      const officersCollection = db.get().collection(COLLECTION.OFFICERS);
-      const activityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-      if (!deadClientId || !client_status) {
-        return reject("Missing required fields: client_id or client_status");
-      }
-      const deadClient = await deadCustomersCollection.findOne({ _id: new ObjectId(deadClientId) });
-      if (!deadClient) return reject("Dead client not found");
-      const { error, value } = callActivityValidation.validate({
-        ...callLogData,
-        client_id: deadClientId,
-        client_status,
-      });
-      if (error) return reject("Validation failed: " + error.details[0].message);
-      const validatedData = value;
-      let officerObjectId = null;
-      if (officer_id) {
-        const officer = await officersCollection.findOne(
-          { _id: new ObjectId(officer_id) },
-          { projection: { _id: 1, designation: 1 } }
-        );
-        if (officer) {
-          officerObjectId = new ObjectId(officer._id);
-          if (!deadClient.officer_id) deadClient.officer_id = officerObjectId;
-          if (
-            Array.isArray(officer.designation) &&
-            officer.designation.includes(DESIGNATIONS.COUNSILOR)
-          ) {
-            if (!deadClient.recruiter_id) {
-              deadClient.recruiter_id = officerObjectId;
-            }
-          }
-        }
-      }
-      
-      const callActivity = {
-        type: 'call_event',
-        client_id: new ObjectId(deadClientId),
-        officer_id:  new ObjectId(req_officer_id),
-        duration: validatedData.duration,
-        next_schedule:  validatedData.next_schedule,
-        next_shedule_time: validatedData.next_shedule_time,
-        comment: validatedData.comment || '',
-        call_type: validatedData.call_type || '',
-        call_status: validatedData.call_status || '',
-        created_at: new Date()
-      };
-      const logResult = await activityCollection.insertOne(callActivity);
-      if (!logResult.acknowledged) return reject("Failed to restore client to LEADS");
-      // Update client doc before restore
-      deadClient.status = validatedData.client_status;
-      deadClient.lastcall = { ...callActivity, _id: logResult.insertedId };
-      deadClient.updated_at = new Date();
-      // Insert to LEADS collection
-      const insertResult = await leadsCollection.insertOne(deadClient);
-      if (!insertResult.acknowledged) return reject("Failed to restore client to LEADS");
-      // Remove from DEAD_LEADS
-      await deadCustomersCollection.deleteOne({ _id: new ObjectId(deadClientId) });
-      // Log system activities
-      await logActivity({
-        type: 'client_restored',
-        client_id:  new ObjectId(deadClientId),
-        recruiter_id:deadClient.recruiter_id != null ? new ObjectId(deadClient.recruiter_id ) : null,
-        officer_id:new ObjectId( officerObjectId ||  deadClient.officer_id) || null,
-        client_status: deadClient.client_status,
-        comment: validatedData.comment || comment
-      });
-      resolve("Client restored to LEADS successfully");
-    } catch (err) {
-      console.error("restoreClientFromDeadAndAssignOfficer Error:", err);
-      reject("Error restoring client");
-    }
-  });
-  },
-
- permanentlyCloseDeadLead: (body, req_officer_id) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      const {
-        client_id: deadClientId,
-        // ...callLogData
-      } = body;
-      if (!deadClientId) return reject("Missing required field: client_id");
-      const clientObjectId = new ObjectId(deadClientId);
-      const officerObjectId = new ObjectId(req_officer_id);
-      const deadCustomersCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-      const activityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-      const customerEventCollection = db.get().collection(COLLECTION.CUSTOMER_ACTIVITY);
-      // Validate input first before any DB operation
-      const validatedData = validatePartial(callActivityValidation, body);
-      const callActivity = {
-        type: 'call_event',
-        client_id: clientObjectId,
-        officer_id: officerObjectId,
-        duration: validatedData.duration,
-        comment: validatedData.comment || '',
-        call_type: validatedData.call_type || '',
-        call_status: validatedData.call_status || '',
-        created_at:  new Date(),
-      };
-
-      // Use findOneAndUpdate to verify existence and update status
-      const updateResult = await deadCustomersCollection.findOneAndUpdate(
-        { _id: clientObjectId },
-        {
-          $set: {
-            status: 'CLOSED',
-            updated_at: new Date()
-          }
-        },
-        { returnDocument: 'after', projection: { recruiter_id: 1 } }
-      );
-      if (!updateResult.value) return reject("Dead client not found");
-
-      // Insert call activity and get its ID
-      const logResult = await activityCollection.insertOne(callActivity);
-    
-      if (!logResult.acknowledged) return reject("Failed to log call activity");
-
-      // Update lastcall field with the new call log
-      await deadCustomersCollection.updateOne(
-        { _id: clientObjectId },
-        {
-          $set: {
-            lastcall: { ...callActivity, _id: logResult.insertedId }
-          }
-        }
-      );
-      // Insert customer activity event
-      await customerEventCollection.insertOne({
-        client_id: clientObjectId,
-        type: 'status_update',
-        status: 'CLOSED',
-        comment: validatedData.comment || '',
-        recruiter_id: (updateResult.value.recruiter_id && updateResult.value.recruiter_id !== 'UNASSIGNED' && updateResult.value.recruiter_id !== null)
-          ? new ObjectId(updateResult.value.recruiter_id)
-          : null,
-        officer_id: officerObjectId,
-        created_at: new Date(),
-      });
-
-      resolve("Dead lead marked as CLOSED successfully");
-    } catch (err) {
-      console.error("permanentlyCloseDeadLead Error:", err);
-      reject(err.message || err || "Error closing dead lead");
-    }
-  });
-  },
     // Get lead/client by ID
   
 }

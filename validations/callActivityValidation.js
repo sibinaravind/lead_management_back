@@ -51,7 +51,7 @@ const callActivityValidation = Joi.object({
 });
 
 const mobilecallLogValidation = Joi.object({
-  received_phone:Joi.string()
+  officer_phone:Joi.string()
     .custom((value, helpers) => {
       const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
       if (!phoneRegex.test(value)) {

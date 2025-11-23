@@ -5,15 +5,16 @@ const { STATUSES } = require('../constants/enums');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { callActivityValidation, mobilecallLogValidation } = require('../validations/callActivityValidation');
 const validatePartial = require("../utils/validatePartial");
+const { ref } = require('joi');
 module.exports = {
     logActivity: async ({
         type,
         client_id,
         officer_id = null,
-        recruiter_id = null,
         assigned_by = null,
         comment = null,
-        client_status = null
+        client_status = null,
+        referrer_id = null
     }) => {
         try {
             // Validate required fields
@@ -47,11 +48,11 @@ module.exports = {
             const validOfficerId = safeObjectId(officer_id);
             if (validOfficerId) data.officer_id = validOfficerId;
 
-            const validRecruiterId = safeObjectId(recruiter_id);
-            if (validRecruiterId) data.recruiter_id = validRecruiterId;
-
             const validAssignedById = safeObjectId(assigned_by);
             if (validAssignedById) data.assigned_by = validAssignedById;
+
+            const validReferrerId = safeObjectId(referrer_id);
+            if (validReferrerId) data.referrer_id = validReferrerId;
 
             // Validate the client_id was properly converted
             if (!data.client_id) {
@@ -68,266 +69,98 @@ module.exports = {
         return new Promise(async (resolve, reject) => {
             try {
                 const { error, value } = callActivityValidation.validate(data);
-                if (error) {
-                    return reject("Validation failed: " + error.details[0].message);
-                }
-                data = value; // Use validated data
+                if (error) return reject("Validation failed: " + error.details[0].message);
+
+                data = value;
                 if (!data.client_id) return reject("Client ID is required");
                 const clientId = new ObjectId(data.client_id);
+
                 const leadsCollection = db.get().collection(COLLECTION.LEADS);
-                const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
-                const deadLeadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
                 const customerActivityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
 
-                // Lookup client
-                let clientDoc = await leadsCollection.findOne({ _id: clientId });
-                let currentCollection = leadsCollection;
+                // Fetch client
+                const clientDoc = await leadsCollection.findOne({ _id: clientId });
+                if (!clientDoc) return reject("Client not found");
 
-                if (!clientDoc) {
-                    clientDoc = await customersCollection.findOne({ _id: clientId });
-                    currentCollection = customersCollection;
-                }
+                // Prepare next schedule
+                let nextScheduleDate = data.next_schedule || null;
 
-                if (!clientDoc) {
-                    clientDoc = await deadLeadsCollection.findOne({ _id: clientId });
-                    currentCollection = deadLeadsCollection;
-                }
-                if (!clientDoc) return reject("Client not found in any collection");
-                // Parse next_schedule (dd/mm/yyyy to ISO)
-                let nextScheduleDate = data.next_schedule;
-                // if (data.next_schedule) {
-                //     const [day, month, year] = data.next_schedule.split('/');
-                //     if (day && month && year) {
-                //         nextScheduleDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`);
-                //     }
-                // }
-                // Insert call event
+                // Insert call event log
                 const logResult = await customerActivityCollection.insertOne({
-                    type: 'call_event',
+                    type: "call_event",
                     client_id: clientId,
                     officer_id: ObjectId.isValid(officer_id) ? new ObjectId(officer_id) : null,
                     duration: data.duration || 0,
                     next_schedule: nextScheduleDate,
                     next_shedule_time: data.next_shedule_time || null,
-                    comment: data.comment || '',
-                    call_type: data.call_type || '',
-                    call_status: data.call_status || '',
-                    created_at: new Date()
+                    comment: data.comment || data.dead_lead_reason || "",
+                    call_type: data.call_type || "",
+                    call_status: data.call_status || "",
+                    created_at: new Date(),
                 });
 
                 if (!logResult.acknowledged) return reject("Failed to log call event");
 
+                // Prepare lastcall object
                 const lastcall = {
                     _id: logResult.insertedId,
-                    type: 'call_event',
+                    type: "call_event",
                     client_id: clientId,
                     officer_id: ObjectId.isValid(officer_id) ? new ObjectId(officer_id) : null,
                     duration: data.duration || 0,
                     next_schedule: nextScheduleDate,
                     next_shedule_time: data.next_shedule_time || null,
-                    comment: data.comment || '',
-                    call_type: data.call_type || '',
-                    call_status: data.call_status || '',
-                    created_at: new Date()
+                    comment: data.comment || "",
+                    call_type: data.call_type || "",
+                    call_status: data.call_status || "",
+                    created_at: new Date(),
                 };
-                // Status update
+
+                // Update status if changed
                 if (
                     data.client_status &&
-                    data.client_status !== 'null' &&
-                    data.client_status !== '' &&
-                    clientDoc.status !== data.client_status && currentCollection !== deadLeadsCollection
+                    data.client_status !== "null" &&
+                    data.client_status !== "" &&
+                    clientDoc.status !== data.client_status
                 ) {
-                    const newStatus = data.client_status;
-                    if (newStatus === STATUSES.DEAD && currentCollection !== deadLeadsCollection) {
-                        const insertResult = await deadLeadsCollection.insertOne({
-                            ...clientDoc,
-                            status: newStatus,
-                            lastcall,
-                            dead_lead_reason: data.dead_lead_reason || '',
-                            moved_to_dead_at: new Date(),
-                            dead_reason: data.comment || ''
-                        });
-                        if (!insertResult.acknowledged) return reject("Failed to move to DEAD_LEADS");
-                        await currentCollection.deleteOne({ _id: clientId });
-
-                        await module.exports.logActivity({
-                            type: 'status_update',
-                            client_id: clientId,
-                            recruiter_id: clientDoc.recruiter_id || null,
-                            officer_id: officer_id || null,
-                            client_status: newStatus,
-                            comment: data.comment || ''
-                        });
-
-                        return resolve("Moved to DEAD_LEADS and call logged");
-                    }
-
-                    if (newStatus === STATUSES.REGISTER && currentCollection !== customersCollection) {
-                        const new_client_id = `AECID${String(await getNextSequence("customer_id")).padStart(5, "0")}`;
-                        clientDoc.client_id = new_client_id;
-
-                        const insertResult = await customersCollection.insertOne({
-                            ...clientDoc,
-                            lastcall,
-                            status: newStatus
-                        });
-
-                        if (!insertResult.acknowledged) return reject("Failed to move to CUSTOMERS");
-                        await currentCollection.deleteOne({ _id: clientId });
-
-                        await module.exports.logActivity({
-                            type: 'status_update',
-                            client_id: clientId,
-                            recruiter_id: clientDoc.recruiter_id || null,
-                            officer_id: officer_id || null,
-                            client_status: newStatus,
-                            comment: data.comment || ''
-                        });
-
-                        return resolve("Moved to CUSTOMERS and call logged");
-                    }
-                    // Simple status update
-                    await currentCollection.updateOne(
+                    await leadsCollection.updateOne(
                         { _id: clientId },
-                        { $set: { status: newStatus, lastcall } }
+                        {
+                            $set: {
+                                status: data.client_status,
+                                dead_lead_reason: data.dead_lead_reason || "",
+                                lastcall
+                            }
+                        }
                     );
-                    await module.exports.logActivity({
-                        type: 'status_update',
-                        client_id: clientId,
-                        recruiter_id: clientDoc.recruiter_id || null,
-                        officer_id: officer_id || null,
-                        client_status: newStatus,
-                        comment: data.comment || ''
-                    });
-                    return resolve("Client status updated and call logged");
-                }
-                // No status change, just update lastcall
-                await currentCollection.updateOne({ _id: clientId }, { $set: { lastcall } });
 
-                resolve("Call event logged and client updated");
+                    await module.exports.logActivity({
+                        type: "status_update",
+                        client_id: clientId,
+                        officer_id: officer_id || null,
+                        client_status: data.client_status,
+                        comment: data.comment || data.dead_lead_reason || ""
+                    });
+
+                    return resolve("Status updated + call logged");
+                }
+
+                // If no status change, only update lastcall
+                await leadsCollection.updateOne(
+
+                    { _id: clientId },
+                    { $set: { lastcall, dead_lead_reason: data.dead_lead_reason || "" } }
+                );
+
+                resolve("Call event logged");
+
             } catch (err) {
                 console.error(err);
                 reject("Error logging call event");
             }
         });
-    },
-
-   CRETeamCallEvent: async (data, officer_id) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            // Validate input
-            console.log("CRETeamCallEvent data:", officer_id);
-            const { error, value } = callActivityValidation.validate(data);
-            if (error) return reject("Validation failed: " + error.details[0].message);
-            data = value;
-
-            if (!data.client_id) return reject("Client ID is required");
-            const clientId = new ObjectId(data.client_id);
-            const leadsCollection = db.get().collection(COLLECTION.LEADS);
-            const deadLeadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-            const activityCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-            // Fetch client
-            const clientDoc = await leadsCollection.findOne({ _id: clientId });
-            if (!clientDoc) return reject("Client not found in LEADS collection");
-
-            const nextScheduleDate = data.next_schedule || null;
-            const callEntry = {
-                type: 'call_event',
-                client_id: clientId,
-                officer_id: ObjectId.isValid(officer_id) ? new ObjectId(officer_id) : null,
-                duration: data.duration || 0,
-                next_schedule: nextScheduleDate,
-                next_shedule_time: data.next_shedule_time || null,
-                comment: data.comment || '',
-                call_type: data.call_type || '',
-                call_status: data.call_status || '',
-                created_at: new Date()
-            };
-            // Log call
-            const logResult = await activityCollection.insertOne(callEntry);
-            if (!logResult.acknowledged) return reject("Failed to log call event");
-            const lastcall = { ...callEntry, _id: logResult.insertedId };
-            const newStatus = data.client_status;
-            const hasStatusChange = newStatus &&
-                newStatus !== 'null' &&
-                newStatus !== '' &&
-                clientDoc.status !== newStatus;
-
-            if (hasStatusChange) {
-                // DEAD → Move to DEAD_LEADS
-                if (newStatus === STATUSES.DEAD) {
-                    const insertResult = await deadLeadsCollection.insertOne({
-                        ...clientDoc,
-                        status: newStatus,
-                        lastcall,
-                        dead_lead_reason: data.dead_lead_reason || '',
-                        moved_to_dead_at: new Date(),
-                        dead_reason: data.comment || ''
-                    });
-
-                    if (!insertResult.acknowledged) return reject("Failed to move to DEAD_LEADS");
-                    await leadsCollection.deleteOne({ _id: clientId });
-                    await module.exports.logActivity({
-                        type: 'status_update',
-                        client_id: clientId,
-                        recruiter_id: clientDoc.recruiter_id || null,
-                        officer_id: officer_id || null,
-                        client_status: newStatus,
-                        comment: data.comment || ''
-                    });
-                    return resolve("Moved to DEAD_LEADS and call logged");
-                }
-
-                // INTERESTED → update & remove from leads (assumed to be moved to another collection)
-                if (newStatus === STATUSES.INTRESTED) {
-                    const updateResult = await leadsCollection.updateOne(
-                        { _id: clientId },
-                        {
-                            $set: {
-                                status: newStatus,
-                                lastcall,
-                                officer_id: clientDoc.recruiter_id || 'UNASSIGNED',
-                                updated_at: new Date()
-                            }
-                        }
-                    );
-                    if (!updateResult.acknowledged) return reject("Failed to update lead");
-                    await module.exports.logActivity({
-                        type: 'status_update',
-                        client_id: clientId,
-                        recruiter_id: clientDoc.recruiter_id || null,
-                        officer_id: officer_id || null,
-                        client_status: newStatus,
-                        comment: data.comment || ''
-                    });
-                    return resolve("Moved to RECRUITER and call logged");
-                }
-
-                // Simple status update
-                await leadsCollection.updateOne(
-                    { _id: clientId },
-                    { $set: { status: newStatus, lastcall , updated_at: new Date()} }
-                );
-                await module.exports.logActivity({
-                    type: 'status_update',
-                    client_id: clientId,
-                    recruiter_id: clientDoc.recruiter_id || null,
-                    officer_id: officer_id || null,
-                    client_status: newStatus,
-                    comment: data.comment || ''
-                });
-
-                return resolve("Client status updated and call logged");
-            }
-            // No status change → just update lastcall
-            await leadsCollection.updateOne({ _id: clientId }, { $set: { lastcall } });
-            return resolve("Call event logged and client updated");
-        } catch (err) {
-            console.error("CRETeamCallEvent Error:", err);
-            return reject("Error logging call event");
-        }
-    });
-},
+    }
+    ,
 
     logMobileCallEvent: async (data) => {
         return new Promise(async (resolve, reject) => {
@@ -337,24 +170,16 @@ module.exports = {
                     return reject("Validation failed: " + error.details[0].message);
                 }
                 data = value;
-                const normalizedPhone = data.phone.toString().replace(/^\+?91/, '').trim();
-                const customersCollection = db.get().collection(COLLECTION.CUSTOMERS);
-                const leadsCollection = db.get().collection(COLLECTION.LEADS);
-                const deadLeadsCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-                const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-                let clientDoc = await leadsCollection.findOne({ phone: normalizedPhone });
-                if (!clientDoc) {
-                    clientDoc = await customersCollection.findOne({ phone: normalizedPhone });
-                }
-                if (!clientDoc) {
-                    clientDoc = await deadLeadsCollection.findOne({ phone: normalizedPhone });
-                }
+                // Normalize phone by removing country code (+91 or 91) and any leading zeros
+                const normalizedPhone = data.phone.toString().replace(/^(\+?91|0+)/, '').trim();
+                console.log("Normalized Phone:", normalizedPhone);
+                let clientDoc = await db.get().collection(COLLECTION.LEADS).findOne({ phone: normalizedPhone });
 
-                const insertResult = await callLogCollection.insertOne({
+                const insertResult = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).insertOne({
                     type: 'call_event',
                     client_id: clientDoc ? ObjectId(clientDoc._id) : null,
                     officer_id: data.officer_id ? ObjectId(data.officer_id) : null,
-                    received_phone: data.received_phone || null,
+                    officer_phone: data.officer_phone || null,
                     phone: normalizedPhone,
                     duration: parseFloat(data.duration || 0),
                     call_type: data.call_type || '',
@@ -441,35 +266,62 @@ module.exports = {
         }
     },
 
-    
+
     updateCallLog: async (logId, updateData) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const data = validatePartial(callActivityValidation, updateData);
+
                 const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
                 const leadsCollection = db.get().collection(COLLECTION.LEADS);
-                const clientsCollection = db.get().collection(COLLECTION.CUSTOMERS);
-                const deadCollection = db.get().collection(COLLECTION.DEAD_LEADS);
-                // Print the client document for debugging
+
                 const now = new Date();
                 const updateFields = { updated_at: now };
 
-                const allowedFields = ['duration', 'next_schedule', 'next_shedule_time', 'comment', 'officer_id'];
+                const allowedFields = [
+                    "duration",
+                    "next_schedule",
+                    "next_shedule_time",
+                    "comment",
+                    "officer_id"
+                ];
+
                 allowedFields.forEach(field => {
                     if (data[field] !== undefined) {
-                        if (field === 'officer_id') {
+                        if (field === "officer_id") {
                             updateFields[field] = ObjectId.isValid(data.officer_id)
                                 ? new ObjectId(data.officer_id)
                                 : data.officer_id;
-                        } if (field === 'next_schedule') {
+                        }
+                        else if (field === "next_schedule") {
                             let nextScheduleDate = null;
-                            if (data.next_schedule) {
-                                const [day, month, year] = data.next_schedule.split('/');
-                                if (day && month && year) {
-                                    nextScheduleDate = new Date(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`);
+
+                            if (typeof data.next_schedule === "string") {
+                                // Case: incoming DD/MM/YYYY
+                                const parts = data.next_schedule.split("/");
+                                if (parts.length === 3) {
+                                    const [day, month, year] = parts;
+                                    nextScheduleDate = new Date(
+                                        `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00Z`
+                                    );
                                 }
                             }
-                            updateFields[field] = nextScheduleDate; // Ensure it's a Date object
+
+                            // If it is already a Date or ISO string, just use it
+                            else if (data.next_schedule instanceof Date) {
+                                nextScheduleDate = data.next_schedule;
+                            }
+
+                            else if (typeof data.next_schedule === "object") {
+                                // Example: { $date: "2025-01-10T00:00:00Z" }
+                                nextScheduleDate = new Date(data.next_schedule);
+                            }
+
+                            else {
+                                nextScheduleDate = null;
+                            }
+
+                            updateFields[field] = nextScheduleDate;
                         }
 
                         else {
@@ -477,37 +329,42 @@ module.exports = {
                         }
                     }
                 });
-                // 1. Update the call log
+
+                // 🔹 1. Update the call log entry
                 const { value: updatedLog } = await callLogCollection.findOneAndUpdate(
                     { _id: new ObjectId(logId) },
                     { $set: updateFields },
-                    { returnDocument: 'after' }
+                    { returnDocument: "after" }
                 );
 
-                if (!updatedLog) return reject(new Error('Call log not found'));
-                // console.log("Updated Call Log:", updatedLog);
+                if (!updatedLog) return reject("Call log not found");
 
-                const collectionsToTry = [
-                    { name: 'LEADS', collection: leadsCollection },
-                    { name: 'CUSTOMERS', collection: clientsCollection },
-                    { name: 'DEAD', collection: deadCollection }
-                ];
-                for (const { name, collection } of collectionsToTry) {
-                    const result = await collection.updateOne({
+                // 🔹 2. Update lastcall inside LEADS only
+                const updateInLead = await leadsCollection.updateOne(
+                    {
                         _id: updatedLog.client_id,
                         $or: [
-                            { 'lastcall._id': new ObjectId(updatedLog._id) },
-                            { 'lastcall.next_schedule': { $lt: updatedLog.next_schedule } },
-                            // { latest_call: { $exists: false } }
+                            { "lastcall._id": new ObjectId(updatedLog._id) },
+                            { "lastcall.next_schedule": { $lt: updatedLog.next_schedule } }
                         ]
-                    }, { $set: { lastcall: updatedLog } });
-                    console.log(`Updated in ${name} collection:`, result);
-                    if (result.modifiedCount > 0) {
-                        return resolve({ success: true, collection: name });
-                    }
+                    },
+                    { $set: { lastcall: updatedLog } }
+                );
+
+                if (updateInLead.modifiedCount > 0) {
+                    return resolve({
+                        success: true,
+                        collection: "LEADS",
+                        lastcallUpdated: true
+                    });
                 }
-                // No collection matched for latest_call update, but call log itself was updated
-                resolve({ updated: false, message: 'Call log updated, but latest_call not replaced in any collection' });
+
+                // If call log updated but lastcall not replaced
+                resolve({
+                    success: true,
+                    lastcallUpdated: false,
+                    message: "Call log updated, but lastcall not replaced"
+                });
 
             } catch (err) {
                 reject({ success: false, error: err.message || err });
@@ -515,10 +372,8 @@ module.exports = {
         });
     },
 
-
-     getCustomerActivityLogs: async (id) => {
+    getCustomerActivityLogs: async (id) => {
         try {
-
             const result = await db.get().collection(COLLECTION.CUSTOMER_ACTIVITY).aggregate([
                 { $match: { client_id: ObjectId(id) } },
                 // { $sort: { created_at: 1 } },
@@ -559,7 +414,7 @@ module.exports = {
                         }
                     }
                 }
-              
+
             ]).toArray();
 
             return result;

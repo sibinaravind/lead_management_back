@@ -3,9 +3,9 @@ const state={
     db:null
 }
 module.exports.connect=function(done){
-     const url='mongodb+srv://sibinjamessibin:3fGNQfdFxIvCdz0v@cluster0.jvd2rpj.mongodb.net/'
+     const url='mongodb+srv://aikara:aikara@alead.cznedk.mongodb.net/'
 
-    const dbname='eagle'
+    const dbname='alead'
     mongoClient.connect(url, {useUnifiedTopology: true,useNewUrlParser: true },(err,data)=>{
         if(err) return done(err)
         state.db=data.db(dbname)

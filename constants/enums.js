@@ -16,7 +16,7 @@ const STATUSES = {
     REGISTER: 'REGISTER',
     FOLLOW_UP: 'FOLLOW_UP',
     UNASSIGNED: 'UNASSIGNED',
-    HOT:'HOT',
+    NEW:'NEW',
     CRE: 'CRE',
     INTRESTED: 'INTRESTED',
 };
