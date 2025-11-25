@@ -6,7 +6,7 @@ module.exports={
     CONFIG:'config',
     CLIENTS:'clients',
     COUNTER: 'counter',
-    PROJECTS: 'projects',
+    PRODUCTS: 'products',
     VACANCIES: 'vacancies',
     CUSTOMERS:'customers',
     LEADS: 'leads',
@@ -16,7 +16,8 @@ module.exports={
     DEAD_LEADS: 'dead_leads',
     ROUNDROBIN: 'roundrobin',
     ANNOUNCEMENTS: 'announcements',
-    
+    DISCOUNT :'discounts',
+    BOOKINGS: 'bookings',
    
 
 }

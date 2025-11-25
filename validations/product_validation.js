@@ -1,18 +1,12 @@
 const Joi = require("joi");
 
-const discountSchema = Joi.object({
-  title: Joi.string().allow("", null),
-  percent: Joi.number().min(0).max(100).default(0),
-  validFrom: Joi.string().allow("", null),
-  validTo: Joi.string().allow("", null),
-});
-
 const priceComponentSchema = Joi.object({
   title: Joi.string().allow("", null),
-  percent: Joi.number().min(0).max(100).default(0),
-  gstPercent: Joi.number().min(0).max(100).default(0),
-  cgstPercent: Joi.number().min(0).max(100).default(0),
-  sgstPercent: Joi.number().min(0).max(100).default(0),
+  
+  percent: Joi.number().min(0).max(100).allow("", null),
+  gstPercent: Joi.number().min(0).max(100).allow("", null),
+  cgstPercent: Joi.number().min(0).max(100).allow("", null),
+  sgstPercent: Joi.number().min(0).max(100).allow("", null),
 });
 
 const documentRequiredSchema = Joi.object({
@@ -24,40 +18,25 @@ const productSchema = Joi.object({
   id: Joi.string().allow("", null),
   name: Joi.string().required(),
   code: Joi.string().allow("", null),
-  category: Joi.string().allow("", null),
-  subCategory: Joi.string().allow("", null),
-
-  type: Joi.string()
-    .valid(
-      "TRAVEL",
-      "MIGRATION",
-      "VEHICLE",
-      "EDUCATION",
-      "REAL_ESTATE",
-      "OTHER"
-    )
-    .required(),
-
-  status: Joi.string().valid("ACTIVE", "INACTIVE").default("ACTIVE"),
-
+  category: Joi.string().allow("", null), // e.g., home , rentential, personal
+  subCategory: Joi.string().allow("", null), // e.g., loan, insurance, credit card
+  status: Joi.string().allow("", null), //.valid("ACTIVE", "INACTIVE")
   description: Joi.string().allow("", null),
   shortDescription: Joi.string().allow("", null),
 
-  basePrice: Joi.number().min(0).default(0),
-  sellingPrice: Joi.number().min(0).default(0),
-  costPrice: Joi.number().min(0).default(0),
+  basePrice: Joi.number().min(0).allow("", null),
+  sellingPrice: Joi.number().min(0).allow("", null),
+  costPrice: Joi.number().min(0).allow("", null),
 
-  advanceRequiredPercent: Joi.number().min(0).max(100).default(0),
+  advanceRequiredPercent: Joi.number().min(0).max(100).allow("", null),
 
-  discount: Joi.array().items(discountSchema).default([]),
+  priceComponents: Joi.array().items(priceComponentSchema).allow("", null),
 
-  priceComponents: Joi.array().items(priceComponentSchema).default([]),
-
-  documentsRequired: Joi.array().items(documentRequiredSchema).default([]),
+  documentsRequired: Joi.array().items(documentRequiredSchema).allow("", null),
 
   validity: Joi.string().allow("", null),
   processingTime: Joi.string().allow("", null),
-  serviceMode: Joi.string().valid("ONLINE", "OFFLINE", "HYBRID", "").allow("", null),
+  serviceMode: Joi.string().allow("", null), //.valid("ONLINE", "OFFLINE", "HYBRID", "")
 
   ageLimit: Joi.string().allow("", null),
   minIncomeRequired: Joi.string().allow("", null),
@@ -66,12 +45,12 @@ const productSchema = Joi.object({
 
   requiresAgreement: Joi.boolean().default(false),
 
-  images: Joi.array().items(Joi.string()).default([]),
+  images: Joi.array().items(Joi.string()).allow("", null),
 
-  isRefundable: Joi.boolean().default(false),
+  isRefundable: Joi.boolean().allow("", null),
   refundPolicy: Joi.string().allow("", null),
 
-  tags: Joi.array().items(Joi.string()).default([]),
+  tags: Joi.array().items(Joi.string()).allow("", null),
   notes: Joi.string().allow("", null),
 
   // LOCATION
@@ -82,13 +61,13 @@ const productSchema = Joi.object({
   // TRAVEL
   travelType: Joi.string().allow("", null),
   duration: Joi.string().allow("", null),
-  inclusions: Joi.array().items(Joi.string()).default([]),
-  exclusions: Joi.array().items(Joi.string()).default([]),
+  inclusions: Joi.array().items(Joi.string()).allow("", null),
+  exclusions: Joi.array().items(Joi.string()).allow("", null),
 
   // MIGRATION / VISA
   visaType: Joi.string().allow("", null),
-  jobAssistance: Joi.boolean().default(false),
-  interviewPreparation: Joi.boolean().default(false),
+  jobAssistance: Joi.boolean().allow("", null),
+  interviewPreparation: Joi.boolean().allow("", null),
 
   // VEHICLE
   brand: Joi.string().allow("", null),
@@ -115,14 +94,28 @@ const productSchema = Joi.object({
 
   // Terms, Support, Warranty
   termsAndConditions: Joi.string().allow("", null),
-  agreementTemplateUrl: Joi.string().allow("", null),
 
   supportAvailable: Joi.boolean().default(true),
   supportDuration: Joi.string().allow("", null),
   warrantyInfo: Joi.string().allow("", null),
 
+  providerDetails: Joi.object({
+    name: Joi.string().allow("", null),
+    contact: Joi.string().allow("", null),
+    email: Joi.string().allow("", null),
+    address: Joi.string().allow("", null),
+  }).default({}),
+
   // WORKFLOW STEPS
-  stepList: Joi.array().items(Joi.string()).default(["Initial Check", "Document Collection", "Processing", "Completion"]),
+  stepList: Joi.array().items(Joi.string()).optional(),
 });
 
-module.exports = productSchema;
+const productUpdateSchema = productSchema.fork(
+  Object.keys(productSchema.describe().keys),
+  (schema) => schema.optional()
+);
+
+
+module.exports = {  productSchema,
+  productUpdateSchema
+};

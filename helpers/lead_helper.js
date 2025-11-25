@@ -4,11 +4,8 @@ const { ObjectId } = require('mongodb');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { leadSchema } = require("../validations/leadValidation");
 const validatePartial = require("../utils/validatePartial");
-const { DESIGNATIONS, STATUSES } = require('../constants/enums');
 const { logActivity } = require('./customer_interaction_helper');
 const { safeObjectId } = require('../utils/safeObjectId');
-const {callActivityValidation} = require('../validations/callActivityValidation'); 
-const removeEmptyFields = require('../utils/removeEmptyFields').removeEmptyFields; 
 const fileUploader = require('../utils/fileUploader');
 const path = require('path');
 var fs = require('fs');
@@ -540,6 +537,7 @@ createLead: async (details) => {
             officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
             referrer_id:safeObjectId(productData.product_id),
             comment:" Interested in product: " + productData.product_name + " , offered: " + (productData.offers[0]?.offer_price || "") + " Negotiating to " + (productData.offers[0]?.demanding_price || ""),
+            
         });
 
         return { success: true, message: "Product interested updated" };

@@ -76,7 +76,9 @@ app.set('view engine', 'hbs');
 const routes = [
   { path: '/officer', route: require("./routes/officers/officers_router") },
   { path: '/config', route: require("./routes/officers/configs_router") },
-  { path: '/project', route: require("./routes/officers/project_router") },
+  // { path: '/project', route: require("./routes/officers/project_router") },
+  { path: '/product', route: require("./routes/officers/product_router") },
+  { path: '/booking', route: require("./routes/officers/booking_router") },
   { path: '/lead', route: require("./routes/officers/lead_router") },
   {path: '/campaign', route: require("./routes/officers/campaign_router") },
   {path: '/customer', route: require("./routes/officers/customer_interaction_router") },
