@@ -4,9 +4,10 @@ const officerValidation = Joi.object({
   officer_id: Joi.string()
     .optional(),
   name: Joi.string().required(),
+  dob: Joi.date().optional().allow(null, ''),
   gender: Joi.string().uppercase()
-    .valid('MALE', 'FEMALE', 'OTHER')
-    .required(),
+    .optional().allow(null, '')
+    ,
   phone: Joi.string()
     .custom((value, helpers) => {
       const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
@@ -24,16 +25,13 @@ const officerValidation = Joi.object({
       return value;
     }, 'Received Phone Validator'),
   status: Joi.string()
-    .valid('ACTIVE', 'INACTIVE', 'PAUSED', 'BLOCKED','DELETED')
-    .required(),
+    .optional().allow(null, '').default('ACTIVE'),
   designation: Joi.array()
     .items(Joi.string())
-    .min(1)
-    .required(),
+    .optional().allow(null, ''),
   branch: Joi.array()
     .items(Joi.string())
-    .min(1)
-    .required(),
+    .optional().allow(null, ''),
   password: Joi.string()
     .required().allow(null, '')
     .custom((value, helpers) => {

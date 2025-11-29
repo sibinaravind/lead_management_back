@@ -6,6 +6,7 @@ const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { callActivityValidation, mobilecallLogValidation } = require('../validations/callActivityValidation');
 const validatePartial = require("../utils/validatePartial");
 const { ref } = require('joi');
+const { safeObjectId } = require('../utils/safeObjectId');
 module.exports = {
     logActivity: async ({
         type,
@@ -172,9 +173,8 @@ module.exports = {
                 data = value;
                 // Normalize phone by removing country code (+91 or 91) and any leading zeros
                 const normalizedPhone = data.phone.toString().replace(/^(\+?91|0+)/, '').trim();
-                console.log("Normalized Phone:", normalizedPhone);
+                // console.log("Normalized Phone:", normalizedPhone);
                 let clientDoc = await db.get().collection(COLLECTION.LEADS).findOne({ phone: normalizedPhone });
-
                 const insertResult = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).insertOne({
                     type: 'call_event',
                     client_id: clientDoc ? ObjectId(clientDoc._id) : null,
@@ -187,6 +187,33 @@ module.exports = {
                 });
 
                 if (insertResult.acknowledged) {
+
+                    const lastcall = {
+                        _id: insertResult.insertedId,
+                        type: "call_event",
+                        client_id: clientDoc ? ObjectId(clientDoc._id) : null,
+                        officer_id: data.officer_id ? ObjectId(data.officer_id) : null,
+                        officer_phone: data.officer_phone || null,
+                        phone: normalizedPhone,
+                        duration: parseFloat(data.duration || 0),
+                        call_type: data.call_type || '',
+                        created_at: new Date()
+                    };
+
+                    // Update status if changed
+                    if (clientDoc)
+                        await db.get().collection(COLLECTION.LEADS).updateOne(
+                            { _id: clientDoc ? ObjectId(clientDoc._id) : null },
+                            {
+                                $set: {
+                                    // status: data.client_status,
+                                    // dead_lead_reason: data.dead_lead_reason || "",
+                                    lastcall
+                                }
+                            }
+                        );
+
+
                     resolve("Call event logged successfully");
                 } else {
                     reject("Failed to log call event");
@@ -199,20 +226,116 @@ module.exports = {
         });
     },
 
-    getCallLogs: async () => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-                const logs = await callLogCollection.find()
-                    .sort({ created_at: -1 })
-                    .toArray();
-                resolve(logs);
-            } catch (err) {
-                console.error(err);
-                reject("Error fetching call logs");
+    getCallLogs: async (query, decoded) => {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                call_type,
+                call_status,
+                employee,
+                startDate,
+                endDate,
+                searchString
+            } = query;
+            const parsedPage = parseInt(page);
+            const parsedLimit = parseInt(limit);
+            const skip = (parsedPage - 1) * parsedLimit;
+            const filter = {};
+
+            // Admin chec
+            const isAdmin = Array.isArray(decoded?.designation) &&
+                decoded.designation.includes('ADMIN');
+
+            // Officer filtering logic
+            let officerIdList = [];
+            if (!isAdmin) {
+                officerIdList = Array.isArray(decoded?.officers)
+                    ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+                    : [];
             }
-        });
+            if (employee) {
+                filter.officer_id = safeObjectId(employee);
+            }
+            else if (!isAdmin && officerIdList.length > 0) {
+                filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+            }
+            else if (!isAdmin) {
+                filter.officer_id = safeObjectId(decoded?._id);
+            }
+            // Admin sees all, so no officer_id filter for admin
+
+            // Status filter
+            if (call_type) filter.call_type = call_type;
+            if (call_status) filter.call_status = call_status;
+
+            // Date parsing
+            const parseDate = (str) => {
+                if (!str) return null;
+                const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+                if (match) {
+                    return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+                }
+                return new Date(str);
+            };
+
+            let start = startDate ? parseDate(startDate) : null;
+            let end = endDate ? parseDate(endDate) : null;
+            if (end && !isNaN(end)) end.setHours(23, 59, 59, 999);
+
+            if (start || end) {
+                filter.created_at = {};
+                if (start && !isNaN(start)) filter.created_at.$gte = start;
+                if (end && !isNaN(end)) filter.created_at.$lte = end;
+
+                if (Object.keys(filter.created_at).length === 0) {
+                    delete filter.created_at;
+                }
+            }
+            // SearchString (phone, name, notes, call_type)
+            if (searchString) {
+                const searchRegex = new RegExp(searchString, "i");
+                filter.$or = [
+                    { phone: { $regex: searchRegex } },
+                    { notes: { $regex: searchRegex } }
+                ];
+            }
+
+            const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+
+            const logs = await callLogCollection.aggregate([
+                { $match: filter },
+
+                {
+                    $facet: {
+                        data: [
+                            { $sort: { created_at: -1 } },
+                            { $skip: skip },
+                            { $limit: parsedLimit }
+                        ],
+
+                        totalCount: [
+                            { $count: "count" }
+                        ]
+                    }
+                }
+            ]).toArray();
+
+            const result = {
+                data: logs[0].data,
+                totalCount: logs[0].totalCount.length ? logs[0].totalCount[0].count : 0,
+                currentPage: parsedPage,
+                limit: parsedLimit,
+            };
+
+            return result;
+
+        } catch (err) {
+            console.error(err);
+            throw "Error fetching call logs";
+        }
     },
+
 
     getCustomerCallLogs: async (id) => {
         try {
@@ -343,10 +466,7 @@ module.exports = {
                 const updateInLead = await leadsCollection.updateOne(
                     {
                         _id: updatedLog.client_id,
-                        $or: [
-                            { "lastcall._id": new ObjectId(updatedLog._id) },
-                            { "lastcall.next_schedule": { $lt: updatedLog.next_schedule } }
-                        ]
+                        "lastcall._id": new ObjectId(updatedLog._id)
                     },
                     { $set: { lastcall: updatedLog } }
                 );

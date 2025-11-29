@@ -45,7 +45,7 @@ app.patch("/addProductInterested/:id", middleware.checkToken, (req, res) => {
 
 app.patch("/assign_officer", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.assignOfficerToLead(req.body.client_id, req.body.officer_id,req.body.comment, req.decoded._id)
+    leadHelper.assignOfficerToLead(req.body.client_id, req.body.officer_id,req.body.comment)
   );
 });
 

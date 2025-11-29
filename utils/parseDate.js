@@ -41,7 +41,35 @@ function stringToTime(timeStr) {
   }
   return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
 }
+function parseDDMMYYYY(value, helpers) {
+  if (!value) return null;
+
+  if (value instanceof Date) return value;
+
+  if (typeof value !== "string") {
+    return helpers.error("date.base");
+  }
+
+  const parts = value.split("/");
+  if (parts.length !== 3) {
+    return helpers.error("date.format");
+  }
+
+  const [day, month, year] = parts.map(Number);
+
+  if (!year || !month || !day) {
+    return helpers.error("date.invalid");
+  }
+
+  // ❗ CRITICAL FIX: create UTC DATE and RETURN IT AS UTC
+  const utcDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+
+  if (isNaN(utcDate)) {
+    return helpers.error("date.invalid");
+  }
+
+  return utcDate;
+}
 
 
-
-module.exports = { stringTodate ,stringToTime };
+module.exports = { stringTodate ,stringToTime , parseDDMMYYYY};

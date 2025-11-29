@@ -96,7 +96,7 @@ createLead: async (details) => {
               officer_id: assignedOfficer
                 ? safeObjectId(assignedOfficer._id)
                 : "UNASSIGNED",
-              comment: value.note || "",
+              comment: value.note || "customer created",
             });
         return resolve(result.insertedId);
       } else {
@@ -203,9 +203,18 @@ createLead: async (details) => {
         try {
             // Validate input
             const validatedData = validatePartial(leadSchema, updateData);
+            // If officer_id exists, ensure it's a valid ObjectId, else remove it
+            if (validatedData.officer_id) {
+              const objId = safeObjectId(validatedData.officer_id);
+              if (objId) {
+                validatedData.officer_id = objId;
+              } else {
+                delete validatedData.officer_id;
+              }
+            }
             const updateResult = await db.get().collection(COLLECTION.LEADS).updateOne(
-            { _id: ObjectId(leadId) },
-            { $set: { ...validatedData, updated_at: new Date() } }
+              { _id: ObjectId(leadId) },
+              { $set: { ...validatedData, updated_at: new Date() } }
             );
             if (updateResult.matchedCount === 0) {
             throw new Error("Lead not found");
@@ -504,6 +513,7 @@ createLead: async (details) => {
         const existingProduct = (lead.product_interested || []).find(
           p => p.product_id === productData.product_id
         );
+        productData.offers[0].uploaded_at  = new Date();
         if (existingProduct) {
           updateQuery = {
             $push: {
@@ -561,19 +571,19 @@ createLead: async (details) => {
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
           const filter = {};
            if (employee) {
-          
               filter.officer_id = safeObjectId(employee);
            } else if (!isAdmin) {
              filter.officer_id = Array.isArray(decoded?.officers)
               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
               : [];
            }else if (isAdmin) {
-                const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find() 
-                    .project({ _id: 1 })
-                    .toArray();
-                  const officerIds = officerList.map(officer => officer._id);
-                  filter.officer_id = { $in: officerIds };
+                // const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                //   .find() 
+                //   .project({ _id: 1 })
+                //   .toArray();
+                // const officerIds = officerList.map(officer => officer._id);
+                // // Match leads assigned to any officer or unassigned (null or "UNASSIGNED")
+                // filter.officer_id = { $in: [...officerIds, null, "UNASSIGNED"] };
  
         }
         // console.log("Filter for lead count:", filter);
@@ -581,7 +591,6 @@ createLead: async (details) => {
             // const ids = [safeObjectId(decoded?._id), ...officerIds].filter(Boolean);
             // console.log("Officer IDs for filter:", ids);
             // filter.officer_id = { $in: ids };
-
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           const tomorrow = new Date(today);
@@ -679,16 +688,16 @@ createLead: async (details) => {
               : [];
           }
         if (filterCategory === 'UNASSIGNED') {
-            filter.officer_id = 'UNASSIGNED';
+            filter.status = 'UNASSIGNED';
           } else if (employee) {
               filter.officer_id = safeObjectId(employee);
           } else if (isAdmin) {
-                  const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find() // works if designation is an array
-                    .project({ _id: 1 })
-                    .toArray();
-                  const officerIds = officerList.map(officer => officer._id);
-                  filter.officer_id = { $in: officerIds };
+                  // const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                  //   .find() // works if designation is an array
+                  //   .project({ _id: 1 })
+                  //   .toArray();
+                  // const officerIds = officerList.map(officer => officer._id);
+                  // filter.officer_id = { $in: [...officerIds, null, "UNASSIGNED"] };
           } else if (officerIdList.length > 0) {
              filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
           } else {
@@ -887,12 +896,12 @@ createLead: async (details) => {
               filter.officer_id = safeObjectId(decoded?._id);
             }
           }else if (isAdmin) {
-                const officerList = await db.get().collection(COLLECTION.OFFICERS)
-                    .find() // works if designation is an array
-                    .project({ _id: 1 })
-                    .toArray();
-                  const officerIds = officerList.map(officer => officer._id);
-                  filter.officer_id = { $in: officerIds };
+                // const officerList = await db.get().collection(COLLECTION.OFFICERS)
+                //     .find() // works if designation is an array
+                //     .project({ _id: 1 })
+                //     .toArray();
+                //   const officerIds = officerList.map(officer => officer._id);
+                //   filter.officer_id = { $in: officerIds };
           }
           // Additional filters
           if (callType) filter.call_type = callType;

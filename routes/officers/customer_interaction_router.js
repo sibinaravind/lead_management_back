@@ -18,7 +18,7 @@ app.post("/add_mobile_call_log", (req, res) => {
 });
 app.get("/get_call_log", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.getCallLogs()
+    leadHelper.getCallLogs(req.query, req.decoded)
   );
 });
 app.get("/customercall/:id", middleware.checkToken, (req, res) => {

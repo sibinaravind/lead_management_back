@@ -1,14 +1,37 @@
 const Joi = require("joi");
-
+const crypto = require("crypto");
+const { safeObjectId } = require('../utils/safeObjectId');
 // Payment schedule schema
+const parseDDMMYYYY = require('../utils/parseDate').parseDDMMYYYY;
+
 const paymentScheduleSchema = Joi.object({
+  id: Joi.string().default(() => {
+    // Generate a MongoDB ObjectId-like string
+    return new crypto.randomBytes(12).toString("hex");
+  }).allow("", null),
   payment_type: Joi.string().allow("", null),
-  due_date: Joi.date().allow("", null),
+  due_date: Joi.date()
+  .allow("", null),
   amount: Joi.number().min(0).allow("", null),
   status: Joi.string().allow("", null),
-  paid_at: Joi.date().allow("", null),
+  paid_at: Joi.date()
+  .allow("", null)
+ ,
   payment_method: Joi.string().allow("", null),
   transaction_id: Joi.string().allow("", null),
+  collected_by: Joi.string()
+  .hex()
+  .length(24)
+  .allow("", null)
+  .custom((value, helpers) => {
+    // Skip empty or null values
+    if (!value) return null;
+    try {
+      return safeObjectId(value);   // convert to ObjectId
+    } catch (err) {
+      return helpers.error("any.invalid");
+    }
+  }),
   remarks: Joi.string().allow("", null),
 });
 
@@ -62,13 +85,31 @@ const bookingSchema = Joi.object({
   return_date: Joi.date().allow(null),
   no_of_travellers: Joi.number().min(1).allow(null),
 
-  created_by: Joi.string().optional(),
+  officer_id: Joi.string() .hex()
+    .length(24).custom((value, helpers) => {
+    // Skip empty or null values
+    if (!value) return null;
+    try {
+      return safeObjectId(value);   // convert to ObjectId
+    } catch (err) {
+      return helpers.error("any.invalid");
+    }
+  }).allow("", null),
   offers_applied: Joi.array().items(
     Joi.object({
       offer_name: Joi.string().allow("", null),
       discount_amount: Joi.number().min(0).allow("", null)
     })
   ).optional(),
+  co_applicant_list: Joi.array().items(
+    Joi.object({
+      name: Joi.string().allow("", null),
+      phone: Joi.string().allow("", null),
+      dob: Joi.string().allow("", null),
+      address: Joi.string().allow("", null),
+      email: Joi.string().allow("", null)
+    })
+  ).allow("", null),
 });
 
-module.exports = { bookingSchema };
+module.exports = { bookingSchema , paymentScheduleSchema};

@@ -45,28 +45,26 @@ const travel_record_schema = Joi.object({
 const work_record_schema = Joi.object({
   company: Joi.string().optional().allow(null, ""),
   position: Joi.string().optional().allow(null, ""),
-  start_date: Joi.string().optional().allow(null, ""),
-  end_date: Joi.string().optional().allow(null, ""),
+  start_date:  Joi.date().optional().allow(null, ''),
+  end_date: Joi.date().optional().allow(null, ""),
   description: Joi.string().optional().allow(null, "")
 }).optional().allow(null);
 
-const document_record_schema = Joi.object({
-  doc_type: Joi.string().optional().allow(null, ""),
-  file_path: Joi.string().optional().allow(null, ""),
-  uploaded_at: Joi.date().optional().allow(null)
-}).optional().allow(null);
+// const document_record_schema = Joi.object({
+//   doc_type: Joi.string().optional().allow(null, ""),
+//   file_path: Joi.string().optional().allow(null, ""),
+//   uploaded_at: Joi.date().optional().allow(null)
+// }).optional().allow(null);
 
 const offer_item_schema = Joi.object({
   offer_price: Joi.number().optional().allow(null, ""),
   demanding_price: Joi.number().optional().allow(null, ""),
-  uploaded_at: Joi.string().custom(dateValidator).optional().allow(null),
+  uploaded_at: Joi.date().default(new Date()),
   updated_by: Joi.string().optional().allow(null, ""),
   status: Joi.string().optional().allow(null, ""),
   description: Joi.string().optional().allow(null, "")
 });
-
 const product_interested_schema = Joi.object({
-  
   product_id: Joi.string().required(),
   product_name: Joi.string().required(),
   offers: Joi.array().items(offer_item_schema).optional().allow(null)
@@ -87,10 +85,7 @@ const leadSchema = Joi.object({
     Joi.valid(null, "")
   ).optional(),
   gender: Joi.string().optional().allow(null, ""),  //.valid('Male', 'Female', 'Other')
-  dob: Joi.alternatives().try(
-    Joi.string().custom(dateValidator),
-    Joi.valid(null, "")
-  ).optional(),
+  dob: Joi.date().optional().allow(null, ""),
   marital_status: Joi.string().optional().allow(null, ""), //.valid('Single', 'Married', 'Divorced', 'Widowed')
   address: Joi.string().optional().allow(null, "").max(500),
   city: Joi.string().optional().allow(null, "").max(100),
@@ -122,7 +117,7 @@ const leadSchema = Joi.object({
   product_interested: Joi.array().optional().items(product_interested_schema).default([]),
   budget: Joi.number().min(0).optional().allow(null),
   preferred_location: Joi.string().optional().allow(null, ""),
-  preferred_date: Joi.string().custom(dateValidator).optional().allow(null),
+  preferred_date: Joi.date().optional().allow(null),
 
   
 
@@ -148,10 +143,8 @@ const leadSchema = Joi.object({
   email_password: Joi.string().optional().allow(null, ""),
   emergency_contact: Joi.string().optional().allow(null, ""),
   passport_number: Joi.string().optional().allow(null, ""),
-  passport_expiry_date: Joi.alternatives().try(
-    Joi.string().custom(dateValidator),
-    Joi.valid(null, "")
-  ).optional(),
+  passport_expiry_date: Joi.date().optional().allow(null, ""),
+
   religion: Joi.string().optional().allow(null, ""),
   
 

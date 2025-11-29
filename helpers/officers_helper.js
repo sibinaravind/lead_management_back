@@ -49,21 +49,15 @@ createOfficer : async (details) => {
       const collection = db.get().collection(COLLECTION.OFFICERS);
       const existingOfficer = await collection.findOne({
         $or: [
-          { officer_id: details.officerId },
+          // { officer_id: details.officerId },
           { phone: details.phone }
         ]
       });
+      if (existingOfficer) return reject("Officer already exists with this officer id or phone")
       var officerId = details.officer_id;
       if (!officerId || officerId.trim() === "") {
-
       const officerIdSeq = await getNextSequence("officer_id");
-      officerId = `AEOID${String(officerIdSeq).padStart(5, "0")}`;
-
-      }
-      if (existingOfficer) return reject("Officer already exists with this officer id or phone")
-      const allowedStatuses = ['ACTIVE', 'INACTIVE', 'BLOCKED'];
-      if (!allowedStatuses.includes(details.status)) {
-        return reject("Invalid status.");
+      officerId = `AEOID${String(officerIdSeq).padStart(3, "0")}`;
       }
       const hashedPassword = await bcrypt.hash(details.password.toString(), SALT_ROUNDS);
       const officerData = {
@@ -74,6 +68,7 @@ createOfficer : async (details) => {
         gender: details.gender,
         company_phone_number: details.company_phone_number,
         designation: details.designation,
+        dob: details.dob,
         branch: details.branch,
         password: hashedPassword,
         officers:[],

@@ -176,16 +176,16 @@ module.exports = {
                     },
 
                     // convert uploaded_at (dd/MM/yyyy) → actual Date object
-                    {
-                        $addFields: {
-                            lastOfferDate: {
-                                $dateFromString: {
-                                    dateString: "$lastOffer.uploaded_at",
-                                    format: "%d/%m/%Y"
-                                }
-                            }
-                        }
-                    },
+                    // {
+                    //     $addFields: {
+                    //         lastOfferDate: {
+                    //             $dateFromString: {
+                    //                 dateString: "$lastOffer.uploaded_at",
+                    //                 format: "%d/%m/%Y"
+                    //             }
+                    //         }
+                    //     }
+                    // },
                     // sort by latest offer date
                     { $sort: { lastOfferDate: -1 } }
                 ])

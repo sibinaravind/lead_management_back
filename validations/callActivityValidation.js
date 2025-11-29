@@ -13,21 +13,17 @@ const callActivityValidation = Joi.object({
       return value;
     }, 'ObjectId Validator'),
   duration: Joi.number().optional(),
-  next_schedule: Joi.string()
+  next_schedule: Joi.date()
     .required()
-    .custom((value, helpers) => {
-      const parsed = stringTodate(value);
-      if (!parsed) return helpers.error('any.invalid');
-      return parsed;
-    }, 'Custom Date Validator'),
+   .allow(null),
 
-  next_shedule_time: Joi.string()
+    next_shedule_time: Joi.number()
     .optional()
     .custom((value, helpers) => {
-      const time = stringToTime(value);
-      if (!time) return helpers.error('any.invalid');
-      return time;
-    }, 'Custom Time Validator'),
+      const doubleValue = parseFloat(value);
+      if (isNaN(doubleValue)) return helpers.error('any.invalid');
+      return doubleValue;
+    }, 'Custom Double Validator').allow(null),
     dead_lead_reason: Joi.string()
     .trim()
     .when('client_status', {

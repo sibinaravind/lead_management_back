@@ -12,47 +12,72 @@ app.post("/bookingCreate", middleware.checkToken, (req, res) => {
   );
 });
 
-app.patch("/productUpdate/:_id", middleware.checkToken, (req, res) => {
+app.patch("/editBooking/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.editProduct(req.params._id, req.body)
-  );
-  
-});
-app.get("/productList", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    producthelper.getProductList()
+    bookinghelper.editBooking(req.params._id, req.body)
   );
 });
 
-app.get("/productDetails/:_id", middleware.checkToken, (req, res) => {
+app.get("/bookingList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.getProductDetails(req.params._id)
+    bookinghelper.getAllBookings(req.query)
   );
 });
 
-app.get("/getProductIntrested/:_id", middleware.checkToken, (req, res) => {
+app.get("/bookingDetails/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.getProductIntrested(req.params._id)
+    bookinghelper.getBookingById(req.params._id)
+  );
+});
+app.post("/addPayment/:_id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    bookinghelper.addPayment( req.params._id,req.body  )
   );
 });
 
-app.post("/addDiscount", middleware.checkToken, (req, res) => {
+app.patch("/updatePayment/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.addDiscount( req.body)
-  );
-});
-app.patch("/editDiscount/:_id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    producthelper.editDiscount(req.params._id, req.body)
+    bookinghelper.updatePayment( req.params._id,req.body  )
   );
 });
 
-app.delete("/deleteDiscount/:_id", middleware.checkToken, (req, res) => {
+app.post("/updateDocuments/:id", middleware.checkToken, async (req, res) => {
+  try {
+    const result = await response.handle(res, () =>
+      bookinghelper.uploadBookingDocument(req.params.id, req.body)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+app.delete("/deleteDocument/:id", middleware.checkToken, async (req, res) => {
+  try {
+    const result = await response.handle(res, () =>
+      bookinghelper.deleteBookingDocument(req.params.id, req.body.doc_type)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+app.get("/upcomingBookings", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.deleteDiscount(req.params._id)
+    bookinghelper.getUpcomingBookings(
+      req.query,
+    )
   );
 });
 
 
+app.get("/getPaymentScheduleList", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    bookinghelper.getPaymentScheduleList(
+      req.query,
+    )
+  );
+});
 
 module.exports = app;
