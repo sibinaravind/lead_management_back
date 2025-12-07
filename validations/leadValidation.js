@@ -20,17 +20,17 @@ const dateValidator = (value, helpers) => {
 const academic_record_schema = Joi.object({
   qualification: Joi.string().optional().allow(null, ""),
   institution: Joi.string().optional().allow(null, ""),
-  year_of_passing: Joi.number().integer().min(1900).max(2100).optional().allow(null),
-  percentage: Joi.number().min(0).max(100).optional().allow(null),
+  year_of_passing: Joi.number().integer().min(1900).max(2100).optional().allow(null, ""),
+  percentage: Joi.number().min(0).max(100).optional().allow(null, ""),
   board: Joi.string().optional().allow(null, ""),
   description: Joi.string().optional().allow(null, "")
 }).optional().allow(null);
 
 const exam_record_schema = Joi.object({
   exam_name: Joi.string().optional().allow(null, ""),
-  score: Joi.number().min(0).optional().allow(null),
-  test_date: Joi.date().optional().allow(null),
-  validity: Joi.date().optional().allow(null),
+  score: Joi.number().min(0).optional().allow(null, ""),
+  test_date: Joi.date().optional().allow(null, ""),
+  validity: Joi.date().optional().allow(null, ""),
   description: Joi.string().optional().allow(null, "")
 }).optional().allow(null);
 
@@ -67,7 +67,7 @@ const offer_item_schema = Joi.object({
 const product_interested_schema = Joi.object({
   product_id: Joi.string().required(),
   product_name: Joi.string().required(),
-  offers: Joi.array().items(offer_item_schema).optional().allow(null)
+  offers: Joi.array().items(offer_item_schema).optional().allow(null, "")
 });
 
 const leadSchema = Joi.object({
@@ -98,13 +98,13 @@ const leadSchema = Joi.object({
   status: Joi.string().default('NEW'), // NEW, CONTACTED, IN_PROGRESS, CONVERTED, DEAD ,'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATION', 'WON', 'LOST')
   service_type: Joi.string().required(),  // master ticket , visa 
 
-  created_at: Joi.date().optional().allow(null),
+  created_at: Joi.date().optional().allow(null, ""),
   updated_at: Joi.date().optional().allow(null),
   note: Joi.string().optional().allow(null, "").max(1000),
   interested_in: Joi.array().items(Joi.string()).allow(null, "").optional(),
   feedback: Joi.string().optional().allow(null, "").max(500),
   loan_required: Joi.boolean().optional().default(false),
-  loan_amount_required: Joi.number().min(0).optional().allow(null),
+  loan_amount_required: Joi.number().min(0).optional().allow(null, ""),
 
   on_call_communication: Joi.boolean().default(false),
   phone_communication: Joi.boolean().default(true),
@@ -115,27 +115,29 @@ const leadSchema = Joi.object({
   branch: Joi.string().optional().allow(null, ""),
 
   product_interested: Joi.array().optional().items(product_interested_schema).default([]),
-  budget: Joi.number().min(0).optional().allow(null),
+  budget: Joi.number().min(0).optional().allow(null, ""),
   preferred_location: Joi.string().optional().allow(null, ""),
   preferred_date: Joi.date().optional().allow(null),
 
   
 
   country_interested: Joi.array().items(Joi.string()).allow(null, "").optional(),
-  expected_salary: Joi.number().integer().min(0).optional().allow(null),
+  expected_salary: Joi.number().integer().min(0).optional().allow(null, ""),
   qualification: Joi.string().optional().allow(null, ""),
-  skills: Joi.array().items(Joi.string()).allow(null, "").optional(),
+  skills: Joi.string().optional().allow(null, ""),
   profession: Joi.string().optional().allow(null, ""),
-  specialized_in: Joi.array().items(Joi.string()).allow(null, ""),
+  specialized_in: Joi.string().optional().allow(null, ""),
   employment_status: Joi.string().optional().allow(null, ""),  //.valid('Employed', 'Self-Employed', 'Unemployed', 'Student', 'Retired')
-  experience: Joi.number().integer().min(0).max(50).optional().allow(null),
-  job_gap_months: Joi.number().integer().min(0).max(600).optional().allow(null),
-  annual_income: Joi.number().min(0).optional().allow(null),
+  experience: Joi.number().integer().min(0).max(50).optional().allow(null, ""),
+  job_gap_months: Joi.number().integer().min(0).max(600).optional().allow(null, ""),
+  annual_income: Joi.number().min(0).optional().allow(null, ""),
   pan_card_number: Joi.string().optional().allow(null, "").pattern(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/),
   gst_number: Joi.string().optional().allow(null, "").pattern(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/),
+  id_proof_type: Joi.string().optional().allow(null, ""),  //.valid()
+  id_proof_number: Joi.string().optional().allow(null, ""),
   has_existing_loans: Joi.boolean().allow(null, "").optional(),
-  credit_score: Joi.number().integer().min(300).max(900).optional().allow(null),
-  first_job_date: Joi.date().optional().allow(null),
+  credit_score: Joi.number().integer().min(300).max(900).optional().allow(null, ""),
+  first_job_date: Joi.date().optional().allow(null, ""),
   
 
   birth_country: Joi.string().optional().allow(null, ""),
@@ -155,11 +157,11 @@ const leadSchema = Joi.object({
   // documents: Joi.array().optional().items(document_record_schema).allow(null, ""),
 
   travel_purpose: Joi.string().optional().allow(null, ""),  //.valid.valid('BUSINESS', 'HONEYMOON', 'FAMILY', 'FRIENDS', 'SOLO')
-  number_of_travelers: Joi.number().integer().min(1).max(50).optional().allow(null),
+  number_of_travelers: Joi.number().integer().optional().allow(null, ""),
   accommodation_preference: Joi.string().optional().allow(null, "").allow(null, ""),  //.valid('BUDGET', 'STANDARD', 'LUXURY')
-  visited_countries: Joi.array().optional().items(Joi.string()),
+  visited_countries: Joi.array().optional().items(Joi.string()).allow(null, ""),
   visa_type_required: Joi.string().optional().allow(null, ""),  //.valid('TOURIST', 'BUSINESS', 'STUDENT', 'WORK')
-  travel_duration: Joi.number().integer().min(1).max(365).optional().allow(null),  
+  travel_duration: Joi.number().integer().min(1).max(365).optional().allow(null, ""),  
   requires_travel_insurance: Joi.boolean().optional().allow(null, ""),
   requires_hotel_booking: Joi.boolean().optional().allow(null, ""),
   requires_flight_booking: Joi.boolean().optional().allow(null, ""),
@@ -167,9 +169,9 @@ const leadSchema = Joi.object({
   preferred_study_mode: Joi.string().optional().allow(null, ""),  //.valid('ONLINE', 'OFFLINE', 'HYBRID')
   batch_preference: Joi.string().optional().allow(null, ""),  //.valid('MORNING', 'AFTERNOON', 'EVENING', 'WEEKEND')
   highest_qualification: Joi.string().optional().allow(null, ""),
-  year_of_passing: Joi.number().integer().min(1900).max(2100).optional().allow(null),
+  year_of_passing: Joi.number().integer().min(1900).max(2100).optional().allow(null, ""),
   field_of_study: Joi.string().optional().allow(null, ""),
-  percentage_or_cgpa: Joi.number().min(0).max(100).optional().allow(null),
+  percentage_or_cgpa: Joi.number().min(0).max(100).optional().allow(null, ""),
   courses_interested: Joi.array().items(Joi.string()).allow(null, "").optional(),
 
   target_visa_type: Joi.string().optional().allow(null, ""),
@@ -184,14 +186,14 @@ const leadSchema = Joi.object({
   model_preference: Joi.string().optional().allow(null, ""),
   fuel_type: Joi.string().optional().allow(null, ""),  //.valid('PETROL', 'DIESEL', 'ELECTRIC', 'CNG')
   transmission: Joi.string().optional().allow(null, ""),  //.valid('MANUAL', 'AUTOMATIC')
-  down_payment_available: Joi.number().min(0).optional().allow(null),
+  down_payment_available: Joi.number().min(0).optional().allow(null, ""),
   insurance_type: Joi.string().optional().allow(null, ""),  //.valid('COMPREHENSIVE', 'THIRD_PARTY')
 
   property_type: Joi.string().optional().allow(null, ""),//.valid('RESIDENTIAL', 'COMMERCIAL', 'PLOT', 'INDUSTRIAL' , 'AGRICULTURAL', 'RETAIL'),
   property_use: Joi.string().optional().allow(null, ""), //.valid('PERSONAL', 'INVESTMENT', 'RENTAL'),
 
   requires_home_loan: Joi.boolean().allow(null, "").optional(),
-  loan_amount_required_real_estate: Joi.number().min(0).optional().allow(null),
+  loan_amount_required_real_estate: Joi.number().min(0).optional().allow(null, ""),
   possession_timeline: Joi.string().optional().allow(null, ""),  //.valid('IMMEDIATE', '3_MONTHS', '6_MONTHS', '1_YEAR')
   furnishing_preference: Joi.string().optional().allow(null, ""),  //.valid('FULLY_FURNISHED', 'SEMI_FURNISHED', 'UNFURNISHED')
   requires_legal_assistance: Joi.boolean().allow(null, "").optional(),

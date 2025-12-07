@@ -74,7 +74,36 @@ module.exports = {
     getProductList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-                resolve(await db.get().collection(COLLECTION.PRODUCTS).find({ status: { $ne: STATUSES.DELETED } }).toArray());
+
+                resolve(await db.get().collection(COLLECTION.PRODUCTS)
+                    .find({ status: { $ne: STATUSES.DELETED } }, {
+                        projection: {
+                            _id: 1,
+                            product_id: 1,
+                            name: 1,
+                            code: 1,
+                            category: 1,
+                            subCategory: 1,
+                            status: 1,
+                            sellingPrice: 1,
+                            shortDescription: 1,
+                            institutionName: 1,
+                            fuelType:1,
+                        bhk:1,
+                        brand:1,
+                        city:1,
+                        country:1,
+                        duration:1,
+                        furnishingStatus:1,
+                        images:1,
+                        qualificationRequired:1,
+                        registrationYear:1,
+                        serviceMode:1,
+                        transmission: 1
+
+                        }
+                    })
+                    .toArray());
             } catch (err) {
                 console.error(err);
                 reject(err || "Error fetching product list");

@@ -152,7 +152,7 @@
 //     return { success: true, data: result };
 //   } catch (error) {
 //     console.error('❌ Network error:', error);
-//     return { success: false, error: error.message };
+//     throw new error( error.message );;
 //   }
 // }
 
@@ -190,7 +190,7 @@
 //     return { success: true, data: result };
 //   } catch (error) {
 //     console.error('❌ Network error:', error);
-//     return { success: false, error: error.message };
+//     throw new error( error.message );;
 //   }
 // }
 
@@ -228,7 +228,7 @@
 //       return { success: true, data: result };
 //     } catch (error) {
 //       console.error('❌ Network error:', error);
-//       return { success: false, error: error.message };
+//       throw new error( error.message );;
 //     }
 //   } else {
 //     // Otherwise, send as text
@@ -258,7 +258,7 @@
 //       return { success: true, data: result };
 //     } catch (error) {
 //       console.error('❌ Network error:', error);
-//       return { success: false, error: error.message };
+//       throw new error( error.message );;
 //     }
 //   }
 // }
@@ -612,7 +612,7 @@
 //     return { success: true, data: result };
 //   } catch (error) {
 //     console.error('❌ Network error:', error);
-//     return { success: false, error: error.message };
+//     throw new error( error.message );;
 //   }
 // }
 

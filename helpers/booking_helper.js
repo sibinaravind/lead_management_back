@@ -455,7 +455,7 @@ module.exports = {
 
             return { success: true, message: "Document deleted successfully." };
         } catch (err) {
-            return { success: false, error: err.message || "Error deleting document." };
+           throw new Error(err.message  || "Error deleting document." );
         }
     },
 
@@ -557,7 +557,7 @@ module.exports = {
             };
 
         } catch (err) {
-            return { success: false, error: err.message };
+              throw new Error(err.message  );
         }
     },
 
@@ -671,7 +671,9 @@ module.exports = {
             };
 
         } catch (err) {
-            return { success: false, error: err.message };
+           
+
+              throw new Error(err.message  );
         }
     },
 

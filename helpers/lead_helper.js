@@ -3,27 +3,27 @@ let COLLECTION = require('../config/collections')
 const { ObjectId } = require('mongodb');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { leadSchema } = require("../validations/leadValidation");
-const validatePartial = require("../utils/validatePartial");
+const {validatePartial,formatJoiErrors} = require("../utils/validatePartial");
 const { logActivity } = require('./customer_interaction_helper');
 const { safeObjectId } = require('../utils/safeObjectId');
 const fileUploader = require('../utils/fileUploader');
 const path = require('path');
 var fs = require('fs');
+const e = require('express');
+
+
 // Helper to get next sequence number
 module.exports = {
 createLead: async (details) => {
   return new Promise(async (resolve, reject) => {
+
     try {
       // Only validate and use fields that are present in details
       var { error, value } = leadSchema.validate(details ) ;
-
-      if (error) return reject("Validation failed: " + error.details[0].message);
-
-        value = Object.fromEntries(
-        Object.entries(value || {}).filter(([_, v]) =>
-          v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")
-        )
-      );
+      if (error) {
+        const cleanErrors = formatJoiErrors(error, details);
+        throw "Validation failed: " + cleanErrors.join(", ");
+      }
 
       const dbInstance = db.get();
       const leadsCol = dbInstance.collection(COLLECTION.LEADS);
@@ -104,8 +104,7 @@ createLead: async (details) => {
       }
 
     } catch (err) {
-      console.error("Error inserting lead:", err);
-      return reject("Error processing request");
+      return reject(err );
     }
   });
   },
@@ -124,7 +123,6 @@ createLead: async (details) => {
         // Validate each lead
         const { error, value } = leadSchema.validate(details);
         if (error) continue; // Skip invalid leads
-
         // Remove empty fields
         const cleanValue = Object.fromEntries(
           Object.entries(value || {}).filter(([_, v]) =>
@@ -194,7 +192,7 @@ createLead: async (details) => {
       }
       return { success: true, insertedIds };
     } catch (err) {
-      return { success: false, error: err.message };
+      throw new Error(err.message );
     }
   },
 
@@ -221,7 +219,7 @@ createLead: async (details) => {
             }
             return { success: true, message: "Lead updated successfully" };
         } catch (err) {
-            return { success: false, error: err.message };
+            throw new Error(err.message );
         }
   },
 
@@ -341,11 +339,29 @@ createLead: async (details) => {
 
     getLeadDetails: async (leadId) => {
       try {
-        const lead = await db.get().collection(COLLECTION.LEADS).findOne({ _id: ObjectId(leadId) });
-        if (!lead) throw new Error("Lead not found");
-        return lead;
+      // Aggregate to fetch lead details with officer info
+      const result = await db.get().collection(COLLECTION.LEADS).aggregate([
+        { $match: { _id: ObjectId(leadId) } },
+        {
+        $lookup: {
+          from: COLLECTION.OFFICERS,
+          localField: "officer_id",
+          foreignField: "_id",
+          as: "officer"
+        }
+        },
+        {
+        $unwind: {
+          path: "$officer",
+          preserveNullAndEmptyArrays: true
+        }
+        },
+      ]).toArray();
+
+      if (!result || result.length === 0) throw new Error("Lead not found");
+      return result[0];
       } catch (err) {
-        throw new Error("Error fetching lead details");
+      throw new Error("Error fetching lead details");
       }
     },
 
@@ -552,7 +568,7 @@ createLead: async (details) => {
 
         return { success: true, message: "Product interested updated" };
       } catch (err) {
-        return { success: false, error: err.message };
+        throw new Error(err.message );
       }
     },
 

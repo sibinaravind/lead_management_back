@@ -52,11 +52,12 @@ app.get('/', async (req, res) => {
     // return JSON to browser
     res.json({ success: true, data: results });
   } catch (error) {
-    console.error('❌ Error:', error.response?.data || error.message);
-    res.status(500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
+    // console.error('❌ Error:', error.response?.data || error.message);
+    // res.status(500).json({
+    //   success: false,
+    //   error: error.response?.data || error.message,
+    // });
+      throw new Error( error.response?.data || error.message );
   }
 });
 

@@ -123,6 +123,7 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
 
 // thinsg to do
 /*** 
+ * //each officers lead status in frist page for officer 
  billing page need registartion for non existing client 
  will add tag to leads that they can add different tag to filter leads in future
 

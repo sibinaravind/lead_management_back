@@ -4,9 +4,9 @@ const { ObjectId } = require('mongodb');
 const { STATUSES } = require('../constants/enums');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { callActivityValidation, mobilecallLogValidation } = require('../validations/callActivityValidation');
-const validatePartial = require("../utils/validatePartial");
 const { ref } = require('joi');
 const { safeObjectId } = require('../utils/safeObjectId');
+const {validatePartial,formatJoiErrors} = require("../utils/validatePartial");
 module.exports = {
     logActivity: async ({
         type,
@@ -69,8 +69,12 @@ module.exports = {
     logCallEvent: async (data, officer_id) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const { error, value } = callActivityValidation.validate(data);
-                if (error) return reject("Validation failed: " + error.details[0].message);
+               
+                 var { error, value } = callActivityValidation.validate(data) ;
+                if (error) {
+                    const cleanErrors = formatJoiErrors(error, data);
+                    throw "Validation failed: " + cleanErrors.join(", ");
+                }
 
                 data = value;
                 if (!data.client_id) return reject("Client ID is required");
@@ -156,8 +160,8 @@ module.exports = {
                 resolve("Call event logged");
 
             } catch (err) {
-                console.error(err);
-                reject("Error logging call event");
+                
+                reject (err.message || err);
             }
         });
     }
@@ -305,11 +309,11 @@ module.exports = {
 
             const logs = await callLogCollection.aggregate([
                 { $match: filter },
-
+                { $sort: { created_at: 1 } },
                 {
                     $facet: {
                         data: [
-                            { $sort: { created_at: -1 } },
+                          
                             { $skip: skip },
                             { $limit: parsedLimit }
                         ],
@@ -342,7 +346,7 @@ module.exports = {
 
             const result = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).aggregate([
                 { $match: { client_id: ObjectId(id) } },
-                { $sort: { created_at: -1 } },
+                { $sort: { created_at: 1 } },
                 {
                     $lookup: {
                         from: COLLECTION.OFFICERS,

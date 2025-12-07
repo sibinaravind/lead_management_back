@@ -23,7 +23,7 @@ const callActivityValidation = Joi.object({
       const doubleValue = parseFloat(value);
       if (isNaN(doubleValue)) return helpers.error('any.invalid');
       return doubleValue;
-    }, 'Custom Double Validator').allow(null),
+    }, 'Custom Double Validator').allow(null).error(new Error('next_shedule_time is invalid')),
     dead_lead_reason: Joi.string()
     .trim()
     .when('client_status', {
@@ -43,7 +43,7 @@ const callActivityValidation = Joi.object({
         return helpers.error('any.invalid');
       }
       return value;
-    }, 'ObjectId Validator'),
+    }, 'ObjectId Validator').error(new Error('officer_id is invalid')),
 });
 
 const mobilecallLogValidation = Joi.object({
@@ -54,7 +54,7 @@ const mobilecallLogValidation = Joi.object({
         return helpers.error('any.invalid');
       }
       return value;
-    }, 'Received Phone Validator'),
+    }, 'Received Phone Validator').error(new Error('officer_phone is invalid')),
   officer_id: Joi.string()
     .trim()
     .required()
@@ -63,7 +63,7 @@ const mobilecallLogValidation = Joi.object({
         return helpers.error('any.invalid');
       }
       return value;
-    }, 'ObjectId Validator'),
+    }, 'ObjectId Validator').error(new Error('officer_id is invalid')),
   phone:Joi.string()
     .custom((value, helpers) => {
       const phoneRegex = /^(\+?\d{1,3}(?:\s?\d{2,})+|\d{10,15})$/;
@@ -71,7 +71,7 @@ const mobilecallLogValidation = Joi.object({
         return helpers.error('any.invalid');
       }
       return value;
-    }, 'Received Phone Validator'),
+    }, 'Received Phone Validator').error(new Error('phone number is invalid')),
   duration: Joi.number().required(),
   call_type: Joi.string().required().uppercase(),
 });
