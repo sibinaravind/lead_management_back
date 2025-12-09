@@ -520,7 +520,7 @@ createLead: async (details) => {
      
 
     addProductInterested: async (leadId, productData ,officer_id) => {
-      try {
+      // try {
         const leadsCol = db.get().collection(COLLECTION.LEADS);
         // Check if product already exists for this lead
         const lead = await leadsCol.findOne({ _id: ObjectId(leadId) });
@@ -530,6 +530,7 @@ createLead: async (details) => {
           p => p.product_id === productData.product_id
         );
         productData.offers[0].uploaded_at  = new Date();
+        productData.offers[0].updated_by  = officer_id ? safeObjectId(officer_id) : "UNASSIGNED";
         if (existingProduct) {
           updateQuery = {
             $push: {
@@ -567,9 +568,9 @@ createLead: async (details) => {
         });
 
         return { success: true, message: "Product interested updated" };
-      } catch (err) {
-        throw new Error(err.message );
-      }
+      // } catch (err) {
+      //   throw new Error(err.message );
+      // }
     },
 
 

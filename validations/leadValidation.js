@@ -114,13 +114,10 @@ const leadSchema = Joi.object({
   officer_id: Joi.string().optional().allow(null, ""),
   branch: Joi.string().optional().allow(null, ""),
 
-  product_interested: Joi.array().optional().items(product_interested_schema).default([]),
+  // product_interested: Joi.array().optional().items(product_interested_schema).default([]),
   budget: Joi.number().min(0).optional().allow(null, ""),
   preferred_location: Joi.string().optional().allow(null, ""),
   preferred_date: Joi.date().optional().allow(null),
-
-  
-
   country_interested: Joi.array().items(Joi.string()).allow(null, "").optional(),
   expected_salary: Joi.number().integer().min(0).optional().allow(null, ""),
   qualification: Joi.string().optional().allow(null, ""),
@@ -211,7 +208,8 @@ module.exports = {
   leadSchema,
   leadUpdateSchema,
   phoneValidator,
-  dateValidator
+  dateValidator,
+  product_interested_schema
 };
 
 
