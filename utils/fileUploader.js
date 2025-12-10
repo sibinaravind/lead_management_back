@@ -32,6 +32,7 @@ async function processAndStoreBase64File({
     // Determine file extension
     let ext;
     const match = base64Data.match(/^data:(.*?)\/(.*?);base64,/);
+   
     if (match) {
       ext = match[2].toLowerCase();
       // Handle common MIME type variations

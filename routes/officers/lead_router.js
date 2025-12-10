@@ -12,7 +12,6 @@ app.post("/insertLead", middleware.checkToken, (req, res) => {
 });
 app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, async (req, res) => {
   try {
-    console.log("Updating client required documents");
     const result = await response.handle(res, () =>
       leadHelper.uploadClientDocument(req.params.id, req.body)
     );

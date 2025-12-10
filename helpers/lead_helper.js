@@ -225,6 +225,7 @@ createLead: async (details) => {
 
 
   uploadClientDocument: (id, { doc_type, base64 }) => {
+    console.log("uploadClientDocument called with id:", id, "doc_type:", doc_type);
           let filePath = null;
           console.log("Starting document upload for lead ID:", id);
           return new Promise(async (resolve, reject) => {
