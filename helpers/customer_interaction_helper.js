@@ -70,7 +70,10 @@ module.exports = {
         return new Promise(async (resolve, reject) => {
             try {
                
-                 var { error, value } = callActivityValidation.validate(data) ;
+                 var { error, value } = callActivityValidation.validate(data,{
+                abortEarly: false,
+                stripUnknown: true,
+            }) ;
                 if (error) {
                     const cleanErrors = formatJoiErrors(error, data);
                     throw "Validation failed: " + cleanErrors.join(", ");

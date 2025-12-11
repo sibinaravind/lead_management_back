@@ -24,26 +24,26 @@ const callActivityValidation = Joi.object({
       if (isNaN(doubleValue)) return helpers.error('any.invalid');
       return doubleValue;
     }, 'Custom Double Validator').allow(null).error(new Error('next_shedule_time is invalid')),
-    dead_lead_reason: Joi.string()
-    .trim()
-    .when('client_status', {
-      is: 'DEAD',
-      then: Joi.required(),
-      otherwise: Joi.optional().allow('')
-    }).uppercase(),
+  dead_lead_reason: Joi.string()
+    .trim().optional().allow('', null),
+    // .when('client_status', {
+    //   is: 'DEAD',
+    //   then: Joi.required(),
+    //   otherwise: Joi.optional().allow('')
+    // }).uppercase(),
     client_status: Joi.string().trim().uppercase().required(),
     comment: Joi.string().optional().allow(''),
     call_type: Joi.string().uppercase(), //.valid('INCOMING', 'OUTGOING')
     call_status: Joi.string().uppercase(), //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY'),
-    officer_id: Joi.string()
-    .trim()
-    .optional()
-    .custom((value, helpers) => {
-      if (!mongoose.Types.ObjectId.isValid(value)) {
-        return helpers.error('any.invalid');
-      }
-      return value;
-    }, 'ObjectId Validator').error(new Error('officer_id is invalid')),
+    // officer_id: Joi.string()
+    // .trim()
+    // .optional()
+    // .custom((value, helpers) => {
+    //   if (!mongoose.Types.ObjectId.isValid(value)) {
+    //     return helpers.error('any.invalid');
+    //   }
+    //   return value;
+    // }, 'ObjectId Validator').error(new Error('officer_id is invalid')),
 });
 
 const mobilecallLogValidation = Joi.object({
