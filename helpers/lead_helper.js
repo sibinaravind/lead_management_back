@@ -108,96 +108,170 @@ createLead: async (details) => {
     }
   });
   },
+bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
+  try {
+    if (!Array.isArray(leadsArray) || leadsArray.length === 0) {
+      return {
+        success: false,
+        message: "Input must be a non-empty array",
+        insertedIds: [],
+        errors: []
+      };
+    }
+    const dbInstance = db.get();
+    const leadsCol = dbInstance.collection(COLLECTION.LEADS);
+    const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
+    const insertedIds = [];
+    const errors = [];
+    // ✅ Force round robin if officers list is provided
+    const useCustomOfficers = Array.isArray(officers) && officers.length > 0;
+    const useRoundRobin = useCustomOfficers || roundrobin === true;
+    // ✅ Counter key (separate sequence for custom officer list)
 
-  bulkInsertLeads: async (leadsArray) => {
-    try {
-      if (!Array.isArray(leadsArray) || leadsArray.length === 0) {
-        throw new Error("Input must be a non-empty array");
-      }
-      const dbInstance = db.get();
-      const leadsCol = dbInstance.collection(COLLECTION.LEADS);
-      const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
+    for (let i = 0; i < leadsArray.length; i++) {
+      const details = leadsArray[i];
 
-      const insertedIds = [];
-      for (const details of leadsArray) {
-        // Validate each lead
+      try {
+        // 1️⃣ Validate
         const { error, value } = leadSchema.validate(details);
-        if (error) continue; // Skip invalid leads
-        // Remove empty fields
+        if (error) {
+          errors.push({
+            index: i,
+            ... details,
+            phone: details?.phone ?? null,
+            reason: `Validation failed: ${error.message}`
+          });
+          continue;
+        }
+        // 2️⃣ Clean empty fields
         const cleanValue = Object.fromEntries(
-          Object.entries(value || {}).filter(([_, v]) =>
-            v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")
+          Object.entries(value).filter(
+            ([_, v]) =>
+              v !== null &&
+              v !== undefined &&
+              !(typeof v === "string" && v.trim() === "")
           )
         );
-        // Check for duplicates by phone
+        // 3️⃣ Duplicate phone
         const exists = await leadsCol.findOne({ phone: cleanValue.phone });
-        if (exists) continue; // Skip duplicates
-
-        // Generate client ID
+        if (exists) {
+          errors.push({
+            index: i,
+              ... details,
+            phone: cleanValue.phone,
+            reason: "Duplicate phone number"
+          });
+          continue;
+        }
+        // 4️⃣ Generate client ID
         const leadIdSeq = await getNextSequence("lead_id");
         const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
 
-        // Officer assignment
+        // 5️⃣ Officer Assignment
         let assignedOfficer = null;
-        if ((!cleanValue.officer_id || cleanValue.officer_id.trim() === "") && cleanValue.service_type) {
-          const rrConfig = await dbInstance
-            .collection(COLLECTION.ROUNDROBIN)
-            .findOne({ name: cleanValue.service_type });
-          if (rrConfig?.officers?.length > 0) {
+
+        if (useRoundRobin) {
+          let officerPool = [];
+
+          // A️⃣ Custom officers list
+          if (useCustomOfficers) {
+            officerPool = officers;
+          }
+          // B️⃣ DB round robin config
+          else if (cleanValue.service_type) {
+            const rrConfig = await dbInstance
+              .collection(COLLECTION.ROUNDROBIN)
+              .findOne({ name: cleanValue.service_type });
+
+            officerPool = rrConfig?.officers || [];
+          }
+          if (officerPool.length > 0) {
             const { value: counter } = await dbInstance
               .collection(COLLECTION.COUNTER)
               .findOneAndUpdate(
-                { _id: `lead_roundrobin_${cleanValue.service_type}` },
+                { _id: 'lead_roundrobin_' },
                 { $inc: { sequence: 1 } },
                 { upsert: true, returnDocument: "after" }
               );
-            const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
-            const selectedOfficerId = rrConfig.officers[officerIndex];
+
+            const officerIndex =
+              (counter.sequence - 1) % officerPool.length;
+
             assignedOfficer = await officersCol.findOne(
-              { _id: safeObjectId(selectedOfficerId) },
-              { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+              { _id: safeObjectId(officerPool[officerIndex]) },
+              {
+                projection: {
+                  name: 1,
+                  officer_id: 1,
+                  email: 1,
+                  designation: 1,
+                  branch: 1
+                }
+              }
             );
           }
-        } else if (cleanValue.officer_id) {
-          assignedOfficer = await officersCol.findOne(
-            { _id: safeObjectId(cleanValue.officer_id) },
-            { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
-          );
         }
 
-        cleanValue.officer_id = assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED";
-        cleanValue.status = assignedOfficer
-          ? (cleanValue.status !== undefined && cleanValue.status !== null && cleanValue.status !== "" ? cleanValue.status : "NEW")
+        // 6️⃣ Force UNASSIGNED if no officer selected
+        cleanValue.officer_id = assignedOfficer
+          ? safeObjectId(assignedOfficer._id)
           : "UNASSIGNED";
 
+          console.log("Officer Pool:", assignedOfficer );
+        cleanValue.status = assignedOfficer ? "NEW" : "UNASSIGNED";
+
+        // 7️⃣ Insert
         const result = await leadsCol.insertOne({
           client_id,
           ...cleanValue,
           created_at: new Date(),
-          updated_at: new Date(),
+          updated_at: new Date()
         });
 
         if (result.acknowledged) {
-          if (cleanValue.officer_id) {
-            leadsCol.updateOne({ _id: result.insertedId }, { $set: { officer_id: safeObjectId(cleanValue.officer_id) } });
-          }
           await logActivity({
             type: "customer_created",
             client_id: result.insertedId,
-            officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
-            comment: cleanValue.note || "",
+            officer_id: assignedOfficer
+              ? safeObjectId(assignedOfficer._id)
+              : "UNASSIGNED",
+            comment: cleanValue.note || ""
           });
+          
           insertedIds.push(result.insertedId);
         }
+      } catch (rowErr) {
+        errors.push({
+          index: i,
+            ... details,
+          phone: details?.phone ?? null,
+          reason: rowErr.message || "Unexpected error"
+        });
       }
-      return { success: true, insertedIds };
-    } catch (err) {
-      throw new Error(err.message );
     }
-  },
+
+    return {
+      success: true,
+      summary: {
+        total: leadsArray.length,
+        inserted: insertedIds.length,
+        failed: errors.length
+      },
+      insertedIds,
+      errors
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err.message || "Bulk insert failed",
+      insertedIds: [],
+      errors: []
+    };
+  }
+ },
 
 
-  editLead : async (leadId, updateData) => {
+  editLead : async (leadId, updateData ,officer_id) => {
         try {
             // Validate input
             const validatedData = validatePartial(leadSchema, updateData);
@@ -217,6 +291,38 @@ createLead: async (details) => {
             if (updateResult.matchedCount === 0) {
             throw new Error("Lead not found");
             }
+            if(updateData.status !== undefined && updateData.status !== null && updateData.status !== "")
+            await logActivity({
+            type: "status_updated",
+            client_id: leadId,
+            officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
+            comment: updateData.status || "",
+           });
+            return { success: true, message: "Lead updated successfully" };
+        } catch (err) {
+            throw new Error(err.message );
+        }
+  },
+  updateLeadStatus : async (leadId, updateData,officer_id) => {
+        try {
+
+            if (!updateData.client_status) {
+              throw new Error("client_status is required");
+            }
+            const updateResult = await db.get().collection(COLLECTION.LEADS).updateOne(
+              { _id: ObjectId(leadId) },
+              { $set: { status: updateData.client_status,
+                        dead_lead_reason: updateData.dead_lead_reason || "", updated_at: new Date() } }
+            );
+            if (updateResult.matchedCount === 0) {
+            throw new Error("Lead not found");
+            }
+            await logActivity({
+            type: "status_updated",
+            client_id: leadId,
+            officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
+            comment: updateData.status || "",
+          });
             return { success: true, message: "Lead updated successfully" };
         } catch (err) {
             throw new Error(err.message );
@@ -1067,6 +1173,92 @@ createLead: async (details) => {
 
 
 
+  // bulkInsertLeads: async (leadsArray) => {
+  //   try {
+  //     if (!Array.isArray(leadsArray) || leadsArray.length === 0) {
+  //       throw new Error("Input must be a non-empty array");
+  //     }
+  //     const dbInstance = db.get();
+  //     const leadsCol = dbInstance.collection(COLLECTION.LEADS);
+  //     const officersCol = dbInstance.collection(COLLECTION.OFFICERS);
+
+  //     const insertedIds = [];
+  //     for (const details of leadsArray) {
+  //       // Validate each lead
+  //       const { error, value } = leadSchema.validate(details);
+  //       if (error) continue; // Skip invalid leads
+  //       // Remove empty fields
+  //       const cleanValue = Object.fromEntries(
+  //         Object.entries(value || {}).filter(([_, v]) =>
+  //           v !== null && v !== undefined && !(typeof v === "string" && v.trim() === "")
+  //         )
+  //       );
+  //       // Check for duplicates by phone
+  //       const exists = await leadsCol.findOne({ phone: cleanValue.phone });
+  //       if (exists) continue; // Skip duplicates
+
+  //       // Generate client ID
+  //       const leadIdSeq = await getNextSequence("lead_id");
+  //       const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+
+  //       // Officer assignment
+  //       let assignedOfficer = null;
+  //       if ((!cleanValue.officer_id || cleanValue.officer_id.trim() === "") && cleanValue.service_type) {
+  //         const rrConfig = await dbInstance
+  //           .collection(COLLECTION.ROUNDROBIN)
+  //           .findOne({ name: cleanValue.service_type });
+  //         if (rrConfig?.officers?.length > 0) {
+  //           const { value: counter } = await dbInstance
+  //             .collection(COLLECTION.COUNTER)
+  //             .findOneAndUpdate(
+  //               { _id: `lead_roundrobin_${cleanValue.service_type}` },
+  //               { $inc: { sequence: 1 } },
+  //               { upsert: true, returnDocument: "after" }
+  //             );
+  //           const officerIndex = (counter.sequence - 1) % rrConfig.officers.length;
+  //           const selectedOfficerId = rrConfig.officers[officerIndex];
+  //           assignedOfficer = await officersCol.findOne(
+  //             { _id: safeObjectId(selectedOfficerId) },
+  //             { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+  //           );
+  //         }
+  //       } else if (cleanValue.officer_id) {
+  //         assignedOfficer = await officersCol.findOne(
+  //           { _id: safeObjectId(cleanValue.officer_id) },
+  //           { projection: { name: 1, officer_id: 1, email: 1, designation: 1, branch: 1 } }
+  //         );
+  //       }
+
+  //       cleanValue.officer_id = assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED";
+  //       cleanValue.status = assignedOfficer
+  //         ? (cleanValue.status !== undefined && cleanValue.status !== null && cleanValue.status !== "" ? cleanValue.status : "NEW")
+  //         : "UNASSIGNED";
+
+  //       const result = await leadsCol.insertOne({
+  //         client_id,
+  //         ...cleanValue,
+  //         created_at: new Date(),
+  //         updated_at: new Date(),
+  //       });
+
+  //       if (result.acknowledged) {
+  //         if (cleanValue.officer_id) {
+  //           leadsCol.updateOne({ _id: result.insertedId }, { $set: { officer_id: safeObjectId(cleanValue.officer_id) } });
+  //         }
+  //         await logActivity({
+  //           type: "customer_created",
+  //           client_id: result.insertedId,
+  //           officer_id: assignedOfficer ? safeObjectId(assignedOfficer._id) : "UNASSIGNED",
+  //           comment: cleanValue.note || "",
+  //         });
+  //         insertedIds.push(result.insertedId);
+  //       }
+  //     }
+  //     return { success: true, insertedIds };
+  //   } catch (err) {
+  //     throw new Error(err.message );
+  //   }
+  // },
 
   // restoreClientFromDeadAndAssignOfficer: async (deadClientId, officerId = null,comment) => {
   //   return new Promise(async (resolve, reject) => {

@@ -47,7 +47,7 @@ module.exports = {
 
             // Only include these fields if they have valid ObjectIds
             const validOfficerId = safeObjectId(officer_id);
-            if (validOfficerId) data.officer_id = validOfficerId;
+            if (validOfficerId) data.officer_id = validOfficerId ;
 
             const validAssignedById = safeObjectId(assigned_by);
             if (validAssignedById) data.assigned_by = validAssignedById;

@@ -22,12 +22,17 @@ app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, async (req
 });
 app.post("/bulkInsertLeads", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.bulkInsertLeads(req.body)
+    leadHelper.bulkInsertLeads(req.body.data, req.body.roundrobin, req.body.officers)
   );
 });
 app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.editLead(req.params.id, req.body)
+  );
+});
+app.patch("/updateLeadStatus/:id", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.updateLeadStatus(req.params.id, req.body ,req.decoded._id)
   );
 });
 app.get("/getAllLeads", middleware.checkToken, (req, res) => {

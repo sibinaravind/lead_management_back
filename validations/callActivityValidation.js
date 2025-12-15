@@ -17,21 +17,17 @@ const callActivityValidation = Joi.object({
     .required()
    .allow(null),
 
-    next_shedule_time: Joi.number()
+    next_shedule_time: Joi.string()
     .optional()
-    .custom((value, helpers) => {
-      const doubleValue = parseFloat(value);
-      if (isNaN(doubleValue)) return helpers.error('any.invalid');
-      return doubleValue;
-    }, 'Custom Double Validator').allow(null).error(new Error('next_shedule_time is invalid')),
-  dead_lead_reason: Joi.string()
-    .trim().optional().allow('', null),
+    .allow(null),
+  // dead_lead_reason: Joi.string()
+  //   .trim().optional().allow('', null),
     // .when('client_status', {
     //   is: 'DEAD',
     //   then: Joi.required(),
     //   otherwise: Joi.optional().allow('')
     // }).uppercase(),
-    client_status: Joi.string().trim().uppercase().required(),
+    // client_status: Joi.string().trim().uppercase().required(),
     comment: Joi.string().optional().allow(''),
     call_type: Joi.string().uppercase(), //.valid('INCOMING', 'OUTGOING')
     call_status: Joi.string().uppercase(), //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY'),
