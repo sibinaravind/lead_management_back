@@ -126,10 +126,13 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
  * //each officers lead status in frist page for officer 
  billing page need registartion for non existing client 
  will add tag to leads that they can add different tag to filter leads in future
+ delete product and lead
 
  need to convert unknown( got a call ) lead to lead with officer 
  check dead lead while insert lead
  filter admin call history with department like now admin will see all officers call history without cre or recruiter filter
+
+
  *    ***/
 
 

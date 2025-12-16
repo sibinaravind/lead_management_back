@@ -3,15 +3,16 @@ let COLLECTION = require('../config/collections')
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { STATUSES } = require('../constants/enums');
 const { productSchema, productUpdateSchema } = require("../validations/product_validation");
-const validatePartial = require("../utils/validatePartial");
+const {validatePartial} = require("../utils/validatePartial");
 const { ObjectId } = require('mongodb');
+const fileUploader = require('../utils/fileUploader');
 // Helper to get next sequence number
 const { safeObjectId } = require('../utils/safeObjectId');
 module.exports = {
     createProduct: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
-                var { error, value } = productSchema.validate(details);
+                var { error, value } = productSchema.validate(details ,{ abortEarly: false  , stripUnknown: true  });
                 if (error) return reject("Validation failed: " + error.details[0].message);
                 value = Object.fromEntries(
                     Object.entries(value || {}).filter(([_, v]) =>
@@ -50,7 +51,7 @@ module.exports = {
     editProduct: async (product_id, updateFields) => {
         return new Promise(async (resolve, reject) => {
             try {
-                const filteredFields = validatePartial(productUpdateSchema, updateFields);
+                const filteredFields = validatePartial(productSchema, updateFields);
                 db.get().collection(COLLECTION.PRODUCTS).updateOne(
                     { _id: safeObjectId(product_id) },
                     { $set: { ...filteredFields, updated_at: new Date() } }
@@ -109,6 +110,60 @@ module.exports = {
                 reject(err || "Error fetching product list");
             }
         });
+    },
+
+
+  addProductImage: (product_id, { doc_type, base64 }) => {
+          let filePath = null;
+          return new Promise(async (resolve, reject) => {
+              try {
+                  if (!doc_type || !base64) {
+                      return reject("Missing required fields for document upload.");
+                  }
+                
+                  filePath = await fileUploader.processAndStoreBase64File({
+                      base64Data: base64,
+                      originalName: doc_type,
+                      clientName: `product_${product_id}`,
+                      uploadsDir: "uploads/product_images"
+                  });
+
+                  const updateResult = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
+                    { _id: safeObjectId(product_id), status: { $ne: STATUSES.DELETED } },
+                    { $push: { images: filePath }, $set: { updated_at: new Date() } }
+                );
+                  if (updateResult.matchedCount === 0) {
+                      // Rollback uploaded file if DB update fails
+                      if (filePath) {
+                          await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                      }
+                      return reject(`Failed to update or add document for "${doc_type}".`);
+                  }
+                  resolve({ success: true, file_path: filePath });
+              } catch (err) {
+                  console.log("Error occurred while uploading document:", err);
+                  // Rollback uploaded file if error
+                  if (filePath) {
+                      await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                  }
+                  reject("Error uploading document: " + (err.message || err));
+              }
+          });
+      },
+
+    // Delete image from product
+    deleteProductImage: async (product_id, imageUrl) => {
+        try {
+            if (!imageUrl) throw "Image URL is required";
+            const result = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
+                { _id: safeObjectId(product_id)},
+                { $pull: { images: imageUrl }, $set: { updated_at: new Date() } }
+            );
+            if (result.modifiedCount > 0) return true;
+            throw "Product not found or image not deleted";
+        } catch (err) {
+            throw err;
+        }
     },
 
     // Get product detail with active discounts using aggregation for better performance

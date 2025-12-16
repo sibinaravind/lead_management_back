@@ -18,6 +18,17 @@ app.patch("/productUpdate/:_id", middleware.checkToken, (req, res) => {
   );
   
 });
+
+app.post("/addProductImage/:id", middleware.checkToken, async (req, res) => {
+  try {
+    const result = await response.handle(res, () =>
+      producthelper.addProductImage(req.params.id, req.body)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 app.get("/productList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     producthelper.getProductList()

@@ -9,7 +9,6 @@ const { safeObjectId } = require('../utils/safeObjectId');
 const fileUploader = require('../utils/fileUploader');
 const path = require('path');
 var fs = require('fs');
-const e = require('express');
 
 
 // Helper to get next sequence number
@@ -19,7 +18,8 @@ createLead: async (details) => {
 
     try {
       // Only validate and use fields that are present in details
-      var { error, value } = leadSchema.validate(details ) ;
+      var { error, value } = leadSchema.validate(details , { abortEarly: false  , stripUnknown: true  }) ;
+    
       if (error) {
         const cleanErrors = formatJoiErrors(error, details);
         throw "Validation failed: " + cleanErrors.join(", ");
@@ -331,9 +331,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
 
 
   uploadClientDocument: (id, { doc_type, base64 }) => {
-    console.log("uploadClientDocument called with id:", id, "doc_type:", doc_type);
           let filePath = null;
-          console.log("Starting document upload for lead ID:", id);
           return new Promise(async (resolve, reject) => {
               try {
                   if (!doc_type || !base64) {

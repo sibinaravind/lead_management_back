@@ -2,8 +2,7 @@ const Joi = require("joi");
 
 const priceComponentSchema = Joi.object({
   title: Joi.string().allow("", null),
-  
-  percent: Joi.number().min(0).max(100).allow("", null),
+  amount: Joi.number().min(0).allow("", null),
   gstPercent: Joi.number().min(0).max(100).allow("", null),
   cgstPercent: Joi.number().min(0).max(100).allow("", null),
   sgstPercent: Joi.number().min(0).max(100).allow("", null),
@@ -13,6 +12,40 @@ const documentRequiredSchema = Joi.object({
   docName: Joi.string().required(),
   mandatory: Joi.boolean().default(true),
 });
+
+
+
+// const SUBCATEGORY = {
+//   // Travel
+//   TOUR_PACKAGE: "tour_package",
+//   FLIGHT_BOOKING: "flight_booking",
+//   HOTEL_BOOKING: "hotel_booking",
+
+//   // Migration
+//   VISA: "visa",
+//   IMMIGRATION: "immigration",
+//   JOB_ASSISTANCE: "job_assistance",
+
+//   // Vehicle
+//   CAR: "car",
+//   BIKE: "bike",
+//   SCOOTER: "scooter",
+
+//   // Education
+//   UG: "ug",
+//   PG: "pg",
+//   DIPLOMA: "diploma",
+//   CERTIFICATION: "certification",
+
+//   // Real Estate
+//   APARTMENT: "apartment",
+//   VILLA: "villa",
+//   PLOT: "plot",
+//   COMMERCIAL: "commercial",
+
+//   // Others
+//   OTHER: "other",
+// };
 
 const productSchema = Joi.object({
   id: Joi.string().allow("", null),
@@ -27,8 +60,7 @@ const productSchema = Joi.object({
   basePrice: Joi.number().min(0).allow("", null),
   sellingPrice: Joi.number().min(0).allow("", null),
   costPrice: Joi.number().min(0).allow("", null),
-
-  advanceRequiredPercent: Joi.number().min(0).max(100).allow("", null),
+  advanceRequiredPercent: Joi.number().min(0).allow("", null),
 
   priceComponents: Joi.array().items(priceComponentSchema).allow("", null),
 
@@ -82,7 +114,7 @@ const productSchema = Joi.object({
   courseDuration: Joi.string().allow("", null),
   courseLevel: Joi.string().allow("", null), // UG / PG / DIPLOMA
   institutionName: Joi.string().allow("", null),
-  countryOfStudy: Joi.string().allow("", null),
+  // countryOfStudy: Joi.string().allow("", null),
 
   // REAL ESTATE
   propertyType: Joi.string().allow("", null),
@@ -98,7 +130,8 @@ const productSchema = Joi.object({
   supportAvailable: Joi.boolean().default(true),
   supportDuration: Joi.string().allow("", null),
   warrantyInfo: Joi.string().allow("", null),
-
+  downpayment: Joi.number().min(0).allow("", null),
+  loanEligibility: Joi.number().allow("", null),
   providerDetails: Joi.object({
     name: Joi.string().allow("", null),
     contact: Joi.string().allow("", null),
