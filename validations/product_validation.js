@@ -77,7 +77,7 @@ const productSchema = Joi.object({
 
   requiresAgreement: Joi.boolean().default(false),
 
-  images: Joi.array().items(Joi.string()).allow("", null),
+  // images: Joi.array().items(Joi.string()).allow("", null),
 
   isRefundable: Joi.boolean().allow("", null),
   refundPolicy: Joi.string().allow("", null),

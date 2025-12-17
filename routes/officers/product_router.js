@@ -29,6 +29,28 @@ app.post("/addProductImage/:id", middleware.checkToken, async (req, res) => {
     return res.status(500).json({ success: false, message: "Internal server error" });
   }
 });
+
+app.delete("/deleteProductImage/:id", middleware.checkToken, async (req, res) => {
+  try {
+    const result = await response.handle(res, () =>
+      producthelper.deleteProductImage(req.params.id, req.body.url)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
+
+app.post("/addProductDocument/:id", middleware.checkToken, async (req, res) => {
+  try {
+    const result = await response.handle(res, () =>
+      producthelper.addProductDocument(req.params.id, req.body)
+    );
+    return result;
+  } catch (error) {
+    return res.status(500).json({ success: false, message: "Internal server error" });
+  }
+});
 app.get("/productList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     producthelper.getProductList()
