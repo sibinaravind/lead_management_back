@@ -54,8 +54,10 @@ const productSchema = Joi.object({
   category: Joi.string().allow("", null), // e.g., home , rentential, personal
   subCategory: Joi.string().allow("", null), // e.g., loan, insurance, credit card
   status: Joi.string().allow("", null), //.valid("ACTIVE", "INACTIVE")
-  description: Joi.string().allow("", null),
+  productType: Joi.string().allow("", null), //.valid("Car", "3bhk", "Pg", "Tour", "Visa", ""),
   shortDescription: Joi.string().allow("", null),
+  description: Joi.string().allow("", null),
+  
 
   basePrice: Joi.number().min(0).allow("", null),
   sellingPrice: Joi.number().min(0).allow("", null),

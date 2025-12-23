@@ -18,54 +18,192 @@ function cleanObject(obj) {
     );
 }
 
-module.exports = {
-    createBooking: async (details) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                var { error, value } = bookingSchema.validate(details);
-                if (error) return reject("Validation failed: " + error.details[0].message);
-                value = cleanObject(value);
-                details = value;
-                const collection = db.get().collection(COLLECTION.BOOKINGS);
-                const newNumber = await getNextSequence('booking_id');
-                const booking_no = `AEBK${String(newNumber).padStart(6, '0')}`;
 
-                if (!details.status) {
-                    details.status = BOOKING_STATUSES.PROCESSING;
+async function allocatePaymentToSchedules({
+    booking,
+    amount,
+    payment_method,
+    transaction_id,
+    remarks,
+    officer_id
+}) {
+    const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
+    const txnCol = db.get().collection(COLLECTION.TRANSACTIONS);
+    let remainingAmount = Number(amount);
+    // sort schedules
+    const schedules = booking.payment_schedule
+        .sort((a, b) => a.due_date - b.due_date);
+    // create transaction ONCE
+    const txn = {
+        booking_id: booking._id,
+        booking_no: booking.booking_no,
+        customer_id: booking.customer_id,
+        amount,
+        payment_method,
+        transaction_id,
+        remarks,
+        created_by: safeObjectId(officer_id),
+        created_at: new Date()
+    };
+
+    const txnResult = await txnCol.insertOne(txn);
+
+    const bulkOps = [];
+
+    for (const schedule of schedules) {
+        if (remainingAmount <= 0) break;
+
+        const paid = schedule.paid_amount || 0;
+        const pending = schedule.amount - paid;
+        if (pending <= 0) continue;
+        const payNow = Math.min(pending, remainingAmount);
+        const newPaid = paid + payNow;
+        const status = newPaid >= schedule.amount ? "PAID" : "PARTIAL-PAID";
+
+        bulkOps.push({
+            updateOne: {
+                filter: {
+                    _id: booking._id,
+                    "payment_schedule._id": schedule._id
+                },
+                update: {
+                    $set: {
+                        "payment_schedule.$.paid_amount": newPaid,
+                        "payment_schedule.$.status": status,
+                        "payment_schedule.$.paid_at": new Date(),
+                        updated_at: new Date()
+                    },
+                    $push: {
+                        "payment_schedule.$.transaction_ids": txnResult.insertedId
+                    }
                 }
-                // const status_history = [{
-                //     status: details.status,
-                //     changed_at: new Date(),
-                //     changed_by: details.officer_id || null,
-                // }];
+            }
+        });
 
-                const result = await collection.insertOne({
-                    booking_no: booking_no,
-                    ...details,
-                    // status_history: status_history,
+        remainingAmount -= payNow;
+    }
+
+    if (bulkOps.length) {
+        await bookingCol.bulkWrite(bulkOps);
+    }
+
+    return {
+        transaction_id: txnResult.insertedId,
+        unallocated_amount: remainingAmount
+    };
+}
+
+module.exports = {
+   
+
+    createBooking: async (details) => {
+    return new Promise(async (resolve, reject) => {
+        try {   
+            const { error, value } = bookingSchema.validate(details);
+            if (error) return reject(error.details[0].message);
+            details = value;
+            // Handle customer creation if not exists
+            if(!details.customer_id){
+                 const leadsCol =  db.get().collection(COLLECTION.LEADS);
+                const exists = await leadsCol.findOne({ phone: details.customer_phone });
+                if (exists) {
+                    return reject(`Client with this phone number already exists with name ${exists.name}, Please use existing client.`
+                    );
+                }
+
+                const leadIdSeq = await getNextSequence("lead_id");
+                const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+
+                const leadResult = await leadsCol.insertOne({
+                    client_id,
+                    name: details.customer_name,
+                    phone: details.customer_phone,
+                    address: details.customer_address || "",
+                    status: STATUSES.CONVERTED,
+                    officer_id: details.officer_id ? safeObjectId(details.officer_id) : null,
                     created_at: new Date(),
                     updated_at: new Date()
                 });
-                logActivity({
-                    type: "booked_product",
-                    client_id: safeObjectId(details.customer_id),
-                    officer_id: safeObjectId(details.officer_id),
-                    referrer_id: safeObjectId(result.insertedId),
-                    comment: " Booked Product: " + details.product_name + " for : " + details.grand_total,
-                });
-                resolve({
-                    insertedId: result.insertedId,
-                    booking_no
-                });
 
-            } catch (err) {
-                console.error(err);
-                reject(err.message || "Error processing request");
+                if (leadResult.acknowledged) {
+                    details.customer_id = leadResult.insertedId;
+                    await logActivity({
+                        type: "customer_created",
+                        client_id: leadResult.insertedId,
+                        officer_id: details.officer_id
+                        ? safeObjectId(details.officer_id)
+                        : "UNASSIGNED",
+                        comment: "New client created during booking creation."
+                    });
+                } else {
+                    return reject({
+                        message: "Client creation failed. Cannot proceed with booking. Try again."
+                    });
+                }
             }
-        });
-    },
 
-    editBooking: async (bookingId, updateData, officer_id) => {
+            // Booking insertion
+            const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
+            const newNumber = await getNextSequence("booking_id");
+            const booking_no = `AEBK${String(newNumber).padStart(6, "0")}`;
+
+            const payment_schedule = (details.payment_schedule || []).map(p => ({
+                ...p,
+                paid_amount: 0,
+                transaction_ids: [],
+                paid_at: null
+            }));
+
+            const bookingResult = await bookingCol.insertOne({
+                booking_no,
+                ...details,
+                payment_schedule,
+                status: BOOKING_STATUSES.PROCESSING,
+                created_at: new Date(),
+                updated_at: new Date()
+            });
+
+            const booking = await bookingCol.findOne({ _id: bookingResult.insertedId });
+
+            // Initial payment
+            let paymentResult = null;
+            if (details.transaction?.paid_amount > 0) {
+                paymentResult = await allocatePaymentToSchedules({
+                    booking,
+                    amount: details.transaction.paid_amount,
+                    payment_method: details.transaction.payment_method,
+                    transaction_id: details.transaction.transaction_id,
+                    remarks: details.transaction.remarks,
+                    officer_id: details.officer_id
+                });
+            }
+
+            await logActivity({
+                type: "BOOKING_CREATED",
+                referrer_id: bookingResult.insertedId,
+                client_id: details.customer_id,
+                officer_id: details.officer_id
+                ? safeObjectId(details.officer_id)
+                : "UNASSIGNED",
+                comment: `New booking ${details.product_name} created.`
+            });
+
+            resolve({
+                booking_no,
+                booking_id: bookingResult.insertedId,
+                initial_payment: paymentResult
+            });
+
+        } catch (err) {
+           
+            reject(err?.message || err || "Booking creation failed");
+        }
+    });
+   },
+
+
+
+    editBooking: async (bookingId, updateData,) => {
         try {
             // Validate input
             const validatedData = validatePartial(bookingSchema, updateData);
@@ -81,6 +219,66 @@ module.exports = {
             return { success: false, error: err.message };
         }
     },
+
+    addBookingPayment: async (data) => {
+        const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
+        const booking = await bookingCol.findOne({
+            _id: safeObjectId(data.booking_id)
+        });
+        if (!booking) throw "Booking not found";
+        return allocatePaymentToSchedules({
+            booking,
+            amount: data.amount,
+            payment_method: data.payment_method,
+            transaction_id: data.transaction_id,
+            remarks: data.remarks,
+            officer_id: data.officer_id
+        });
+    },
+
+    reschedulePayment: async ({
+        booking_id,
+        payment_schedule_id,
+        due_date,
+        amount
+    }) => {
+        try {
+            const col = db.get().collection(COLLECTION.BOOKINGS);
+
+            const result = await col.updateOne(
+                {
+                    _id: safeObjectId(booking_id),
+                    payment_schedule: {
+                        $elemMatch: {
+                            _id: payment_schedule_id,
+                            status: { $ne: "PAID" }
+                        }
+                    }
+                },
+                {
+                    $set: {
+                        "payment_schedule.$.due_date": new Date(due_date),
+                        // ...(amount != null && {
+                        //     "payment_schedule.$.amount": Number(amount)
+                        // }),
+                        updated_at: new Date()
+                    }
+                }
+            );
+
+            if (result.matchedCount === 0) {
+                throw new Error("Booking not found or payment already PAID");
+            }
+
+            return { message: "Payment rescheduled successfully" };
+
+        } catch (err) {
+            throw err;
+        }
+    },
+
+
+
     getBookingById: async (id) => {
         return new Promise(async (resolve, reject) => {
             try {
@@ -263,74 +461,6 @@ module.exports = {
         }
     },
 
-    addPayment: async (id, paymentData) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-
-                var { error, value } = paymentScheduleSchema.validate(paymentData);
-                if (error) return reject("Validation failed: " + error.details[0].message);
-                paymentData = cleanObject(value);
-                const objectId = safeObjectId(id);
-                if (!objectId) return reject("Invalid booking ID");
-                const collection = db.get().collection(COLLECTION.BOOKINGS);
-
-                await collection.updateOne(
-                    { _id: objectId },
-                    {
-                        $push: { payment_schedule: paymentData },
-                        $set: { updated_at: new Date() }
-                    }
-                ).then((updateResult) => {
-                    if (updateResult.modifiedCount === 0) {
-                        return reject("Payment not added");
-                    }
-                    resolve({ success: true, message: "Payment added successfully" });
-                });
-            } catch (err) {
-                console.error(err);
-                reject(err.message || "Error adding payment");
-            }
-        });
-    },
-
-    updatePayment: async (bookingId, updateData) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                // Validate update body (partial allowed)
-                const updatePayload = validatePartial(paymentScheduleSchema, updateData);
-
-                if (!bookingId) return reject("Invalid booking ID");
-                if (!updatePayload.id) return reject("Invalid payment ID");
-                console.log("Update Payload:", updatePayload);
-                await db.get().collection(COLLECTION.BOOKINGS).updateOne(
-                    {
-                        _id: safeObjectId(bookingId),
-                        "payment_schedule.id": updatePayload.id
-                    },
-                    {
-                        $set: {
-                            "payment_schedule.$": {
-                                ...updatePayload,
-                            },
-                            updated_at: new Date()
-                        }
-                    }
-                ).then((updateResult) => {
-                    if (updateResult.modifiedCount === 0) {
-                        return reject("Payment not found or no changes applied");
-                    }
-                    resolve({
-                        success: true,
-                        message: "Payment updated successfully"
-                    });
-                });
-
-            } catch (err) {
-                console.error(err);
-                reject(err.message || "Error updating payment");
-            }
-        });
-    },
 
     uploadBookingDocument: (id, { doc_type, base64 }) => {
         let filePath = null;
@@ -373,7 +503,6 @@ module.exports = {
                         }
                     );
                 } else {
-                    console.log("Adding new document entry for doc_type:", doc_type);
                     // ➕ Add new document entry if it doesn't exist
                     updateResult = await collection.updateOne(
                         { _id: ObjectId(id) },
@@ -389,8 +518,6 @@ module.exports = {
                         }
                     );
                 }
-
-                console.log("Update Result:", updateResult);
 
                 if (updateResult.matchedCount === 0) {
                     // Rollback uploaded file if DB update fails
@@ -455,7 +582,7 @@ module.exports = {
 
             return { success: true, message: "Document deleted successfully." };
         } catch (err) {
-           throw new Error(err.message  || "Error deleting document." );
+            throw new Error(err.message || "Error deleting document.");
         }
     },
 
@@ -557,7 +684,7 @@ module.exports = {
             };
 
         } catch (err) {
-              throw new Error(err.message  );
+            throw new Error(err.message);
         }
     },
 
@@ -635,7 +762,7 @@ module.exports = {
                         due_date: "$payment_schedule.due_date",
                         paid_at: "$payment_schedule.paid_at",
                         transaction_id: "$payment_schedule.transaction_id",
-                        payment_id: "$payment_schedule.id",
+                        payment_id: "$payment_schedule._id",
                         remarks: "$payment_schedule.remarks",
                     }
                 },
@@ -671,11 +798,128 @@ module.exports = {
             };
 
         } catch (err) {
-           
 
-              throw new Error(err.message  );
+
+            throw new Error(err.message);
         }
     },
 
 
 };
+
+
+
+//  createBooking: async (details) => {
+//         return new Promise(async (resolve, reject) => {
+//             try {
+//                 var { error, value } = bookingSchema.validate(details);
+//                 if (error) return reject("Validation failed: " + error.details[0].message);
+//                 value = cleanObject(value);
+//                 details = value;
+//                 const collection = db.get().collection(COLLECTION.BOOKINGS);
+//                 const newNumber = await getNextSequence('booking_id');
+//                 const booking_no = `AEBK${String(newNumber).padStart(6, '0')}`;
+
+//                 if (!details.status) {
+//                     details.status = BOOKING_STATUSES.PROCESSING;
+//                 }
+//                 // const status_history = [{
+//                 //     status: details.status,
+//                 //     changed_at: new Date(),
+//                 //     changed_by: details.officer_id || null,
+//                 // }];
+
+//                 const result = await collection.insertOne({
+//                     booking_no: booking_no,
+//                     ...details,
+//                     // status_history: status_history,
+//                     created_at: new Date(),
+//                     updated_at: new Date()
+//                 });
+//                 logActivity({
+//                     type: "booked_product",
+//                     client_id: safeObjectId(details.customer_id),
+//                     officer_id: safeObjectId(details.officer_id),
+//                     referrer_id: safeObjectId(result.insertedId),
+//                     comment: " Booked Product: " + details.product_name + " for : " + details.grand_total,
+//                 });
+//                 resolve({
+//                     insertedId: result.insertedId,
+//                     booking_no
+//                 });
+
+//             } catch (err) {
+//                 console.error(err);
+//                 reject(err.message || "Error processing request");
+//             }
+//         });
+//     },
+
+// addPayment: async (id, paymentData) => {
+//         return new Promise(async (resolve, reject) => {
+//             try {
+
+//                 var { error, value } = paymentScheduleSchema.validate(paymentData);
+//                 if (error) return reject("Validation failed: " + error.details[0].message);
+//                 paymentData = cleanObject(value);
+//                 const objectId = safeObjectId(id);
+//                 if (!objectId) return reject("Invalid booking ID");
+//                 const collection = db.get().collection(COLLECTION.BOOKINGS);
+
+//                 await collection.updateOne(
+//                     { _id: objectId },
+//                     {
+//                         $push: { payment_schedule: paymentData },
+//                         $set: { updated_at: new Date() }
+//                     }
+//                 ).then((updateResult) => {
+//                     if (updateResult.modifiedCount === 0) {
+//                         return reject("Payment not added");
+//                     }
+//                     resolve({ success: true, message: "Payment added successfully" });
+//                 });
+//             } catch (err) {
+//                 console.error(err);
+//                 reject(err.message || "Error adding payment");
+//             }
+//         });
+//     },
+
+//     updatePayment: async (bookingId, updateData) => {
+//         return new Promise(async (resolve, reject) => {
+//             try {
+//                 // Validate update body (partial allowed)
+//                 const updatePayload = validatePartial(paymentScheduleSchema, updateData);
+
+//                 if (!bookingId) return reject("Invalid booking ID");
+//                 if (!updatePayload.id) return reject("Invalid payment ID");
+//                 console.log("Update Payload:", updatePayload);
+//                 await db.get().collection(COLLECTION.BOOKINGS).updateOne(
+//                     {
+//                         _id: safeObjectId(bookingId),
+//                         "payment_schedule.id": updatePayload.id
+//                     },
+//                     {
+//                         $set: {
+//                             "payment_schedule.$": {
+//                                 ...updatePayload,
+//                             },
+//                             updated_at: new Date()
+//                         }
+//                     }
+//                 ).then((updateResult) => {
+//                     if (updateResult.modifiedCount === 0) {
+//                         return reject("Payment not found or no changes applied");
+//                     }
+//                     resolve({
+//                         success: true,
+//                         message: "Payment updated successfully"
+//                     });
+//                 });
+
+//             } catch (err) {
+//                 console.error(err);
+//                 reject(err.message || "Error updating payment");
+//             }
+//         });
+//     },

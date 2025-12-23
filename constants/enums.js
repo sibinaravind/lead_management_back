@@ -27,6 +27,7 @@ const STATUSES = {
     NEW:'NEW',
     CRE: 'CRE',
     INTRESTED: 'INTRESTED',
+    CONVERTED: 'CONVERTED',
 };
 
 module.exports = {

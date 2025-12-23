@@ -489,6 +489,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
             name: 1,
             email: 1,
             phone: 1,
+            address: 1,
             service_type: 1,
             country_code: 1,
             status: 1,

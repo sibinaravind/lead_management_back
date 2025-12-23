@@ -29,17 +29,26 @@ app.get("/bookingDetails/:_id", middleware.checkToken, (req, res) => {
     bookinghelper.getBookingById(req.params._id)
   );
 });
-app.post("/addPayment/:_id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    bookinghelper.addPayment( req.params._id,req.body  )
-  );
-});
 
-app.patch("/updatePayment/:_id", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    bookinghelper.updatePayment( req.params._id,req.body  )
-  );
-});
+app.post(
+  "/payment/add",
+  middleware.checkToken,
+  (req, res) => {
+    return response.handle(res, () =>
+      bookinghelper.addBookingPayment(req.body)
+    );
+  }
+);
+
+app.patch(
+  "/payment/reschedule",
+  middleware.checkToken,
+  (req, res) => {
+    return response.handle(res, () =>
+      bookinghelper.reschedulePayment(req.body)
+    );
+  }
+);
 
 app.post("/updateDocuments/:id", middleware.checkToken, async (req, res) => {
   try {

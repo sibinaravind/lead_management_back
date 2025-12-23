@@ -18,6 +18,7 @@ module.exports={
     ANNOUNCEMENTS: 'announcements',
     DISCOUNT :'discounts',
     BOOKINGS: 'bookings',
+    TRANSACTIONS: 'transactions',
    
 
 }
