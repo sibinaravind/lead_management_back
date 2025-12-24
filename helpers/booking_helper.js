@@ -5,7 +5,7 @@ const { STATUSES, BOOKING_STATUSES } = require('../constants/enums');
 const { bookingSchema, paymentScheduleSchema } = require("../validations/bookingValidation");
 const { safeObjectId } = require('../utils/safeObjectId');
 const { logActivity } = require('./customer_interaction_helper');
-const validatePartial = require("../utils/validatePartial");
+const {validatePartial} = require("../utils/validatePartial");
 const { ObjectId } = require('mongodb');
 const fileUploader = require('../utils/fileUploader');
 const path = require('path');
@@ -94,112 +94,113 @@ async function allocatePaymentToSchedules({
 }
 
 module.exports = {
-   
+
 
     createBooking: async (details) => {
-    return new Promise(async (resolve, reject) => {
-        try {   
-            const { error, value } = bookingSchema.validate(details);
-            if (error) return reject(error.details[0].message);
-            details = value;
-            // Handle customer creation if not exists
-            if(!details.customer_id){
-                 const leadsCol =  db.get().collection(COLLECTION.LEADS);
-                const exists = await leadsCol.findOne({ phone: details.customer_phone });
-                if (exists) {
-                    return reject(`Client with this phone number already exists with name ${exists.name}, Please use existing client.`
-                    );
+        return new Promise(async (resolve, reject) => {
+            try {
+                const { error, value } = bookingSchema.validate(details);
+                if (error) return reject(error.details[0].message);
+                details = value;
+                // Handle customer creation if not exists
+                if (!details.customer_id) {
+                    const leadsCol = db.get().collection(COLLECTION.LEADS);
+                    const exists = await leadsCol.findOne({ phone: details.customer_phone });
+                    if (exists) {
+                        return reject(`Client with this phone number already exists with name ${exists.name}, Please use existing client.`
+                        );
+                    }
+
+                    const leadIdSeq = await getNextSequence("lead_id");
+                    const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+
+                    const leadResult = await leadsCol.insertOne({
+                        client_id,
+                        name: details.customer_name,
+                        phone: details.customer_phone,
+                        address: details.customer_address || "",
+                        status: STATUSES.CONVERTED,
+                        officer_id: details.officer_id ? safeObjectId(details.officer_id) : null,
+                        created_at: new Date(),
+                        updated_at: new Date()
+                    });
+
+                    if (leadResult.acknowledged) {
+                        details.customer_id = safeObjectId(leadResult.insertedId);
+                        details.customer_app_id = client_id;
+                        await logActivity({
+                            type: "customer_created",
+                            client_id: leadResult.insertedId,
+                            officer_id: details.officer_id
+                                ? safeObjectId(details.officer_id)
+                                : "UNASSIGNED",
+                            comment: "New client created during booking creation."
+                        });
+                    } else {
+                        return reject({
+                            message: "Client creation failed. Cannot proceed with booking. Try again."
+                        });
+                    }
                 }
 
-                const leadIdSeq = await getNextSequence("lead_id");
-                const client_id = `AELID${String(leadIdSeq).padStart(5, "0")}`;
+                // Booking insertion
+                const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
+                const newNumber = await getNextSequence("booking_id");
+                const booking_id = `AEBK${String(newNumber).padStart(6, "0")}`;
 
-                const leadResult = await leadsCol.insertOne({
-                    client_id,
-                    name: details.customer_name,
-                    phone: details.customer_phone,
-                    address: details.customer_address || "",
-                    status: STATUSES.CONVERTED,
-                    officer_id: details.officer_id ? safeObjectId(details.officer_id) : null,
+                const payment_schedule = (details.payment_schedule || []).map(p => ({
+                    ...p,
+                    paid_amount: 0,
+                    transaction_ids: [],
+                    paid_at: null
+                }));
+
+                const bookingResult = await bookingCol.insertOne({
+                    booking_id,
+                    ...details,
+                    payment_schedule,
+                    status: BOOKING_STATUSES.PROCESSING,
                     created_at: new Date(),
                     updated_at: new Date()
                 });
 
-                if (leadResult.acknowledged) {
-                    details.customer_id = leadResult.insertedId;
-                    await logActivity({
-                        type: "customer_created",
-                        client_id: leadResult.insertedId,
+                const booking = await bookingCol.findOne({ _id: bookingResult.insertedId });
+
+                // Initial payment
+                let paymentResult = null;
+                if (details.transaction?.paid_amount > 0) {
+                    paymentResult = await allocatePaymentToSchedules({
+                        booking,
+                        amount: details.transaction.paid_amount,
+                        payment_method: details.transaction.payment_method,
+                        transaction_id: details.transaction.transaction_id,
+                        remarks: details.transaction.remarks,
                         officer_id: details.officer_id
-                        ? safeObjectId(details.officer_id)
-                        : "UNASSIGNED",
-                        comment: "New client created during booking creation."
-                    });
-                } else {
-                    return reject({
-                        message: "Client creation failed. Cannot proceed with booking. Try again."
                     });
                 }
-            }
 
-            // Booking insertion
-            const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
-            const newNumber = await getNextSequence("booking_id");
-            const booking_no = `AEBK${String(newNumber).padStart(6, "0")}`;
-
-            const payment_schedule = (details.payment_schedule || []).map(p => ({
-                ...p,
-                paid_amount: 0,
-                transaction_ids: [],
-                paid_at: null
-            }));
-
-            const bookingResult = await bookingCol.insertOne({
-                booking_no,
-                ...details,
-                payment_schedule,
-                status: BOOKING_STATUSES.PROCESSING,
-                created_at: new Date(),
-                updated_at: new Date()
-            });
-
-            const booking = await bookingCol.findOne({ _id: bookingResult.insertedId });
-
-            // Initial payment
-            let paymentResult = null;
-            if (details.transaction?.paid_amount > 0) {
-                paymentResult = await allocatePaymentToSchedules({
-                    booking,
-                    amount: details.transaction.paid_amount,
-                    payment_method: details.transaction.payment_method,
-                    transaction_id: details.transaction.transaction_id,
-                    remarks: details.transaction.remarks,
+                await logActivity({
+                    type: "BOOKING_CREATED",
+                    referrer_id: bookingResult.insertedId,
+                    client_id: details.customer_id,
                     officer_id: details.officer_id
+                        ? safeObjectId(details.officer_id)
+                        : "UNASSIGNED",
+                    comment: `New booking ${details.product_name} created.`
                 });
+
+                resolve({
+                    booking_id,
+                    _id: bookingResult.insertedId,
+                    initial_payment: paymentResult
+                });
+
+            } catch (err) {
+
+                reject(err?.message || err || "Booking creation failed");
             }
-
-            await logActivity({
-                type: "BOOKING_CREATED",
-                referrer_id: bookingResult.insertedId,
-                client_id: details.customer_id,
-                officer_id: details.officer_id
-                ? safeObjectId(details.officer_id)
-                : "UNASSIGNED",
-                comment: `New booking ${details.product_name} created.`
-            });
-
-            resolve({
-                booking_no,
-                booking_id: bookingResult.insertedId,
-                initial_payment: paymentResult
-            });
-
-        } catch (err) {
-           
-            reject(err?.message || err || "Booking creation failed");
-        }
-    });
-   },
+        });
+    },
 
 
 
@@ -216,7 +217,7 @@ module.exports = {
             }
             return { success: true, message: "Lead updated successfully" };
         } catch (err) {
-            return { success: false, error: err.message };
+            throw(err.message || "Error updating booking");
         }
     },
 
@@ -279,19 +280,93 @@ module.exports = {
 
 
 
+    // getBookingById: async (id) => {
+    //     return new Promise(async (resolve, reject) => {
+    //         try {
+    //             const objectId = safeObjectId(id);
+    //             if (!objectId) return reject("Invalid booking ID");
+
+    //             const collection = db.get().collection(COLLECTION.BOOKINGS);
+    //             const booking = await collection.findOne({ _id: objectId });
+    //             if (!booking) return reject("Booking not found");
+
+    //             resolve(booking);
+
+    //         } catch (err) {
+    //             console.error(err);
+    //             reject(err.message || "Error fetching booking");
+    //         }
+    //     });
+    // },
+
     getBookingById: async (id) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const objectId = safeObjectId(id);
                 if (!objectId) return reject("Invalid booking ID");
 
-                const collection = db.get().collection(COLLECTION.BOOKINGS);
+                const bookingCol = db.get().collection(COLLECTION.BOOKINGS);
 
-                const booking = await collection.findOne({ _id: objectId });
+                const data = await bookingCol.aggregate([
+                    {
+                        $match: { _id: objectId }
+                    },
+                    {
+                        $lookup: {
+                            from: COLLECTION.PRODUCTS,
+                            localField: "product_id",
+                            foreignField: "_id",
+                            as: "product"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$product",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+                    {
+                        $lookup: {
+                            from: COLLECTION.LEADS,
+                            localField: "customer_id",
+                            foreignField: "_id",
+                            as: "lead"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$lead",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
 
-                if (!booking) return reject("Booking not found");
+                    // 4️⃣ Add required + uploaded documents
+                    {
+                        $addFields: {
+                            required_documents: {
+                                $ifNull: ["$product.documentsRequired", []]
+                            },
+                            customer_documents: {
+                                $ifNull: ["$lead.documents", []]
+                            }
+                        }
+                    },
 
-                resolve(booking);
+                    // 5️⃣ Remove lookup objects (optional cleanup)
+                    {
+                        $project: {
+                            product: 0,
+                            lead: 0
+                        }
+                    }
+                ]).toArray();
+
+                if (!data.length) {
+                    return reject("Booking not found");
+                }
+
+                resolve( data[0]
+                );
 
             } catch (err) {
                 console.error(err);
@@ -299,6 +374,8 @@ module.exports = {
             }
         });
     },
+
+
 
     getAllBookings: async (query, decoded) => {
         try {

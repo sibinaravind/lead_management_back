@@ -29,7 +29,7 @@ const priceComponentSchema = Joi.object({
 
 
 const transactionSchema = Joi.object({
-  paid_amount: Joi.number().positive().allow("", null),
+  paid_amount: Joi.number().allow("", null),
   payment_method: Joi.string().allow("", null),
   transaction_id: Joi.string().allow("", null),
   remarks: Joi.string().allow("", null)
@@ -37,11 +37,29 @@ const transactionSchema = Joi.object({
 
 // MAIN BOOKING SCHEMA
 const bookingSchema = Joi.object({
-  customer_id: Joi.string().allow("", null),
+  customer_id: Joi.string().hex().length(24).allow("", null).custom((value, helpers) => {
+    // Skip empty or null values
+    if (!value) return value;
+    try {
+      return safeObjectId(value);   // convert to ObjectId if not null
+    } catch (err) {
+      return helpers.error("any.invalid");
+    }
+  }),
+  customer_app_id: Joi.string().allow("", null),
   customer_name: Joi.string(),
   customer_phone: Joi.string(),
   customer_address: Joi.string().allow("", null),
-  product_id: Joi.string().required(),
+  product_id: Joi.string().hex().length(24).allow("", null).custom((value, helpers) => {
+    // Skip empty or null values
+    if (!value) return value;
+    try {
+      return safeObjectId(value);   // convert to ObjectId if not null
+    } catch (err) {
+      return helpers.error("any.invalid");
+    }
+  }),
+  product_app_id: Joi.string().allow("", null),
   product_name: Joi.string().allow("", null),
   booking_date: Joi.date().required(),
   expected_closure_date: Joi.date().allow("", null),
@@ -76,24 +94,25 @@ const bookingSchema = Joi.object({
   return_date: Joi.date().allow(null),
   no_of_travellers: Joi.number().min(1).allow(null),
 
-  officer_id: Joi.string() .hex()
-    .length(24).custom((value, helpers) => {
+  officer_id: Joi.string().hex().length(24).allow("", null).custom((value, helpers) => {
     // Skip empty or null values
-    if (!value) return null;
+    if (!value) return value;
     try {
-      return safeObjectId(value);   // convert to ObjectId
+      return safeObjectId(value);   // convert to ObjectId if not null
     } catch (err) {
       return helpers.error("any.invalid");
     }
   }),
-  
+
   co_applicant_list: Joi.array().items(
     Joi.object({
       name: Joi.string().allow("", null),
       phone: Joi.string().allow("", null),
       dob: Joi.string().allow("", null),
       address: Joi.string().allow("", null),
-      email: Joi.string().allow("", null)
+      email: Joi.string().allow("", null),
+      idCardType : Joi.string().allow("", null),
+      idCardNumber : Joi.string().allow("", null),
     })
   ).allow("", null),
 });
