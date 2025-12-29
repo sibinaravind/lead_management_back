@@ -80,10 +80,6 @@ app.get("/interactions/:id", middleware.checkToken, (req, res) => {
 
 
 
-
-
-
-
 // app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
 //   if (req.query.filterCategory == 'HISTORY') {
 //       return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));

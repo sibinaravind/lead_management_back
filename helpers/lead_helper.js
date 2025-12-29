@@ -726,7 +726,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
             {
               $facet: {
                 TOTAL: [{ $count: "count" }],
-                NEW: [{ $match: { status: "HOT" } }, { $count: "count" }],
+                NEW: [{ $match: { status: "NEW" } }, { $count: "count" }],
                 UNASSIGNED: [{ $match: { status: "UNASSIGNED" } }, { $count: "count" }],
                 NEGOTIATING: [{ $match: { status: "NEGOTIATING" } }, { $count: "count" }],
                 DEAD: [{ $match: { status: "DEAD" } }, { $count: "count" }],
@@ -954,7 +954,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
                       created_at: 1,
                       officer_id: 1,
                       officer_name: "$officer.name",
-                      officer_staff_id: "$officer.officer_id",
+                      officer_gen_id: "$officer.officer_id",
                       dead_lead_reason: 1,
                       source_campaign: 1,
                       // lastcall: 0 // Optional: expose if needed for frontend

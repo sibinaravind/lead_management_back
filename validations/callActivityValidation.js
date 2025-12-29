@@ -15,11 +15,11 @@ const callActivityValidation = Joi.object({
   duration: Joi.number().optional(),
   next_schedule: Joi.date()
     .required()
-   .allow(null),
+   .allow(null,''),
 
     next_shedule_time: Joi.string()
     .optional()
-    .allow(null),
+    .allow(null,''),
   // dead_lead_reason: Joi.string()
   //   .trim().optional().allow('', null),
     // .when('client_status', {
@@ -28,7 +28,7 @@ const callActivityValidation = Joi.object({
     //   otherwise: Joi.optional().allow('')
     // }).uppercase(),
     // client_status: Joi.string().trim().uppercase().required(),
-    comment: Joi.string().optional().allow(''),
+    comment: Joi.string().optional().allow('',null),
     call_type: Joi.string().uppercase(), //.valid('INCOMING', 'OUTGOING')
     call_status: Joi.string().uppercase(), //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY'),
     // officer_id: Joi.string()

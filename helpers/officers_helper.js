@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const SALT_ROUNDS = 10;
 const  officerValidation= require('../validations/officerValidation');
-const validatePartial = require("../utils/validatePartial");
+const {validatePartial} = require("../utils/validatePartial");
 // const { off } = require('../routes/officers/officers_router');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 module.exports = {
@@ -76,7 +76,8 @@ createOfficer : async (details) => {
       };
       const result = await collection.insertOne(officerData);
       if (result.acknowledged) {
-        resolve(result.insertedId);
+        resolve(
+          { insertedId: result.insertedId , officer_id: officerId});
       } else {
         reject("Insert failed");
       }
