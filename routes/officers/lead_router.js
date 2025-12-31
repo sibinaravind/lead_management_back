@@ -98,7 +98,9 @@ app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
 app.get("/getCallFilteredHistory", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getCallHistoryWithFilters(req.query, req.decoded));
 });
-
+app.get("/getCallCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getCallCountByCategory(req.decoded, req.query));
+});
 app.get("/getLeadCount", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getLeadCountByCategory(req.decoded, req.query));
 });

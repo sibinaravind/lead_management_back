@@ -984,7 +984,110 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
         }
   },  
 
-   getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
+  getCallCountByCategory: async (decoded, query) => {
+  try {
+    const { employee } = query;
+
+    const isAdmin =
+      Array.isArray(decoded?.designation) &&
+      decoded.designation.includes("ADMIN");
+
+    const filter = {};
+
+    // Officer filter
+    if (employee) {
+      filter.officer_id = safeObjectId(employee);
+    } else if (!isAdmin) {
+      filter.officer_id = Array.isArray(decoded?.officers)
+        ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+        : safeObjectId(decoded?._id);
+    }
+
+    const now = new Date();
+
+    // Date calculations
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(todayStart.getDate() + 1);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Sunday
+
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+    const result = await db
+      .get()
+      .collection(COLLECTION.CALL_LOG_ACTIVITY)
+      .aggregate([
+        { $match: filter },
+        {
+          $facet: {
+            TOTAL: [{ $count: "count" }],
+
+            TODAY: [
+              {
+                $match: {
+                  created_at: { $gte: todayStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            YESTERDAY: [
+              {
+                $match: {
+                  created_at: { $gte: yesterdayStart, $lt: todayStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            THIS_WEEK: [
+              {
+                $match: {
+                  created_at: { $gte: weekStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            THIS_MONTH: [
+              {
+                $match: {
+                  created_at: { $gte: monthStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ]
+          }
+        }
+      ])
+      .toArray();
+
+    const counts = result[0] || {};
+    const getCount = (key) => counts[key]?.[0]?.count ?? 0;
+
+    return {
+      TOTAL: getCount("TOTAL"),
+      TODAY: getCount("TODAY"),
+      YESTERDAY: getCount("YESTERDAY"),
+      THIS_WEEK: getCount("THIS_WEEK"),
+      THIS_MONTH: getCount("THIS_MONTH")
+    };
+
+  } catch (err) {
+    console.error("getCallCountByCategory error:", err);
+    throw new Error("Server Error");
+  }
+},
+
+
+getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
         try {
           const {
             page = 1,
@@ -1123,15 +1226,19 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
                   client_id: "$client.client_id",
                   officer_id: 1,
                   recruiter_id: 1,
-                  duration: 1,
-                  next_schedule: 1,
-                  comment: 1,
-                  call_type: 1,
-                  call_status: 1,
-                  created_at: 1,
+                  lastcall: {
+                  _id: "$_id",
+                  duration: "$duration",
+                  next_schedule: "$next_schedule",
+                  comment: "$comment",
+                  call_type: "$call_type",
+                  call_status: "$call_status",
+                  next_shedule_time: "$next_shedule_time",
+                  created_at: "$created_at",
+                 },
                   // Officer Info
                   officer_name: "$officer.name",
-                  officer_staff_id: "$officer.officer_id",
+                  officer_gen_id: "$officer.officer_id",
                   officer_email: "$officer.email",
                   // Client Info
                   name: "$client.name",
@@ -1142,6 +1249,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
                   lead_source: "$client.lead_source",
                   service_type: "$client.service_type",
                   interested_in: "$client.interested_in",
+                  created_at: "$client.created_at"
                 }
               }
             ],

@@ -167,15 +167,14 @@ module.exports = {
                 reject (err.message || err);
             }
         });
-    }
-    ,
+    },
 
     logMobileCallEvent: async (data) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const { error, value } = mobilecallLogValidation.validate(data);
                 if (error) {
-                    return reject("Validation failed: " + error.details[0].message);
+                    return reject("Validation failed: " + error);
                 }
                 data = value;
                 // Normalize phone by removing country code (+91 or 91) and any leading zeros
@@ -190,6 +189,7 @@ module.exports = {
                     phone: normalizedPhone,
                     duration: parseFloat(data.duration || 0),
                     call_type: data.call_type || '',
+                    call_status: data.call_status || parseFloat(data.duration || 0) > 0 ? 'ATTENDED' : 'NOT ATTENDED',
                     created_at: new Date()
                 });
 
@@ -203,6 +203,7 @@ module.exports = {
                         officer_phone: data.officer_phone || null,
                         phone: normalizedPhone,
                         duration: parseFloat(data.duration || 0),
+                        call_status: data.call_status || parseFloat(data.duration || 0) > 0 ? 'ATTENDED' : 'NOT ATTENDED',
                         call_type: data.call_type || '',
                         created_at: new Date()
                     };

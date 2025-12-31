@@ -399,8 +399,8 @@ module.exports = {
 
             const filter = {};
 
-            if (customer_id) filter.customer_id = customer_id;
-            if (product_id) filter.product_id = product_id;
+            if (customer_id) filter.customer_id = safeObjectId(customer_id);
+            if (product_id) filter.product_id = safeObjectId(product_id);
             if (status) filter.status = status;
             if (branch) filter.branch = branch;
 
