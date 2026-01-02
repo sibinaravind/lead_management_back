@@ -97,7 +97,7 @@ const productSchema = Joi.object({
   duration: Joi.string().allow("", null),
   inclusions: Joi.array().items(Joi.string()).allow("", null),
   exclusions: Joi.array().items(Joi.string()).allow("", null),
-
+  startDate: Joi.date().allow("", null),
   // MIGRATION / VISA
   visaType: Joi.string().allow("", null),
   jobAssistance: Joi.boolean().allow("", null),

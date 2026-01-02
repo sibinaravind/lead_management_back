@@ -24,7 +24,11 @@ let checkToken = (req, res, next) => {
     });
   } else {
     // No token provided, skip validation
-    next();
+     return res.status(401).json({
+          status: false,
+          msg: "Token is invalid",
+        });
+    // next();
   }
 };
 

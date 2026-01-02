@@ -375,7 +375,101 @@ module.exports = {
         });
     },
 
+   getbookingCountByCategory: async (decoded, query) => {
+   try {
+    const { employee } = query;
+    const isAdmin =
+      Array.isArray(decoded?.designation) &&
+      decoded.designation.includes("ADMIN");
+    const filter = {};
+    // Officer filter
+    if (employee) {
+      filter.officer_id = safeObjectId(employee);
+    } else if (!isAdmin) {
+      filter.officer_id = Array.isArray(decoded?.officers)
+        ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+        : safeObjectId(decoded?._id);
+    }
+    const now = new Date();
+    // Date calculations
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(todayStart.getDate() + 1);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Sunday
+
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+    const result = await db
+      .get()
+      .collection(COLLECTION.BOOKINGS)
+      .aggregate([
+        { $match: filter },
+        {
+          $facet: {
+            TOTAL: [{ $count: "count" }],
+            TODAY: [
+              {
+                $match: {
+                  created_at: { $gte: todayStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            YESTERDAY: [
+              {
+                $match: {
+                  created_at: { $gte: yesterdayStart, $lt: todayStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            THIS_WEEK: [
+              {
+                $match: {
+                  created_at: { $gte: weekStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ],
+
+            THIS_MONTH: [
+              {
+                $match: {
+                  created_at: { $gte: monthStart, $lt: tomorrowStart }
+                }
+              },
+              { $count: "count" }
+            ]
+          }
+        }
+      ])
+      .toArray();
+
+    const counts = result[0] || {};
+    const getCount = (key) => counts[key]?.[0]?.count ?? 0;
+
+    return {
+      TOTAL: getCount("TOTAL"),
+      TODAY: getCount("TODAY"),
+      YESTERDAY: getCount("YESTERDAY"),
+      THIS_WEEK: getCount("THIS_WEEK"),
+      THIS_MONTH: getCount("THIS_MONTH")
+    };
+
+  } catch (err) {
+    console.error("getCallCountByCategory error:", err);
+    throw new Error("Server Error");
+  }
+  },
 
     getAllBookings: async (query, decoded) => {
         try {
@@ -383,37 +477,34 @@ module.exports = {
                 customer_id,
                 product_id,
                 status,
-                from_date,
-                to_date,
+                startDate,
+                endDate,
                 search,
                 page = 1,
                 limit = 10,
                 officer,
                 branch,
             } = query;
-
             const parsedPage = parseInt(page);
             const parsedLimit = parseInt(limit);
             const skip = (parsedPage - 1) * parsedLimit;
             const collection = db.get().collection(COLLECTION.BOOKINGS);
-
             const filter = {};
-
             if (customer_id) filter.customer_id = safeObjectId(customer_id);
             if (product_id) filter.product_id = safeObjectId(product_id);
             if (status) filter.status = status;
             if (branch) filter.branch = branch;
 
             // Officer filter
-            const isAdmin = decoded?.roles?.includes("ADMIN");
+           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
+           
             let officerIdList = [];
             if (!isAdmin) {
                 officerIdList = Array.isArray(decoded?.officers)
                     ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
                     : [];
             }
-            if (officer) {
-
+            else if (officer) {
                 filter.officer_id = safeObjectId(officer);
             }
             else if (isAdmin) {
@@ -426,7 +517,7 @@ module.exports = {
             }
 
             // Date range filter
-            if (from_date || to_date) {
+            if (startDate || endDate) {
                 const parseDate = (str) => {
                     if (!str) return null;
                     const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
@@ -436,9 +527,9 @@ module.exports = {
                     return new Date(str);
                 };
                 filter.created_at = {};
-                if (from_date) filter.created_at.$gte = parseDate(from_date);
-                if (to_date) {
-                    const end = parseDate(to_date);
+                if (startDate) filter.created_at.$gte = parseDate(startDate);
+                if (endDate) {
+                    const end = parseDate(endDate);
                     end.setHours(23, 59, 59, 999);
                     filter.created_at.$lte = end;
                 }
@@ -481,9 +572,10 @@ module.exports = {
                                         _id: 1,
                                         booking_date: 1,
                                         expected_closure_date: 1,
-                                        booking_no: 1,
+                                        booking_id: 1,
                                         customer_id: 1,
                                         customer_name: 1,
+                                        
                                         product_id: 1,
                                         product_name: 1,
                                         total_amount: 1,
@@ -492,7 +584,7 @@ module.exports = {
                                         officer_id: 1,
                                         created_at: 1,
                                         officers_name: "$officers.name",
-                                        officers_id: "$officers.officer_id",
+                                        // officer_id: "$officers.officer_id",
                                         payed: {
                                             $sum: {
                                                 $map: {
@@ -668,8 +760,8 @@ module.exports = {
             let {
                 page = 1,
                 limit = 50,
-                from_date,
-                to_date,
+                startDate,
+                endDate,
                 status
             } = query;
             page = parseInt(page);
@@ -682,7 +774,7 @@ module.exports = {
             };
 
             // ---- DATE RANGE FILTER ----
-            if (from_date || to_date) {
+            if (startDate || endDate) {
                 const parseDate = (str) => {
                     if (!str) return null;
                     const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
@@ -697,11 +789,11 @@ module.exports = {
                 };
                 matchFilter.booking_date = {};
 
-                if (from_date) {
-                    matchFilter.booking_date.$gte = parseDate(from_date);
+                if (startDate) {
+                    matchFilter.booking_date.$gte = parseDate(startDate);
                 }
-                if (to_date) {
-                    const end = parseDate(to_date);
+                if (endDate) {
+                    const end = parseDate(endDate);
                     end.setHours(23, 59, 59, 999);
                     matchFilter.booking_date.$lte = end;
                 }
@@ -773,8 +865,8 @@ module.exports = {
                 limit = 20,
                 status,            // PENDING | PAID | etc.
                 filter_status,     // UPCOMING | OVERDUE
-                from_date,
-                to_date,
+                startDate,
+                endDate,
             } = query;
             page = parseInt(page);
             limit = parseInt(limit);
@@ -810,13 +902,13 @@ module.exports = {
             }
 
             // 👉 Date range filter (optional)
-            if (from_date || to_date) {
+            if (startDate || endDate) {
                 matchFilter["payment_schedule.due_date"] = {};
-                if (from_date)
-                    matchFilter["payment_schedule.due_date"].$gte = parseDate(from_date);
+                if (startDate)
+                    matchFilter["payment_schedule.due_date"].$gte = parseDate(startDate);
 
-                if (to_date) {
-                    const end = parseDate(to_date);
+                if (endDate) {
+                    const end = parseDate(endDate);
                     end.setHours(23, 59, 59, 999);
                     matchFilter["payment_schedule.due_date"].$lte = end;
                 }

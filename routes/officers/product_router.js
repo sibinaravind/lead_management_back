@@ -57,6 +57,13 @@ app.get("/productList", middleware.checkToken, (req, res) => {
   );
 });
 
+app.get("/deletedProductList", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    producthelper.deletedProductList()
+  );
+});
+
+
 app.get("/productDetails/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     producthelper.getProductDetails(req.params._id)

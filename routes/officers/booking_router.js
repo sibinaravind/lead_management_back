@@ -20,8 +20,12 @@ app.patch("/editBooking/:_id", middleware.checkToken, (req, res) => {
 
 app.get("/bookingList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    bookinghelper.getAllBookings(req.query)
+    bookinghelper.getAllBookings(req.query , req.decoded)
   );
+});
+
+app.get("/getBookingCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   bookinghelper.getbookingCountByCategory(req.decoded, req.query));
 });
 
 app.get("/bookingDetails/:_id", middleware.checkToken, (req, res) => {

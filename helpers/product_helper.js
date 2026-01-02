@@ -3,7 +3,7 @@ let COLLECTION = require('../config/collections')
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { STATUSES } = require('../constants/enums');
 const { productSchema, productUpdateSchema } = require("../validations/product_validation");
-const {validatePartial} = require("../utils/validatePartial");
+const { validatePartial } = require("../utils/validatePartial");
 const { ObjectId } = require('mongodb');
 const fileUploader = require('../utils/fileUploader');
 // Helper to get next sequence number
@@ -12,7 +12,7 @@ module.exports = {
     createProduct: async (details) => {
         return new Promise(async (resolve, reject) => {
             try {
-                var { error, value } = productSchema.validate(details ,{ abortEarly: false  , stripUnknown: true  });
+                var { error, value } = productSchema.validate(details, { abortEarly: false, stripUnknown: true });
                 if (error) return reject("Validation failed: " + error.details[0].message);
                 value = Object.fromEntries(
                     Object.entries(value || {}).filter(([_, v]) =>
@@ -75,9 +75,8 @@ module.exports = {
     getProductList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
-
                 resolve(await db.get().collection(COLLECTION.PRODUCTS)
-                    .find({ status: { $ne: STATUSES.DELETED } }, {
+                    .find({ status: { $nin: [STATUSES.DELETED, STATUSES.DISCONTINUED] } }, {
                         projection: {
                             _id: 1,
                             product_id: 1,
@@ -89,18 +88,61 @@ module.exports = {
                             sellingPrice: 1,
                             shortDescription: 1,
                             institutionName: 1,
-                            fuelType:1,
-                        bhk:1,
-                        brand:1,
-                        city:1,
-                        country:1,
-                        duration:1,
-                        furnishingStatus:1,
-                        images:1,
-                        qualificationRequired:1,
-                        registrationYear:1,
-                        serviceMode:1,
-                        transmission: 1
+                            fuelType: 1,
+                            bhk: 1,
+                            brand: 1,
+                            city: 1,
+                            country: 1,
+                            duration: 1,
+                            furnishingStatus: 1,
+                            startDate: 1,
+                            images: 1,
+                            qualificationRequired: 1,
+                            registrationYear: 1,
+                            serviceMode: 1,
+                            transmission: 1,
+                            productType: 1,
+                            downpayment: 1,
+                            advanceRequiredPercent: 1
+
+                        }
+                    })
+                    .toArray());
+            } catch (err) {
+                console.error(err);
+                reject(err || "Error fetching product list");
+            }
+        });
+    },
+
+    deletedProductList: async () => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                resolve(await db.get().collection(COLLECTION.PRODUCTS)
+                    .find({ status: { $in: [STATUSES.DELETED, STATUSES.DISCONTINUED] } }, {
+                        projection: {
+                            _id: 1,
+                            product_id: 1,
+                            name: 1,
+                            code: 1,
+                            category: 1,
+                            subCategory: 1,
+                            status: 1,
+                            sellingPrice: 1,
+                            shortDescription: 1,
+                            institutionName: 1,
+                            fuelType: 1,
+                            bhk: 1,
+                            brand: 1,
+                            city: 1,
+                            country: 1,
+                            duration: 1,
+                            furnishingStatus: 1,
+                            images: 1,
+                            qualificationRequired: 1,
+                            registrationYear: 1,
+                            serviceMode: 1,
+                            transmission: 1
 
                         }
                     })
@@ -113,50 +155,50 @@ module.exports = {
     },
 
 
-  addProductImage: (product_id, { doc_type, base64 }) => {
-          let filePath = null;
-          return new Promise(async (resolve, reject) => {
-              try {
-                  if (!doc_type || !base64) {
-                      return reject("Missing required fields for document upload.");
-                  }
-                
-                  filePath = await fileUploader.processAndStoreBase64File({
-                      base64Data: base64,
-                      originalName: doc_type,
-                      clientName: `product_${product_id}`,
-                      uploadsDir: "uploads/product_images"
-                  });
+    addProductImage: (product_id, { doc_type, base64 }) => {
+        let filePath = null;
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (!doc_type || !base64) {
+                    return reject("Missing required fields for document upload.");
+                }
 
-                  const updateResult = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
+                filePath = await fileUploader.processAndStoreBase64File({
+                    base64Data: base64,
+                    originalName: doc_type,
+                    clientName: `product_${product_id}`,
+                    uploadsDir: "uploads/product_images"
+                });
+
+                const updateResult = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
                     { _id: safeObjectId(product_id), status: { $ne: STATUSES.DELETED } },
                     { $push: { images: filePath }, $set: { updated_at: new Date() } }
                 );
-                  if (updateResult.matchedCount === 0) {
-                      // Rollback uploaded file if DB update fails
-                      if (filePath) {
-                          await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
-                      }
-                      return reject(`Failed to update or add document for "${doc_type}".`);
-                  }
-                  resolve({ success: true, file_path: filePath });
-              } catch (err) {
-                  console.log("Error occurred while uploading document:", err);
-                  // Rollback uploaded file if error
-                  if (filePath) {
-                      await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
-                  }
-                  reject("Error uploading document: " + (err.message || err));
-              }
-          });
-      },
+                if (updateResult.matchedCount === 0) {
+                    // Rollback uploaded file if DB update fails
+                    if (filePath) {
+                        await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                    }
+                    return reject(`Failed to update or add document for "${doc_type}".`);
+                }
+                resolve({ success: true, file_path: filePath });
+            } catch (err) {
+                console.log("Error occurred while uploading document:", err);
+                // Rollback uploaded file if error
+                if (filePath) {
+                    await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                }
+                reject("Error uploading document: " + (err.message || err));
+            }
+        });
+    },
 
     // Delete image from product
     deleteProductImage: async (product_id, imageUrl) => {
         try {
             if (!imageUrl) throw "Image URL is required";
             const result = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
-                { _id: safeObjectId(product_id)},
+                { _id: safeObjectId(product_id) },
                 { $pull: { images: imageUrl }, $set: { updated_at: new Date() } }
             );
             if (result.modifiedCount > 0) return true;
@@ -167,54 +209,58 @@ module.exports = {
     },
 
 
-      addProductDocument: (product_id, { doc_type, base64 }) => {
-          let filePath = null;
-          return new Promise(async (resolve, reject) => {
-              try {
-                  if (!doc_type || !base64) {
-                      return reject("Missing required fields for document upload.");
-                  }
-                
-                  filePath = await fileUploader.processAndStoreBase64File({
-                      base64Data: base64,
-                      originalName: doc_type,
-                      clientName: `product_${product_id}`,
-                      uploadsDir: "uploads/product_images"
-                  });
+    addProductDocument: (product_id, { doc_type, base64 }) => {
+        let filePath = null;
+        return new Promise(async (resolve, reject) => {
+            try {
+                if (!doc_type || !base64) {
+                    return reject("Missing required fields for document upload.");
+                }
 
-                  const updateResult = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
+                filePath = await fileUploader.processAndStoreBase64File({
+                    base64Data: base64,
+                    originalName: doc_type,
+                    clientName: `product_${product_id}`,
+                    uploadsDir: "uploads/product_images"
+                });
+
+                const updateResult = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
                     { _id: safeObjectId(product_id), status: { $ne: STATUSES.DELETED } },
-                    { $push: { documents: {
-                                      doc_type,
-                                      file_path: filePath,
-                                      uploaded_at: new Date()
-                                  } }, $set: { updated_at: new Date() } }
+                    {
+                        $push: {
+                            documents: {
+                                doc_type,
+                                file_path: filePath,
+                                uploaded_at: new Date()
+                            }
+                        }, $set: { updated_at: new Date() }
+                    }
                 );
-                  if (updateResult.matchedCount === 0) {
-                      // Rollback uploaded file if DB update fails
-                      if (filePath) {
-                          await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
-                      }
-                      return reject(`Failed to update or add document for "${doc_type}".`);
-                  }
-                  resolve({ success: true, file_path: filePath });
-              } catch (err) {
-                  console.log("Error occurred while uploading document:", err);
-                  // Rollback uploaded file if error
-                  if (filePath) {
-                      await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
-                  }
-                  reject("Error uploading document: " + (err.message || err));
-              }
-          });
-      },
+                if (updateResult.matchedCount === 0) {
+                    // Rollback uploaded file if DB update fails
+                    if (filePath) {
+                        await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                    }
+                    return reject(`Failed to update or add document for "${doc_type}".`);
+                }
+                resolve({ success: true, file_path: filePath });
+            } catch (err) {
+                console.log("Error occurred while uploading document:", err);
+                // Rollback uploaded file if error
+                if (filePath) {
+                    await fs.promises.unlink(path.resolve(filePath)).catch(() => { });
+                }
+                reject("Error uploading document: " + (err.message || err));
+            }
+        });
+    },
 
     // Delete image from product
     deleteProductDocument: async (product_id, documentUrl) => {
         try {
             if (!documentUrl) throw "Document URL is required";
             const result = await db.get().collection(COLLECTION.PRODUCTS).updateOne(
-                { _id: safeObjectId(product_id)},
+                { _id: safeObjectId(product_id) },
                 { $pull: { documents: { file_path: documentUrl } }, $set: { updated_at: new Date() } }
             );
             if (result.modifiedCount > 0) return true;
@@ -284,7 +330,20 @@ module.exports = {
                             status: { $ne: STATUSES.DELETED }
                         }
                     },
-                    // take only this product from array
+                    {
+                        $lookup: {
+                            from: COLLECTION.OFFICERS,
+                            localField: "officer_id",
+                            foreignField: "_id",
+                            as: "officer",
+                        },
+                    },
+                    {
+                        $unwind: {
+                            path: "$officer",
+                            preserveNullAndEmptyArrays: true,
+                        },
+                    },
                     {
                         $project: {
                             name: 1,
@@ -295,8 +354,21 @@ module.exports = {
                             created_at: 1,
                             updated_at: 1,
                             status: 1,
+                            interested_in: 1,
                             lead_source: 1,
                             officer_id: 1,
+                            officer_name: "$officer.name",
+                            officer_gen_id: "$officer.officer_id",
+                            lastcall: {
+                                _id: "$lastcall._id",
+                                duration: "$lastcall.duration",
+                                next_schedule: "$lastcall.next_schedule",
+                                comment: "$lastcall.comment",
+                                call_type: "$lastcall.call_type",
+                                call_status: "$lastcall.call_status",
+                                next_shedule_time: "$lastcall.next_shedule_time",
+                                created_at: "$lastcall.created_at",
+                            },
                             product_interested: {
                                 $filter: {
                                     input: "$product_interested",
@@ -308,14 +380,14 @@ module.exports = {
                     },
 
                     // flatten product_interested so we can access offers
-                    { $unwind: "$product_interested" },
+                    // { $unwind: "$product_interested" },
 
-                    // get last entry from offers
-                    {
-                        $addFields: {
-                            lastOffer: { $arrayElemAt: ["$product_interested.offers", -1] }
-                        }
-                    },
+                    // // get last entry from offers
+                    // {
+                    //     $addFields: {
+                    //         lastOffer: { $arrayElemAt: ["$product_interested.offers", -1] }
+                    //     }
+                    // },
 
                     // convert uploaded_at (dd/MM/yyyy) → actual Date object
                     // {
@@ -329,7 +401,7 @@ module.exports = {
                     //     }
                     // },
                     // sort by latest offer date
-                    { $sort: { lastOfferDate: -1 } }
+                    // { $sort: { lastOfferDate: -1 } }
                 ])
                 .toArray();
 
