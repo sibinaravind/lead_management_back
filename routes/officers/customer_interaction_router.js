@@ -38,5 +38,11 @@ app.get("/customerActivity/:id", middleware.checkToken, (req, res) => {
   );
 });
 
+app.post("/getLatestCallLogByPhone", (req, res) => {
+  return response.handle(res, () =>
+    leadHelper.getLatestCallLogByPhone(req.body.phone)
+  );
+});
+
 
 module.exports = app;

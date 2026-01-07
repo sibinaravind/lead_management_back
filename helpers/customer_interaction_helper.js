@@ -6,7 +6,7 @@ const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 const { callActivityValidation, mobilecallLogValidation } = require('../validations/callActivityValidation');
 const { ref } = require('joi');
 const { safeObjectId } = require('../utils/safeObjectId');
-const {validatePartial,formatJoiErrors} = require("../utils/validatePartial");
+const { validatePartial, formatJoiErrors } = require("../utils/validatePartial");
 module.exports = {
     logActivity: async ({
         type,
@@ -47,7 +47,7 @@ module.exports = {
 
             // Only include these fields if they have valid ObjectIds
             const validOfficerId = safeObjectId(officer_id);
-            if (validOfficerId) data.officer_id = validOfficerId ;
+            if (validOfficerId) data.officer_id = validOfficerId;
 
             const validAssignedById = safeObjectId(assigned_by);
             if (validAssignedById) data.assigned_by = validAssignedById;
@@ -69,11 +69,11 @@ module.exports = {
     logCallEvent: async (data, officer_id) => {
         return new Promise(async (resolve, reject) => {
             try {
-               
-                 var { error, value } = callActivityValidation.validate(data,{
-                abortEarly: false,
-                stripUnknown: true,
-            }) ;
+
+                var { error, value } = callActivityValidation.validate(data, {
+                    abortEarly: false,
+                    stripUnknown: true,
+                });
                 if (error) {
                     const cleanErrors = formatJoiErrors(error, data);
                     throw "Validation failed: " + cleanErrors.join(", ");
@@ -163,8 +163,8 @@ module.exports = {
                 resolve("Call event logged");
 
             } catch (err) {
-                
-                reject (err.message || err);
+
+                reject(err.message || err);
             }
         });
     },
@@ -317,7 +317,7 @@ module.exports = {
                 {
                     $facet: {
                         data: [
-                          
+
                             { $skip: skip },
                             { $limit: parsedLimit }
                         ],
@@ -551,6 +551,67 @@ module.exports = {
             throw new Error("Error fetching call logs with officer details");
         }
     },
+
+   getLatestCallLogByPhone: async (phone) => {
+    try {
+        const normalizedPhone = phone
+            .toString()
+            .replace(/^(\+?91|0+)/, '')
+            .trim();
+
+        const data = await db.get()
+            .collection(COLLECTION.CALL_LOG_ACTIVITY)
+            .aggregate([
+                {
+                    $match: { phone: normalizedPhone }
+                },
+                {
+                    $sort: { created_at: -1 }
+                },
+                {
+                    $limit: 1
+                },
+                {
+                    $lookup: {
+                        from: COLLECTION.LEADS,
+                        localField: "client_id",
+                        foreignField: "_id",
+                        as: "client"
+                    }
+                },
+                {
+                    $unwind: {
+                        path: "$client",
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+                {
+                    $project: {
+                        _id: 1,
+                        phone: 1,
+                        call_type: 1,
+                        call_status: 1,
+                        comment: 1,
+                        duration: 1,
+                        created_at: 1,
+
+                        // SAFE lead fields
+                        lead_name: { $ifNull: ["$client.name", null] },
+                        interested_in: { $ifNull: ["$client.interested_in", null] },
+                        status: { $ifNull: ["$client.status", null] }
+                    }
+                }
+            ])
+            .toArray();
+
+        return data.length ? data[0] : 'not Client found';
+
+    } catch (err) {
+        console.error(err);
+        throw new Error("Error fetching latest call log");
+    }
+},
+
 }
 
 

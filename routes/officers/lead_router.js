@@ -101,10 +101,15 @@ app.get("/getCallFilteredHistory", middleware.checkToken, async (req, res) => {
 app.get("/getCallCount", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getCallCountByCategory(req.decoded, req.query));
 });
+app.get("/getCallCountForAllOfficers", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getCallCountForAllOfficers(req.query));
+});
 app.get("/getLeadCount", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getLeadCountByCategory(req.decoded, req.query));
 });
-
+app.get("/getLeadCountForAllOfficers", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   leadHelper.getLeadCountForAllOfficers(req.query));
+});
 app.get("/getFilteredDeadLeads", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getFilteredDeadLeads( req.query, req.decoded,));
 });

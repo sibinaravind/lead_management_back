@@ -28,6 +28,14 @@ app.get("/getBookingCount", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   bookinghelper.getbookingCountByCategory(req.decoded, req.query));
 });
 
+
+
+app.get("/getBookingCountForAllOfficers", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   bookinghelper.getBookingCountForAllOfficers( req.query));
+});
+
+
+
 app.get("/bookingDetails/:_id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     bookinghelper.getBookingById(req.params._id)
@@ -76,6 +84,10 @@ app.delete("/deleteDocument/:id", middleware.checkToken, async (req, res) => {
   }
 });
 
+app.get("/getUpcomingBookingCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   bookinghelper.getUpcomingBookingCount(req.decoded, req.query));
+});
+
 app.get("/upcomingBookings", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     bookinghelper.getUpcomingBookings(
@@ -91,6 +103,24 @@ app.get("/getPaymentScheduleList", middleware.checkToken, (req, res) => {
       req.query,
     )
   );
+});
+
+app.get("/getPaymentScheduleCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   bookinghelper.getPaymentScheduleCount(req.decoded, req.query));
+});
+
+
+app.get("/getTransactionList", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    bookinghelper.getTransactionList(
+      req.query,
+      req.decoded
+    )
+  );
+});
+
+app.get("/getPaymentTransactionCount", middleware.checkToken, async (req, res) => {
+      return response.handle(res, () =>   bookinghelper.getPaymentTransactionCount(req.decoded, req.query));
 });
 
 module.exports = app;

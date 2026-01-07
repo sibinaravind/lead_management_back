@@ -781,6 +781,215 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
         }
   },
 
+  getLeadCountForAllOfficers: async (query) => {
+  try {
+    const { startDate, endDate } = query;
+
+    /* ---------------- Date Parser (DD/MM/YYYY) ---------------- */
+    const parseDate = (str) => {
+      if (!str) return null;
+
+      const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+      if (match) {
+        return new Date(
+          Number(match[3]),
+          Number(match[2]) - 1,
+          Number(match[1]),
+          0, 0, 0, 0
+        );
+      }
+
+      const d = new Date(str);
+      return isNaN(d) ? null : d;
+    };
+
+    /* ---------------- Date Filter ---------------- */
+    const filter = {};
+    const dateField = "created_at";
+
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+
+    if (start || end) {
+      filter[dateField] = {};
+
+      if (start) {
+        filter[dateField].$gte = start;
+      }
+
+      if (end) {
+        end.setHours(23, 59, 59, 999); // include full end day
+        filter[dateField].$lte = end;
+      }
+
+      if (Object.keys(filter[dateField]).length === 0) {
+        delete filter[dateField];
+      }
+    }
+
+    /* ---------------- Day Calculations ---------------- */
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const dayAfterTomorrow = new Date(tomorrow);
+    dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
+
+    const scheduleField = "lastcall.next_schedule";
+
+    /* ---------------- Aggregation ---------------- */
+    const result = await db
+      .get()
+      .collection(COLLECTION.LEADS)
+      .aggregate([
+        /* Match date filter */
+        { $match: filter },
+
+        /* Group by officer */
+        {
+          $group: {
+            _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
+
+            TOTAL: { $sum: 1 },
+
+            NEW: {
+              $sum: { $cond: [{ $eq: ["$status", "NEW"] }, 1, 0] }
+            },
+
+            NEGOTIATING: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "NEGOTIATING"] }, 1, 0]
+              }
+            },
+
+            DEAD: {
+              $sum: { $cond: [{ $eq: ["$status", "DEAD"] }, 1, 0] }
+            },
+
+            CONVERTED: {
+              $sum: {
+                $cond: [{ $eq: ["$status", "CONVERTED"] }, 1, 0]
+              }
+            },
+
+            TODAY: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: [`$${scheduleField}`, today] },
+                      { $lt: [`$${scheduleField}`, tomorrow] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            TOMORROW: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: [`$${scheduleField}`, tomorrow] },
+                      { $lt: [`$${scheduleField}`, dayAfterTomorrow] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            UPCOMING: {
+              $sum: {
+                $cond: [
+                  { $gte: [`$${scheduleField}`, dayAfterTomorrow] },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            PENDING: {
+              $sum: {
+                $cond: [
+                  { $lt: [`$${scheduleField}`, today] },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        },
+
+        /* Join OFFICERS collection */
+        {
+          $lookup: {
+            from: COLLECTION.OFFICERS,
+            localField: "_id",
+            foreignField: "_id",
+            as: "officer"
+          }
+        },
+
+        { 
+          $unwind: { 
+            path: "$officer", 
+            preserveNullAndEmptyArrays: true 
+          } 
+        },
+
+        /* Final Shape */
+        {
+          $project: {
+            _id: 1,
+
+            officer_id: {
+              $cond: [
+                { $eq: ["$_id", "UNASSIGNED"] },
+                "UNASSIGNED",
+                "$officer.officer_id"
+              ]
+            },
+
+            officer_name: {
+              $cond: [
+                { $eq: ["$_id", "UNASSIGNED"] },
+                "UNASSIGNED",
+                "$officer.name"
+              ]
+            },
+
+            TOTAL: 1,
+            NEW: 1,
+            NEGOTIATING: 1,
+            DEAD: 1,
+            CONVERTED: 1,
+            TODAY: 1,
+            TOMORROW: 1,
+            UPCOMING: 1,
+            PENDING: 1
+          }
+        },
+
+        { $sort: { TOTAL: -1 } }
+      ])
+      .toArray();
+
+    return result;
+
+  } catch (err) {
+    console.error("getLeadCountForAllOfficers error:", err);
+    throw new Error("Server Error");
+  }
+},
+
+
+
   getFilteredLeads: async (query, decoded) => { //  all, new, today, tomorrow, Negotiating ,upcoming, unallocated, dead , converted
         try {
           const {
@@ -1285,6 +1494,198 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
         }
     },
     // Get lead/client by ID
+
+   getCallCountForAllOfficers: async (query) => {
+   try {
+    const { startDate, endDate } = query;
+
+    /* ---------------- Date Parser ---------------- */
+    const parseDate = (str) => {
+      if (!str) return null;
+      const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+      if (match) {
+        return new Date(
+          Number(match[3]),
+          Number(match[2]) - 1,
+          Number(match[1]),
+          0, 0, 0, 0
+        );
+      }
+      return new Date(str);
+    };
+
+    /* ---------------- Date Filter ---------------- */
+    const filter = {};
+    const dateField = "created_at";
+
+    const start = parseDate(startDate);
+    const end = parseDate(endDate);
+
+    if (start || end) {
+      filter[dateField] = {};
+
+      if (start instanceof Date && !isNaN(start)) {
+        filter[dateField].$gte = start;
+      }
+
+      if (end instanceof Date && !isNaN(end)) {
+        end.setHours(23, 59, 59, 999);
+        filter[dateField].$lte = end;
+      }
+
+      if (Object.keys(filter[dateField]).length === 0) {
+        delete filter[dateField];
+      }
+    }
+
+    /* ---------------- Day Calculations ---------------- */
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(todayStart.getDate() + 1);
+
+    const yesterdayStart = new Date(todayStart);
+    yesterdayStart.setDate(todayStart.getDate() - 1);
+
+    const weekStart = new Date(todayStart);
+    weekStart.setDate(todayStart.getDate() - todayStart.getDay());
+
+    const monthStart = new Date(
+      todayStart.getFullYear(),
+      todayStart.getMonth(),
+      1
+    );
+
+    /* ---------------- Aggregation ---------------- */
+    const result = await db
+      .get()
+      .collection(COLLECTION.CALL_LOG_ACTIVITY)
+      .aggregate([
+        { $match: filter },
+
+        {
+          $group: {
+            _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
+
+            TOTAL: { $sum: 1 },
+
+            TODAY: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$created_at", todayStart] },
+                      { $lt: ["$created_at", tomorrowStart] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            YESTERDAY: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$created_at", yesterdayStart] },
+                      { $lt: ["$created_at", todayStart] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            THIS_WEEK: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$created_at", weekStart] },
+                      { $lt: ["$created_at", tomorrowStart] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            },
+
+            THIS_MONTH: {
+              $sum: {
+                $cond: [
+                  {
+                    $and: [
+                      { $gte: ["$created_at", monthStart] },
+                      { $lt: ["$created_at", tomorrowStart] }
+                    ]
+                  },
+                  1,
+                  0
+                ]
+              }
+            }
+          }
+        },
+
+        /* ---------------- Join OFFICERS ---------------- */
+        {
+          $lookup: {
+            from: COLLECTION.OFFICERS,
+            localField: "_id",
+            foreignField: "_id",
+            as: "officer"
+          }
+        },
+        {
+          $unwind: {
+            path: "$officer",
+            preserveNullAndEmptyArrays: true
+          }
+        },
+
+        {
+          $project: {
+            _id: 1,
+            officer_id: {
+              $cond: [
+                { $eq: ["$_id", "UNASSIGNED"] },
+                "UNASSIGNED",
+                "$officer.officer_id"
+              ]
+            },
+            officer_name: {
+              $cond: [
+                { $eq: ["$_id", "UNASSIGNED"] },
+                "UNASSIGNED",
+                "$officer.name"
+              ]
+            },
+            TOTAL: 1,
+            TODAY: 1,
+            YESTERDAY: 1,
+            THIS_WEEK: 1,
+            THIS_MONTH: 1
+          }
+        },
+
+        { $sort: { TOTAL: -1 } }
+      ])
+      .toArray();
+
+    return result;
+  } catch (err) {
+    console.error("getCallCountForAllOfficers error:", err);
+    throw new Error("Server Error");
+  }
+},
+
+
+
   
 }
 
