@@ -511,7 +511,6 @@ module.exports = {
     getBookingCountForAllOfficers: async (query) => {
         try {
             const { startDate, endDate } = query;
-console.log("getBookingCountForAllOfficers called with:", query);
             /* ---------------- Date Parser ---------------- */
             const parseDate = (str) => {
                 if (!str) return null;
@@ -585,13 +584,26 @@ console.log("getBookingCountForAllOfficers called with:", query);
                 .collection(COLLECTION.BOOKINGS)
                 .aggregate([
                     { $match: filter },
-
                     {
                         $group: {
                             _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
-
                             TOTAL: { $sum: 1 },
-
+                            CANCELLED: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $eq: ["$status", "CANCELLED"] },
+                                                // apply selected date range (start & end)
+                                                ...(start ? [{ $gte: ["$created_at", start] }] : []),
+                                                ...(end ? [{ $lte: ["$created_at", end] }] : [])
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
                             TODAY: {
                                 $sum: {
                                     $cond: [
@@ -691,7 +703,8 @@ console.log("getBookingCountForAllOfficers called with:", query);
                             TODAY: 1,
                             YESTERDAY: 1,
                             THIS_WEEK: 1,
-                            THIS_MONTH: 1
+                            THIS_MONTH: 1,
+                            CANCELLED: 1
                         }
                     },
 
@@ -701,7 +714,6 @@ console.log("getBookingCountForAllOfficers called with:", query);
 
             return result;
         } catch (err) {
-            console.error("getBookingCountForAllOfficers error:", err);
             throw new Error("Server Error");
         }
     },

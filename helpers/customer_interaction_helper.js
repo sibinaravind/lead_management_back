@@ -181,6 +181,10 @@ module.exports = {
                 const normalizedPhone = data.phone.toString().replace(/^(\+?91|0+)/, '').trim();
                 // console.log("Normalized Phone:", normalizedPhone);
                 let clientDoc = await db.get().collection(COLLECTION.LEADS).findOne({ phone: normalizedPhone });
+
+                if(clientDoc == null){
+                        return reject("Client not found with the provided phone number");
+                }
                 const insertResult = await db.get().collection(COLLECTION.CALL_LOG_ACTIVITY).insertOne({
                     type: 'call_event',
                     client_id: clientDoc ? ObjectId(clientDoc._id) : null,
