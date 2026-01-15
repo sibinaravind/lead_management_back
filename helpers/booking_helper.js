@@ -1151,7 +1151,7 @@ module.exports = {
              * BASE FILTER
              * -------------------------------------------------- */
             const matchFilter = {
-                status: { $ne: "CANCELLED" },
+                status: { $nin: ["CANCELLED", "COMPLETED"] },
             };
 
             /* --------------------------------------------------
@@ -1309,7 +1309,8 @@ module.exports = {
 
             const matchFilter = {
                 "payment_schedule.due_date": { $exists: true },
-                status: { $ne: "CANCELLED" }
+                status: { $nin: ["CANCELLED", "COMPLETED"] },
+            
             };
 
             /* ---------------- OFFICER FILTER ---------------- */
@@ -1494,7 +1495,7 @@ module.exports = {
              * -------------------------------------------------- */
             const matchFilter = {
                 "payment_schedule.due_date": { $exists: true },
-                "status": { $ne: "CANCELLED" },
+                 "status": { $nin: ["CANCELLED", "COMPLETED"] },
             };
 
 

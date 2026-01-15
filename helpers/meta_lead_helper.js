@@ -33,6 +33,7 @@ async function getPageAccessToken() {
 
 module.exports = {
   fetchFormsAndLeadsInsert: async () => {
+    // console.log('Starting fetchFormsAndLeadsInsert process...');
     const collection = db.get().collection(COLLECTION.LEADS);
     // await collection.createIndex({ leadId: 1 }, { unique: true }); //req
 
@@ -120,72 +121,71 @@ module.exports = {
       console.error('❌ Error fetching forms:', errMsg);
       return [{ error: errMsg }];
     }
-
     return summary;
   },
- 
-
-
-  createLead: async (details) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const collection = db.get().collection(COLLECTION.LEADS);
-
-                // // Ensure unique index on client_id (run once in your setup/migration scripts)
-                // await collection.createIndex({ client_id: 1 }, { unique: true });
-
-                // Check for duplicate client (by email or phone)
-                const existingClient = await collection.findOne({
-                    $or: [
-                        { email: details.email },
-                        { phone: details.phone }
-                    ]
-                });
-                if (existingClient) return reject("Client already exists with this email or phone");
-
-                // Get next client number atomically
-                const newNumber = await getNextSequence('lead_id');
-                const lead_id = `AELD${String(newNumber).padStart(5, '0')}`;
-
-
-                const result = await collection.insertOne({
-                    lead_id: lead_id,
-                    name: details.name,
-                    email: details.email,
-                    phone: details.phone,
-                    alternate_phone: details.alternate_phone,
-                    date_of_birth: details.date_of_birth,
-                    counsilor: details.counsilor,  //need to check the coming officer is cousilor , then only add the cousilor
-                    counsilor_id: details.counsilor_id,
-                    assign_to: details.assign_to,
-                    qualification: details.qualification,
-                    job_start_date: details.job_start_date,
-                    experience: details.experience,
-                    preferred_country: details.preferred_country,
-                    job_role: details.job_role,
-                    expected_salary: details.expected_salary,
-                    address: details.address,
-                    city: details.city,
-                    state: details.state,
-                    country: details.country,
-                    status: 'NEW',
-                    created_at: new Date(),
-                    lead_source: details.lead_source || 'Unknown',
-                    events:details.events || [],
-                });
-                if (result.acknowledged) {
-                    return resolve(result.insertedId);
-                } else {
-                    reject("Insert failed");
-                }
-            } catch (err) {
-                console.error(err);
-                reject("Error processing request");
-            }
-        });
-    
-},
 }
+
+
+//   createLead: async (details) => {
+//         return new Promise(async (resolve, reject) => {
+//             try {
+//                 const collection = db.get().collection(COLLECTION.LEADS);
+
+//                 // // Ensure unique index on client_id (run once in your setup/migration scripts)
+//                 // await collection.createIndex({ client_id: 1 }, { unique: true });
+
+//                 // Check for duplicate client (by email or phone)
+//                 const existingClient = await collection.findOne({
+//                     $or: [
+//                         { email: details.email },
+//                         { phone: details.phone }
+//                     ]
+//                 });
+//                 if (existingClient) return reject("Client already exists with this email or phone");
+
+//                 // Get next client number atomically
+//                 const newNumber = await getNextSequence('lead_id');
+//                 const lead_id = `AELD${String(newNumber).padStart(5, '0')}`;
+
+
+//                 const result = await collection.insertOne({
+//                     lead_id: lead_id,
+//                     name: details.name,
+//                     email: details.email,
+//                     phone: details.phone,
+//                     alternate_phone: details.alternate_phone,
+//                     date_of_birth: details.date_of_birth,
+//                     counsilor: details.counsilor,  //need to check the coming officer is cousilor , then only add the cousilor
+//                     counsilor_id: details.counsilor_id,
+//                     assign_to: details.assign_to,
+//                     qualification: details.qualification,
+//                     job_start_date: details.job_start_date,
+//                     experience: details.experience,
+//                     preferred_country: details.preferred_country,
+//                     job_role: details.job_role,
+//                     expected_salary: details.expected_salary,
+//                     address: details.address,
+//                     city: details.city,
+//                     state: details.state,
+//                     country: details.country,
+//                     status: 'NEW',
+//                     created_at: new Date(),
+//                     lead_source: details.lead_source || 'Unknown',
+//                     events:details.events || [],
+//                 });
+//                 if (result.acknowledged) {
+//                     return resolve(result.insertedId);
+//                 } else {
+//                     reject("Insert failed");
+//                 }
+//             } catch (err) {
+//                 console.error(err);
+//                 reject("Error processing request");
+//             }
+//         });
+    
+// },
+// }
 
 //sucessful
 // module.exports = {

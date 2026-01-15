@@ -61,7 +61,7 @@ const bookingSchema = Joi.object({
   }),
   product_app_id: Joi.string().allow("", null),
   product_name: Joi.string().allow("", null),
-  booking_date: Joi.date().required(),
+  booking_date: Joi.date().allow("", null),
   expected_closure_date: Joi.date().allow("", null),
   total_amount: Joi.number().min(0).required(),
   gst_amount: Joi.number().min(0).allow("", null),

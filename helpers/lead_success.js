@@ -5,7 +5,7 @@ const app = express();
 const port = 3000;
 
 // === CONFIGURATION ===
-const ACCESS_TOKEN = '';
+const ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN;
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 
 const PAGE_ID = '100464991488860'; // 🔁 Replace with your Page ID

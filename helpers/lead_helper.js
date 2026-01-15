@@ -217,7 +217,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
           ? safeObjectId(assignedOfficer._id)
           : "UNASSIGNED";
 
-          console.log("Officer Pool:", assignedOfficer );
+          // console.log("Officer Pool:", assignedOfficer );
         cleanValue.status = assignedOfficer ? "NEW" : "UNASSIGNED";
 
         // 7️⃣ Insert
@@ -269,40 +269,49 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
     };
   }
  },
+editLead: async (leadId, updateData, officer_id) => {
+  try {
+    const data = validatePartial(leadSchema, updateData);
 
+    if (data.officer_id) {
+      const oid = safeObjectId(data.officer_id);
+      oid ? (data.officer_id = oid) : delete data.officer_id;
+    }
 
-  editLead : async (leadId, updateData ,officer_id) => {
-        try {
-            // Validate input
-            const validatedData = validatePartial(leadSchema, updateData);
-            // If officer_id exists, ensure it's a valid ObjectId, else remove it
-            if (validatedData.officer_id) {
-              const objId = safeObjectId(validatedData.officer_id);
-              if (objId) {
-                validatedData.officer_id = objId;
-              } else {
-                delete validatedData.officer_id;
-              }
-            }
-            const updateResult = await db.get().collection(COLLECTION.LEADS).updateOne(
-              { _id: ObjectId(leadId) },
-              { $set: { ...validatedData, updated_at: new Date() } }
-            );
-            if (updateResult.matchedCount === 0) {
-            throw new Error("Lead not found");
-            }
-            if(updateData.status !== undefined && updateData.status !== null && updateData.status !== "")
-            await logActivity({
-            type: "status_updated",
-            client_id: leadId,
-            officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
-            comment: updateData.status || "",
-           });
-            return { success: true, message: "Lead updated successfully" };
-        } catch (err) {
-            throw new Error(err.message );
-        }
-  },
+    const result = await db.get().collection(COLLECTION.LEADS).findOneAndUpdate(
+      { _id: ObjectId(leadId) },
+      { $set: { ...data, updated_at: new Date() } },
+      {
+        returnDocument: "before", // 👈 gives previous document
+        projection: { status: 1 },
+      }
+    );
+
+    if (!result.value) {
+      throw new Error("Lead not found");
+    }
+console.log("Previous Status:", officer_id);
+    // 🔹 Log only if status changed
+    if (
+      updateData.status !== undefined &&
+      updateData.status !== null &&
+      updateData.status !== "" &&
+      result.value.status !== updateData.status
+    ) {
+      await logActivity({
+        type: "status_updated",
+        client_id: leadId,
+        officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
+        comment: updateData.status,
+      });
+    }
+
+    return { success: true, message: "Lead updated successfully" };
+  } catch (e) {
+    throw new Error(e.message);
+  }
+ },
+
   updateLeadStatus : async (leadId, updateData,officer_id) => {
         try {
 
@@ -1068,6 +1077,9 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
             tomorrow.setDate(today.getDate() + 1);
+            const yesterday = new Date(today);
+            yesterday.setDate(today.getDate() - 1);
+            
             const dayAfterTomorrow = new Date(tomorrow);
             dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 1);
             dateField = 'lastcall.next_schedule';
@@ -1081,7 +1093,7 @@ bulkInsertLeads: async (leadsArray, roundrobin = false, officers = []) => {
               end.setMilliseconds(-1);
             } else if (filterCategory === 'PENDING') {
                 start = startDate ? parseDate(startDate) : null;
-                end = endDate ? parseDate(endDate) : new Date(today);
+                end = endDate ? parseDate(endDate) :  new Date(yesterday);
                 if (end && !isNaN(end)) {
                   end.setHours(23, 59, 59, 999);
                 }
@@ -1432,11 +1444,9 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
                     {
                     $unwind: {
                     path: "$client",
-                    preserveNullAndEmptyArrays: false
+                    preserveNullAndEmptyArrays: true
                     }
                     },
-               
-
               // Final Project
               {
                 $project: {

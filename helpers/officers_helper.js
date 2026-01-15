@@ -427,6 +427,7 @@ listAllRoundRobin: async () => {
                   _id: { $toString: "$$officer._id" },
                   name: "$$officer.name",
                   phone: "$$officer.phone",
+                  officer_id: { $toString: "$$officer.officer_id" },
                   company_phone_number: "$$officer.company_phone_number",
                   branch: "$$officer.branch",
                   designation: "$$officer.designation"

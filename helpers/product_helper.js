@@ -34,7 +34,10 @@ module.exports = {
                     created_at: new Date()
                 }).then(result => {
                     if (result.acknowledged) {
-                        resolve(result.insertedId);
+                        resolve({
+                            id: result.insertedId,
+                            product_id: product_id
+                        });
                     } else {
                         reject("Insert failed");
                     }
@@ -72,42 +75,58 @@ module.exports = {
         });
     },
     // // Get Client List  
-    getProductList: async () => {
+    getProductList: async (search) => {
         return new Promise(async (resolve, reject) => {
             try {
-                resolve(await db.get().collection(COLLECTION.PRODUCTS)
-                    .find({ status: { $nin: [STATUSES.DELETED, STATUSES.DISCONTINUED] } }, {
-                        projection: {
-                            _id: 1,
-                            product_id: 1,
-                            name: 1,
-                            code: 1,
-                            category: 1,
-                            subCategory: 1,
-                            status: 1,
-                            sellingPrice: 1,
-                            shortDescription: 1,
-                            institutionName: 1,
-                            fuelType: 1,
-                            bhk: 1,
-                            brand: 1,
-                            city: 1,
-                            country: 1,
-                            duration: 1,
-                            furnishingStatus: 1,
-                            startDate: 1,
-                            images: 1,
-                            qualificationRequired: 1,
-                            registrationYear: 1,
-                            serviceMode: 1,
-                            transmission: 1,
-                            productType: 1,
-                            downpayment: 1,
-                            advanceRequiredPercent: 1
+                const query = {
+                    status: { $in: [STATUSES.ACTIVE, STATUSES.UPCOMING] }
+                };
 
-                        }
-                    })
-                    .toArray());
+                // add name filter only if search exists
+                if (search && search.trim()) {
+                   query.$or = [
+                        { name: { $regex: search, $options: 'i' } },
+                        { code: { $regex: search, $options: 'i' } },
+                        { brand: { $regex: search, $options: 'i' } }
+                        ]
+                }   
+
+                resolve(
+                    await db
+                        .get()
+                        .collection(COLLECTION.PRODUCTS)
+                        .find(query, {
+                            projection: {
+                                _id: 1,
+                                product_id: 1,
+                                name: 1,
+                                code: 1,
+                                category: 1,
+                                subCategory: 1,
+                                status: 1,
+                                sellingPrice: 1,
+                                shortDescription: 1,
+                                institutionName: 1,
+                                fuelType: 1,
+                                bhk: 1,
+                                brand: 1,
+                                city: 1,
+                                country: 1,
+                                duration: 1,
+                                furnishingStatus: 1,
+                                startDate: 1,
+                                images: 1,
+                                qualificationRequired: 1,
+                                registrationYear: 1,
+                                serviceMode: 1,
+                                transmission: 1,
+                                productType: 1,
+                                downpayment: 1,
+                                advanceRequiredPercent: 1
+                            }
+                        })
+                        .toArray()
+                );
             } catch (err) {
                 console.error(err);
                 reject(err || "Error fetching product list");
@@ -115,11 +134,12 @@ module.exports = {
         });
     },
 
+
     deletedProductList: async () => {
         return new Promise(async (resolve, reject) => {
             try {
                 resolve(await db.get().collection(COLLECTION.PRODUCTS)
-                    .find({ status: { $in: [STATUSES.DELETED, STATUSES.DISCONTINUED] } }, {
+                    .find({ status: { $nin: [STATUSES.ACTIVE, STATUSES.UPCOMING] } }, {
                         projection: {
                             _id: 1,
                             product_id: 1,

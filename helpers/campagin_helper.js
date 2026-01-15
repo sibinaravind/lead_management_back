@@ -31,7 +31,11 @@ module.exports = {
                 image: imagePath || null,
                 createdAt: new Date()
             });
-            return result.insertedId;
+            return {
+                campaignId:
+                result.insertedId,
+                path:imagePath
+            }
         } catch (err) {
             if (imagePath && fs.existsSync(imagePath)) {
                 try {

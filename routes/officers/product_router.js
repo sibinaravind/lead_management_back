@@ -53,7 +53,7 @@ app.post("/addProductDocument/:id", middleware.checkToken, async (req, res) => {
 });
 app.get("/productList", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    producthelper.getProductList()
+    producthelper.getProductList(req.query.search)
   );
 });
 

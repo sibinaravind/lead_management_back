@@ -87,6 +87,8 @@ const leadSchema = Joi.object({
   gender: Joi.string().optional().allow(null, ""),  //.valid('Male', 'Female', 'Other')
   dob: Joi.date().optional().allow(null, ""),
   marital_status: Joi.string().optional().allow(null, ""), //.valid('Single', 'Married', 'Divorced', 'Widowed')
+  business_name: Joi.string().optional().allow(null, ""),
+  business_type: Joi.string().optional().allow(null, ""),
   address: Joi.string().optional().allow(null, "").max(500),
   city: Joi.string().optional().allow(null, "").max(100),
   state: Joi.string().optional().allow(null, "").max(100),

@@ -3,13 +3,16 @@ const app = express();
 app.use(express.json());
 let middleware = require("../../middleware");
 let leadHelper=require('../../helpers/lead_helper');
-let metalead=require('../../helpers/meta_lead_helper');
+let metaleadHelper=require('../../helpers/meta_lead_helper');
 const response = require("../../utils/responseManager");
+
+
 app.post("/insertLead", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
     leadHelper.createLead(req.body)
   );
 });
+
 app.post("/updateClientRequiredDocuments/:id", middleware.checkToken, async (req, res) => {
   try {
     const result = await response.handle(res, () =>
@@ -27,7 +30,7 @@ app.post("/bulkInsertLeads", middleware.checkToken, (req, res) => {
 });
 app.patch("/updateLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
-    leadHelper.editLead(req.params.id, req.body)
+    leadHelper.editLead(req.params.id, req.body ,req.decoded._id)
   );
 });
 app.patch("/updateLeadStatus/:id", middleware.checkToken, (req, res) => {
@@ -53,11 +56,7 @@ app.patch("/assign_officer", middleware.checkToken, (req, res) => {
   );
 });
 
-app.get("/metaLead", middleware.checkToken, (req, res) => {
-  return response.handle(res, () =>
-    metalead.fetchFormsAndLeadsInsert()
-  );
-});
+
 
 app.get("/getLead/:id", middleware.checkToken, (req, res) => {
   return response.handle(res, () =>
@@ -89,6 +88,9 @@ app.get("/interactions/:id", middleware.checkToken, (req, res) => {
 //     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
 //   }
 // });
+// app.get("/getFilteredDeadLeads", middleware.checkToken, async (req, res) => {
+//       return response.handle(res, () =>   leadHelper.getFilteredDeadLeads( req.query, req.decoded,));
+// });
 
 app.get("/getAllFilterdLeads", middleware.checkToken, async (req, res) => {
     return response.handle(res, () =>   leadHelper.getFilteredLeads(req.query, req.decoded));
@@ -110,12 +112,15 @@ app.get("/getLeadCount", middleware.checkToken, async (req, res) => {
 app.get("/getLeadCountForAllOfficers", middleware.checkToken, async (req, res) => {
       return response.handle(res, () =>   leadHelper.getLeadCountForAllOfficers(req.query));
 });
-app.get("/getFilteredDeadLeads", middleware.checkToken, async (req, res) => {
-      return response.handle(res, () =>   leadHelper.getFilteredDeadLeads( req.query, req.decoded,));
+
+
+
+app.get("/metaLead", middleware.checkToken, (req, res) => {
+  console.log('Received request for /metaLead');
+  return response.handle(res, () =>
+    metaleadHelper.fetchFormsAndLeadsInsert()
+  );
 });
-
-
-
 
 
 module.exports = app;
