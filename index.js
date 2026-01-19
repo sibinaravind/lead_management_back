@@ -1,4 +1,5 @@
 
+global.whatsappInitialized = false;
 const express = require("express");
 const https = require('https');
 const session = require('express-session');
@@ -19,6 +20,7 @@ const functions = require('firebase-functions');
 const { createWriteStream } = require('fs');
 const app = express();
 const server = http.createServer(app);
+const whatsappService = require('./services/whatsapp-service');
 
 
 // https.createServer({
@@ -86,8 +88,13 @@ const routes = [
   // {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
   {path: '/announcement', route: require("./routes/officers/announcement_router") },
   // {path: '/cre', route: require("./routes/officers/cre_router") },
-  { path: '/', route: require("./routes/webiste/website") }
+  { path: '/', route: require("./routes/webiste/website") },
+  { path: '/whatsapp', route: require("./routes/officers/whatsapp_router") },
 ];
+
+// whatsappService.initialize().catch(err => {
+//   console.error('Failed to initialize WhatsApp:', err);
+// });
 
 // Use routes
 routes.forEach(({ path, route }) => app.use(path, route));
@@ -111,6 +118,21 @@ exports.api = functions.https.onRequest(app);
 // Start the server
 server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
 
+// server.listen(PORT, "0.0.0.0", () => {
+//   console.log(`Server listening on port ${PORT}`);
+  
+//   // CRITICAL: Only initialize once
+//   if (!global.whatsappInitialized) {
+//     global.whatsappInitialized = true;
+    
+//     // Delay initialization to let server settle
+//     setTimeout(() => {
+//       whatsappService.initialize().catch(err => {
+//         console.error('Failed to initialize WhatsApp:', err);
+//       });
+//     }, 3000);
+//   }
+// });
 // Cron job for token refresh
 
 

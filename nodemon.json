@@ -1,0 +1,19 @@
+{
+  "verbose": false,
+  "ignore": [
+    "auth_info_baileys",
+    "node_modules",
+    "uploads",
+    "*.log"
+  ],
+  "watch": [
+    "routes",
+    "config",
+    "helpers",
+    "services",
+    "models",
+    "index.js"
+  ],
+  "ext": "js",
+  "delay": 2000
+}
