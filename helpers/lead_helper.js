@@ -290,7 +290,6 @@ editLead: async (leadId, updateData, officer_id) => {
     if (!result.value) {
       throw new Error("Lead not found");
     }
-console.log("Previous Status:", officer_id);
     // 🔹 Log only if status changed
     if (
       updateData.status !== undefined &&
@@ -330,7 +329,7 @@ console.log("Previous Status:", officer_id);
             type: "status_updated",
             client_id: leadId,
             officer_id: officer_id ? safeObjectId(officer_id) : "UNASSIGNED",
-            comment: updateData.status || "",
+            comment: updateData.client_status || "",
           });
             return { success: true, message: "Lead updated successfully" };
         } catch (err) {

@@ -10,16 +10,68 @@ const {validatePartial} = require("../utils/validatePartial");
 // const { off } = require('../routes/officers/officers_router');
 const getNextSequence = require('../utils/get_next_unique').getNextSequence;
 module.exports = {
+// loginOfficer: async (officer_id, password) => {
+//   const JWT_SECRET = process.env.JWT_SECRET ;
+//   return new Promise(async (resolve, reject) => {
+//     try {
+//       const collection = db.get().collection(COLLECTION.OFFICERS);
+//       const officer = await collection.findOne({ officer_id: officer_id });
+//       if (!officer) return reject("Officer not found");
+
+//       const isMatch = await bcrypt.compare(password.toString(), officer.password);
+//       if (!isMatch) return reject("Invalid credentials");
+
+
+
+//       // Prepare JWT payload
+//       const payload = {
+//         _id: officer._id,
+//         officer_id: officer.officer_id,
+//         designation: officer.designation,
+//         branch: officer.branch,
+//         officers: officer.officers || [],
+//       };
+//       const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '300m' });
+//       // Exclude password from response
+//       const { password: pwd, ...officerData } = officer;
+//       officerData.token = token;
+//       resolve({ officer: officerData });
+//     } catch (error) {
+//       reject("Error processing request");
+//     }
+//   });
+// },
 loginOfficer: async (officer_id, password) => {
-  const JWT_SECRET = process.env.JWT_SECRET ;
+  const JWT_SECRET = process.env.JWT_SECRET;
   return new Promise(async (resolve, reject) => {
     try {
       const collection = db.get().collection(COLLECTION.OFFICERS);
+      const permissionsCollection = db.get().collection(COLLECTION.CONFIG); 
+      
       const officer = await collection.findOne({ officer_id: officer_id });
       if (!officer) return reject("Officer not found");
 
       const isMatch = await bcrypt.compare(password.toString(), officer.password);
       if (!isMatch) return reject("Invalid credentials");
+
+      const permissionsDoc = await permissionsCollection.findOne({_id :ObjectId("682a9eeb231dc6e6d693248a")});
+      let combinedPermissions = {};
+      if (officer.designation && Array.isArray(officer.designation)) {
+        officer.designation.forEach(role => {
+          const roleKey = role.toUpperCase(); // Ensure role name matches the key in permissions doc
+          if (permissionsDoc && permissionsDoc[roleKey]) {
+            const rolePermissions = permissionsDoc[roleKey];
+            // Merge permissions - if any role has 'true', the combined permission will be 'true'
+            Object.keys(rolePermissions).forEach(permission => {
+              if (rolePermissions[permission] === true) {
+                combinedPermissions[permission] = true;
+              } else if (combinedPermissions[permission] === undefined) {
+                combinedPermissions[permission] = false;
+              }
+            });
+          }
+        });
+      }
 
       // Prepare JWT payload
       const payload = {
@@ -28,13 +80,19 @@ loginOfficer: async (officer_id, password) => {
         designation: officer.designation,
         branch: officer.branch,
         officers: officer.officers || [],
+        permissions: combinedPermissions, // Add combined permissions to JWT
       };
-      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '300m' });
+      
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '400m' });
+      
       // Exclude password from response
       const { password: pwd, ...officerData } = officer;
       officerData.token = token;
+      officerData.permissions = combinedPermissions; // Add permissions to response
+      
       resolve({ officer: officerData });
     } catch (error) {
+      console.error("Login error:", error);
       reject("Error processing request");
     }
   });

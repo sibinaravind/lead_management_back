@@ -129,6 +129,8 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${POR
  will add tag to leads that they can add different tag to filter leads in future
  delete product and lead
 
+ booking doc not updating immediately after creting  need to check
+
 
  task sheudled for booking 
  
