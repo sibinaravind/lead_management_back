@@ -1,24 +1,25 @@
-module.exports={
-//main db
-    ADMIN_COLLECTION:'admin',
-    OFFICERS:'officers',
-    POST:'post',
-    CONFIG:'config',
-    CLIENTS:'clients',
+module.exports = {
+    //main db
+    ADMIN_COLLECTION: 'admin',
+    OFFICERS: 'officers',
+    POST: 'post',
+    CONFIG: 'config',
+    CLIENTS: 'clients',
     COUNTER: 'counter',
     PRODUCTS: 'products',
     VACANCIES: 'vacancies',
-    CUSTOMERS:'customers',
+    CUSTOMERS: 'customers',
     LEADS: 'leads',
     CAMPAIGNS: 'campaigns',
     CUSTOMER_ACTIVITY: 'customer_activity',
-    CALL_LOG_ACTIVITY:'call_log_activity',
+    CALL_LOG_ACTIVITY: 'call_log_activity',
     DEAD_LEADS: 'dead_leads',
     ROUNDROBIN: 'roundrobin',
     ANNOUNCEMENTS: 'announcements',
-    DISCOUNT :'discounts',
+    DISCOUNT: 'discounts',
     BOOKINGS: 'bookings',
     TRANSACTIONS: 'transactions',
-   
+    EVENTS: 'events',
+
 
 }

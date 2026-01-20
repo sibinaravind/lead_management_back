@@ -87,9 +87,11 @@ const routes = [
   // {path: '/customer', route: require("./routes/officers/customer_router") },
   // {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
   {path: '/announcement', route: require("./routes/officers/announcement_router") },
+  { path: '/event', route: require("./routes/officers/event_router") },
   // {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") },
   { path: '/whatsapp', route: require("./routes/officers/whatsapp_router") },
+  { path: '/email', route: require("./routes/officers/email_tracking_router") },
 ];
 
 // whatsappService.initialize().catch(err => {
