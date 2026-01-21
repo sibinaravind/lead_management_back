@@ -11,7 +11,7 @@ const eventSchema = Joi.object({
             'string.max': 'Event name cannot exceed 200 characters'
         }),
     description: Joi.string().allow("", null).trim().max(1000),
-    date_time: Joi.date().required()
+    next_schedule: Joi.date().required()
         .messages({
             'date.base': 'Valid event date and time is required',
             'any.required': 'Event date and time is required'

@@ -5,6 +5,7 @@ const { eventSchema } = require("../validations/eventValidation");
 const { safeObjectId } = require('../utils/safeObjectId');
 const { validatePartial } = require("../utils/validatePartial");
 const { buildOfficerMatch } = require("../utils/officer_match");
+const { buildDateRangeFilter } = require("../utils/date_range_filter");
 const { ObjectId } = require('mongodb');
 const e = require('express');
 
@@ -267,94 +268,597 @@ module.exports = {
         }
     },
 
-    getUpcomingActivities: async (query = {}, decoded = {}) => {
+    getEventCountByCategory: async (query, decoded) => {
         try {
-            const { page = 1, limit = 10, employee } = query;
-            const parsedPage = Math.max(parseInt(page, 10), 1);
-            const parsedLimit = Math.max(parseInt(limit, 10), 1);
-            const skip = (parsedPage - 1) * parsedLimit;
+            const { employee } = query;
 
             const now = new Date();
+            // Date calculations
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
 
-            const officerEventMatch = buildOfficerMatch(decoded, employee, "officers");
-            const officerCallMatch = buildOfficerMatch(decoded, employee, "officer_id");
+            const tomorrowStart = new Date(todayStart);
+            tomorrowStart.setDate(todayStart.getDate() + 1);
 
-            const result = await db.get().collection(COLLECTION.EVENTS).aggregate([
-                {
-                    $match: {
-                        // date_time: { $gt: now },
-                        ...officerEventMatch
+            const tomorrowEnd = new Date(tomorrowStart);
+            tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+            const yesterdayStart = new Date(todayStart);
+            yesterdayStart.setDate(todayStart.getDate() - 1);
+
+            const weekStart = new Date(todayStart);
+            weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Sunday
+
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 7);
+
+            const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+            const monthEnd = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 0);
+            monthEnd.setHours(23, 59, 59, 999);
+
+            // Build officer match
+            const officerMatch = buildOfficerMatch(decoded, employee, "officers");
+
+            // Base filter
+            const baseFilter = {
+                ...officerMatch,
+
+            };
+            console.log("Base Filter for Event Count:", baseFilter);
+
+            const result = await db
+                .get()
+                .collection(COLLECTION.EVENTS)
+                .aggregate([
+                    { $match: baseFilter },
+                    {
+                        $facet: {
+                            TOTAL: [{ $count: "count" }],
+
+                            TODAY: [
+                                {
+                                    $match: {
+                                        next_schedule: { $gte: todayStart, $lt: tomorrowStart }
+                                    }
+                                },
+                                { $count: "count" }
+                            ],
+
+                            TOMORROW: [
+                                {
+                                    $match: {
+                                        next_schedule: { $gte: tomorrowStart, $lt: tomorrowEnd }
+                                    }
+                                },
+                                { $count: "count" }
+                            ],
+                            THIS_WEEK: [
+                                {
+                                    $match: {
+                                        next_schedule: { $gte: weekStart, $lt: weekEnd }
+                                    }
+                                },
+                                { $count: "count" }
+                            ],
+
+                            THIS_MONTH: [
+                                {
+                                    $match: {
+                                        next_schedule: { $gte: monthStart, $lte: monthEnd }
+                                    }
+                                },
+                                { $count: "count" }
+                            ],
+
+                            UPCOMING: [
+                                {
+                                    $match: {
+                                        next_schedule: { $gte: todayStart }
+                                    }
+                                },
+                                { $count: "count" }
+                            ],
+
+                            PENDING: [
+                                {
+                                    $match: {
+                                        status: { $nin: ['COMPLETED', 'CANCELLED'] },
+                                        next_schedule: { $lt: todayStart }
+                                    }
+                                },
+                                { $count: "count" }
+                            ]
+                        }
                     }
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        type: { $literal: "EVENT" },
-                        title: "$name",
-                        description: 1,
-                        date_time: 1,
-                        client_id: 1,
-                        officers: 1,
-                        created_at: 1
-                    }
-                },
-                {
-                    $unionWith: {
-                        coll: COLLECTION.CALL_LOG_ACTIVITY,
-                        pipeline: [
-                            {
-                                $match: {
-                                    next_schedule: { $gt: now },
-                                    ...officerCallMatch
-                                }
-                            },
-                            {
-                                $project: {
-                                    _id: 1,
-                                    type: { $literal: "CALL_EVENT" },
-                                    title: "$call_type",
-                                    next_schedule: "$next_schedule",
-                                    description: "$comment",
-                                    date_time: 1,
-                                    client_id: 1,
-                                    created_at: 1
-                                }
-                            }
-                        ]
-                    }
-                },
-                { $sort: { date_time: 1 } },
-                {
-                    $facet: {
-                        metadata: [{ $count: "total" }],
-                        data: [
-                            { $skip: skip },
-                            { $limit: parsedLimit }
-                        ]
-                    }
-                }
-            ]).toArray();
-// console.log(result);
-            const total = result[0]?.metadata?.[0]?.total ?? 0;
-            const activities = result[0]?.data ?? [];
+                ])
+                .toArray();
+
+            const counts = result[0] || {};
+            const getCount = (key) => counts[key]?.[0]?.count ?? 0;
 
             return {
-                activities,
-                total,
-                page: parsedPage,
-                limit: parsedLimit,
-                totalPages: Math.ceil(total / parsedLimit)
-
+                TOTAL: getCount("TOTAL"),
+                TODAY: getCount("TODAY"),
+                TOMORROW: getCount("TOMORROW"),
+                THIS_WEEK: getCount("THIS_WEEK"),
+                THIS_MONTH: getCount("THIS_MONTH"),
+                UPCOMING: getCount("UPCOMING"),
+                PENDING: getCount("PENDING")
             };
 
         } catch (err) {
 
-            throw new Error(err.message || "Error fetching upcoming activities");
+            throw new Error("Server Error");
         }
     },
 
 
-};
+    getAllEvents: async (query = {}, decoded = {}) => {
+        try {
+            const {
+                page = 1,
+                limit = 10,
+                employee,
+                client_id,
+                booking_id,
+                startDate,
+                endDate
+            } = query;
+            const parsedPage = Math.max(parseInt(page), 1);
+            const parsedLimit = Math.max(parseInt(limit), 1);
+            const skip = (parsedPage - 1) * parsedLimit;
+            // Parse date from DD/MM/YYYY format
+            const parseDate = (dateStr) => {
+                if (!dateStr) return null;
+                const [day, month, year] = dateStr.split('/');
+                return new Date(`${year}-${month}-${day}`);
+            };
+
+            const dateFilter = {};
+            if (startDate || endDate) {
+                if (startDate) {
+                    const start = parseDate(startDate);
+                    if (start && !isNaN(start)) {
+                        dateFilter.$gte = start;
+                    }
+                }
+                if (endDate) {
+                    const end = parseDate(endDate);
+                    if (end && !isNaN(end)) {
+                        // Set to end of day
+                        end.setHours(23, 59, 59, 999);
+                        dateFilter.$lte = end;
+                    }
+                }
+            }
+            const officerMatchForEvents = buildOfficerMatch(
+                decoded,
+                employee,
+                "officers"
+            );
+
+            const eventMatch = {
+                ...(Object.keys(dateFilter).length > 0 && { next_schedule: dateFilter }),
+                ...(booking_id && { booking_id: safeObjectId(booking_id) }),
+                ...(client_id && { client_id: safeObjectId(client_id) }),
+                ...officerMatchForEvents  // Apply officer filter
+            };
+
+            const result = await db.get()
+                .collection(COLLECTION.EVENTS)
+                .aggregate([
+                    { $match: eventMatch },
+                    {
+                        $project: {
+                            _id: 1,
+                            type: { $literal: "EVENT" },
+                            title: "$name",
+                            description: 1,
+                            next_schedule: "$next_schedule",
+                            client_id: 1,
+                            booking_id: 1,
+                            officers: 1,
+                            created_at: 1
+                        }
+                    },
+                    { $sort: { next_schedule: 1 } },
+                    {
+                        $facet: {
+                            metadata: [{ $count: "total" }],
+                            data: [{ $skip: skip }, { $limit: parsedLimit }]
+                        }
+                    }
+                ])
+                .toArray();
+
+            const total = result[0]?.metadata?.[0]?.total ?? 0;
+
+            return {
+                activities: result[0]?.data ?? [],
+                total,
+                page: parsedPage,
+                limit: parsedLimit,
+                totalPages: Math.ceil(total / parsedLimit)
+            };
+
+        } catch (err) {
+            console.error(err);
+            throw new Error("Error fetching upcoming activities");
+        }
+    },
+
+    getEventCountForAllOfficers: async (query) => {
+        try {
+            const { startDate, endDate } = query;
+
+            /* ---------------- Date Parser ---------------- */
+            const parseDate = (str) => {
+                if (!str) return null;
+                const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+                if (match) {
+                    return new Date(
+                        Number(match[3]),
+                        Number(match[2]) - 1,
+                        Number(match[1]),
+                        0, 0, 0, 0
+                    );
+                }
+                return new Date(str);
+            };
+
+            /* ---------------- Date Filter ---------------- */
+            const filter = {};
+            const dateField = "next_schedule";
+
+            const start = parseDate(startDate);
+            const end = parseDate(endDate);
+
+            if (start || end) {
+                filter[dateField] = {};
+
+                if (start instanceof Date && !isNaN(start)) {
+                    filter[dateField].$gte = start;
+                }
+
+                if (end instanceof Date && !isNaN(end)) {
+                    end.setHours(23, 59, 59, 999);
+                    filter[dateField].$lte = end;
+                }
+
+                if (Object.keys(filter[dateField]).length === 0) {
+                    delete filter[dateField];
+                }
+            }
+
+            /* ---------------- Day Calculations ---------------- */
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+
+            const tomorrowStart = new Date(todayStart);
+            tomorrowStart.setDate(todayStart.getDate() + 1);
+
+            const tomorrowEnd = new Date(tomorrowStart);
+            tomorrowEnd.setDate(tomorrowEnd.getDate() + 1);
+
+            const yesterdayStart = new Date(todayStart);
+            yesterdayStart.setDate(todayStart.getDate() - 1);
+
+            const weekStart = new Date(todayStart);
+            weekStart.setDate(todayStart.getDate() - todayStart.getDay());
+
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekEnd.getDate() + 7);
+
+            const monthStart = new Date(
+                todayStart.getFullYear(),
+                todayStart.getMonth(),
+                1
+            );
+
+            const monthEnd = new Date(
+                todayStart.getFullYear(),
+                todayStart.getMonth() + 1,
+                0
+            );
+            monthEnd.setHours(23, 59, 59, 999);
+
+            /* ---------------- Aggregation ---------------- */
+            const result = await db
+                .get()
+                .collection(COLLECTION.EVENTS)
+                .aggregate([
+                    { $match: filter },
+
+                    // Unwind officers array to group by each officer
+                    {
+                        $unwind: {
+                            path: "$officers",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+
+                    {
+                        $group: {
+                            _id: { $ifNull: ["$officers", "UNASSIGNED"] },
+
+                            TOTAL: { $sum: 1 },
+
+                            TODAY: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $gte: ["$next_schedule", todayStart] },
+                                                { $lt: ["$next_schedule", tomorrowStart] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            TOMORROW: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $gte: ["$next_schedule", tomorrowStart] },
+                                                { $lt: ["$next_schedule", tomorrowEnd] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+
+                            THIS_WEEK: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $gte: ["$next_schedule", weekStart] },
+                                                { $lt: ["$next_schedule", weekEnd] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            THIS_MONTH: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                { $gte: ["$next_schedule", monthStart] },
+                                                { $lte: ["$next_schedule", monthEnd] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            UPCOMING: {
+                                $sum: {
+                                    $cond: [
+                                        { $gte: ["$next_schedule", todayStart] },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+
+                            PENDING: {
+                                $sum: {
+                                    $cond: [
+                                        {
+                                            $and: [
+                                                {
+                                                    $not: {
+                                                        $in: ["$status", ["COMPLETED", "CANCELLED"]]
+                                                    }
+                                                },
+                                                { $lt: ["$next_schedule", todayStart] }
+                                            ]
+                                        },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            }
+                        }
+                    },
+
+                    /* ---------------- Join OFFICERS ---------------- */
+                    {
+                        $lookup: {
+                            from: COLLECTION.OFFICERS,
+                            localField: "_id",
+                            foreignField: "_id",
+                            as: "officer"
+                        }
+                    },
+                    {
+                        $unwind: {
+                            path: "$officer",
+                            preserveNullAndEmptyArrays: true
+                        }
+                    },
+
+                    {
+                        $project: {
+                            _id: 1,
+                            officer_id: {
+                                $cond: [
+                                    { $eq: ["$_id", "UNASSIGNED"] },
+                                    "UNASSIGNED",
+                                    "$officer.officer_id"
+                                ]
+                            },
+                            officer_name: {
+                                $cond: [
+                                    { $eq: ["$_id", "UNASSIGNED"] },
+                                    "UNASSIGNED",
+                                    "$officer.name"
+                                ]
+                            },
+                            TOTAL: 1,
+                            TODAY: 1,
+                            TOMORROW: 1,
+                            THIS_WEEK: 1,
+                            THIS_MONTH: 1,
+                            UPCOMING: 1,
+                            PENDING: 1
+                        }
+                    },
+
+                    { $sort: { TOTAL: -1 } }
+                ])
+                .toArray();
+
+            return result;
+        } catch (err) {
+            console.error("getEventCountForAllOfficers error:", err);
+            throw new Error("Server Error");
+        }
+    }
+}
+
+//  getAllUpcomingActivities: async (query = {}, decoded = {}) => {
+//         try {
+//             const {
+//                 page = 1,
+//                 limit = 10,
+//                 employee,
+//                 client_id,
+//                 booking_id,
+//                 startDate,
+//                 endDate
+//             } = query;
+//             const parsedPage = Math.max(parseInt(page), 1);
+//             const parsedLimit = Math.max(parseInt(limit), 1);
+//             const skip = (parsedPage - 1) * parsedLimit;
+//             // Parse date from DD/MM/YYYY format
+//             const parseDate = (dateStr) => {
+//                 if (!dateStr) return null;
+//                 const [day, month, year] = dateStr.split('/');
+//                 return new Date(`${year}-${month}-${day}`);
+//             };
+
+//             const dateFilter = {};
+//             if (startDate || endDate) {
+//                 if (startDate) {
+//                     const start = parseDate(startDate);
+//                     if (start && !isNaN(start)) {
+//                         dateFilter.$gte = start;
+//                     }
+//                 }
+//                 if (endDate) {
+//                     const end = parseDate(endDate);
+//                     if (end && !isNaN(end)) {
+//                         // Set to end of day
+//                         end.setHours(23, 59, 59, 999);
+//                         dateFilter.$lte = end;
+//                     }
+//                 }
+//             }
+//             const officerMatchForEvents = buildOfficerMatch(
+//                 decoded,
+//                 employee,
+//                 "officers"
+//             );
+//             const officerMatchForCalls = buildOfficerMatch(
+//                 decoded,
+//                 employee,
+//                 "officer_id"
+//             );
+//             const eventMatch = {
+//                 ...(Object.keys(dateFilter).length > 0 && { next_schedule: dateFilter }),
+//                 ...(booking_id && { booking_id: safeObjectId(booking_id) }),
+//                 ...(client_id && { client_id: safeObjectId(client_id) }),
+//                 ...officerMatchForEvents  // Apply officer filter
+//             };
+
+//             console.log("Event Match Filter:", eventMatch);
+
+
+//             // Build match filters for calls
+//             const callMatch = {
+//                 ...(Object.keys(dateFilter).length > 0 && { next_schedule: dateFilter }),
+//                 ...(client_id && { client_id: safeObjectId(client_id) }),
+//                 ...officerMatchForCalls  // Apply officer filter
+//             };
+//             console.log("Call Match Filter:", callMatch);
+
+//             const result = await db.get()
+//                 .collection(COLLECTION.EVENTS)
+//                 .aggregate([
+//                     { $match: eventMatch },
+//                     {
+//                         $project: {
+//                             _id: 1,
+//                             type: { $literal: "EVENT" },
+//                             title: "$name",
+//                             description: 1,
+//                             next_schedule: "$next_schedule",
+//                             client_id: 1,
+//                             booking_id: 1,
+//                             officers: 1,
+//                             created_at: 1
+//                         }
+//                     },
+//                     ...(!booking_id ? [{
+//                         $unionWith: {
+//                             coll: COLLECTION.CALL_LOG_ACTIVITY,
+//                             pipeline: [
+//                                 { $match: callMatch },
+//                                 {
+//                                     $project: {
+//                                         _id: 1,
+//                                         type: { $literal: "CALL_EVENT" },
+//                                         title: "$call_type",
+//                                         description: "$comment",
+//                                         next_schedule: "$next_schedule",
+//                                         client_id: 1,
+//                                         officer_id: 1,
+//                                         created_at: 1
+//                                     }
+//                                 }
+//                             ]
+//                         }
+//                     }] : []),
+//                     { $sort: { next_schedule: 1 } },
+//                     {
+//                         $facet: {
+//                             metadata: [{ $count: "total" }],
+//                             data: [{ $skip: skip }, { $limit: parsedLimit }]
+//                         }
+//                     }
+//                 ])
+//                 .toArray();
+
+//             const total = result[0]?.metadata?.[0]?.total ?? 0;
+
+//             return {
+//                 activities: result[0]?.data ?? [],
+//                 total,
+//                 page: parsedPage,
+//                 limit: parsedLimit,
+//                 totalPages: Math.ceil(total / parsedLimit)
+//             };
+
+//         } catch (err) {
+//             console.error(err);
+//             throw new Error("Error fetching upcoming activities");
+//         }
+//     }
 
 
 

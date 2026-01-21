@@ -100,7 +100,6 @@ module.exports = {
                     officer_id: ObjectId.isValid(officer_id) ? new ObjectId(officer_id) : null,
                     duration: data.duration || 0,
                     next_schedule: nextScheduleDate,
-                    next_shedule_time: data.next_shedule_time || null,
                     comment: data.comment || data.dead_lead_reason || "",
                     call_type: data.call_type || "",
                     call_status: data.call_status || "",
@@ -117,7 +116,6 @@ module.exports = {
                     officer_id: ObjectId.isValid(officer_id) ? new ObjectId(officer_id) : null,
                     duration: data.duration || 0,
                     next_schedule: nextScheduleDate,
-                    next_shedule_time: data.next_shedule_time || null,
                     comment: data.comment || "",
                     call_type: data.call_type || "",
                     call_status: data.call_status || "",
@@ -371,7 +369,7 @@ module.exports = {
                         client_id: 1,
                         duration: 1,
                         next_schedule: 1,
-                        next_shedule_time: 1,
+                     
                         comment: 1,
                         call_type: 1,
                         call_status: 1,
@@ -416,7 +414,6 @@ module.exports = {
                 const allowedFields = [
                     "duration",
                     "next_schedule",
-                    "next_shedule_time",
                     "comment",
                     "officer_id"
                 ];
@@ -525,7 +522,6 @@ module.exports = {
                         client_id: 1,
                         duration: 1,
                         next_schedule: 1,
-                        next_shedule_time: 1,
                         comment: 1,
                         call_type: 1,
                         call_status: 1,

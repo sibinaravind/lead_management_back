@@ -543,7 +543,7 @@ editLead: async (leadId, updateData, officer_id) => {
                                 duration: 1,
                                 next_schedule: 1,
                                 referrer_id: 1,
-                                next_shedule_time: 1,
+                              
                                 comment: 1,
                                 call_type: 1,
                                 call_status: 1,
@@ -1175,7 +1175,7 @@ editLead: async (leadId, updateData, officer_id) => {
                         comment: "$lastcall.comment",
                         call_type: "$lastcall.call_type",
                         call_status: "$lastcall.call_status",
-                        next_shedule_time: "$lastcall.next_shedule_time",
+                    
                         created_at: "$lastcall.created_at",
                       },
                       // next_schedule: "$lastcall.next_schedule",
@@ -1461,7 +1461,7 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
                   comment: "$comment",
                   call_type: "$call_type",
                   call_status: "$call_status",
-                  next_shedule_time: "$next_shedule_time",
+              
                   created_at: "$created_at",
                  },
                   // Officer Info

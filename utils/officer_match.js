@@ -1,12 +1,9 @@
 
 const { safeObjectId } = require('../utils/safeObjectId');
 const buildOfficerMatch = (decoded = {}, employee, fieldName) => {
-
     const isAdmin =
         Array.isArray(decoded?.designation) &&
         decoded.designation.includes("ADMIN");
-
-    // Helper to safely convert to ObjectId
     const toObjectId = (id) => {
         try {
             return safeObjectId(id);
@@ -15,17 +12,13 @@ const buildOfficerMatch = (decoded = {}, employee, fieldName) => {
         }
     };
 
-    /* ================= EXPLICIT EMPLOYEE FILTER ================= */
     if (employee) {
         const empId = toObjectId(employee);
         if (!empId) return {};
-
         return fieldName === "officers"
             ? { [fieldName]: { $in: [empId] } }
             : { [fieldName]: empId };
     }
-
-    /* ================= ADMIN → NO FILTER ================= */
     if (isAdmin) {
         return {};
     }

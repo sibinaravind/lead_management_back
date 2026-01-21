@@ -20,7 +20,19 @@ app.patch("/updateEvent/:_id", middleware.checkToken, (req, res) => {
 app.get("/eventList", middleware.checkToken, (req, res) => {
   
   return response.handle(res, () =>
-    eventHelper.getUpcomingActivities(req.query, req.decoded)
+    eventHelper.getAllEvents(req.query, req.decoded)
+  );
+});
+app.get("/eventListCount", middleware.checkToken, (req, res) => {
+  
+  return response.handle(res, () =>
+    eventHelper.getEventCountByCategory(req.query, req.decoded)
+  );
+});
+app.get("/eventCountForAllOfficers", middleware.checkToken, (req, res) => {
+  
+  return response.handle(res, () =>
+    eventHelper.getEventCountForAllOfficers(req.query)
   );
 });
 app.delete("/deleteEvent/:_id", middleware.checkToken, (req, res) => {

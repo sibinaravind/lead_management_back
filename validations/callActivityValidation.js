@@ -17,9 +17,6 @@ const callActivityValidation = Joi.object({
     .required()
    .allow(null,''),
 
-  next_shedule_time: Joi.string()
-    .optional()
-    .allow(null,''),
   // dead_lead_reason: Joi.string()
   //   .trim().optional().allow('', null),
     // .when('client_status', {

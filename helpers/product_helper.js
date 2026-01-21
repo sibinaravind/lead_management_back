@@ -386,7 +386,7 @@ module.exports = {
                                 comment: "$lastcall.comment",
                                 call_type: "$lastcall.call_type",
                                 call_status: "$lastcall.call_status",
-                                next_shedule_time: "$lastcall.next_shedule_time",
+                            
                                 created_at: "$lastcall.created_at",
                             },
                             product_interested: {
