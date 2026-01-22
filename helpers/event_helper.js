@@ -152,8 +152,6 @@ module.exports = {
                         data: [
                             { $skip: skip },
                             { $limit: parsedLimit },
-
-                            // Lookup client
                             {
                                 $lookup: {
                                     from: COLLECTION.LEADS,
@@ -445,41 +443,80 @@ module.exports = {
                 ...officerMatchForEvents  // Apply officer filter
             };
 
-            const result = await db.get()
-                .collection(COLLECTION.EVENTS)
-                .aggregate([
-                    { $match: eventMatch },
-                    {
-                        $project: {
-                            _id: 1,
-                            type: { $literal: "EVENT" },
-                            title: "$name",
-                            description: 1,
-                            next_schedule: "$next_schedule",
-                            client_id: 1,
-                            booking_id: 1,
-                            officers: 1,
-                            created_at: 1
-                        }
-                    },
-                    { $sort: { next_schedule: 1 } },
-                    {
-                        $facet: {
-                            metadata: [{ $count: "total" }],
-                            data: [{ $skip: skip }, { $limit: parsedLimit }]
-                        }
-                    }
-                ])
-                .toArray();
 
-            const total = result[0]?.metadata?.[0]?.total ?? 0;
+            const pipeline = [
+                { $match: eventMatch },
+
+                // Sort first
+                { $sort: { next_schedule: 1 } },
+
+                {
+                    $facet: {
+                        // -----------------------------
+                        // Paginated Data
+                        // -----------------------------
+                        data: [
+                            { $skip: skip },
+                            { $limit: parsedLimit },
+
+                            // Lookup lead info
+                            {
+                                $lookup: {
+                                    from: COLLECTION.LEADS,
+                                    let: { clientId: "$client_id" },
+                                    pipeline: [
+                                        { $match: { $expr: { $eq: ["$_id", "$$clientId"] } } },
+                                        { $project: { name: 1, phone: 1, country_code: 1, client_id: 1 } }
+                                    ],
+                                    as: "lead"
+                                }
+                            },
+                            { $unwind: { path: "$lead", preserveNullAndEmptyArrays: true } },
+
+                            // Lookup officers
+                            {
+                                $lookup: {
+                                    from: COLLECTION.OFFICERS,
+                                    let: { officerIds: "$officers" },
+                                    pipeline: [
+                                        { $match: { $expr: { $in: ["$_id", "$$officerIds"] } } },
+                                        { $project: { _id: 1, name: 1 ,officer_id: 1 } }
+                                    ],
+                                    as: "officer_info"
+                                }
+                            },
+
+                            // Add computed fields
+                            {
+                                $addFields: {
+                                    client_name: "$lead.name",
+                                    client_phone: { $concat: ["$lead.country_code", " ", "$lead.phone"] },
+                                    client_genid: "$lead.client_id",
+                                    officers: "$officer_info",
+                                    type: "EVENT"
+                                }
+                            },
+
+                            // Remove temporary fields
+                            { $project: { lead: 0, officer_info: 0 } }
+                        ],
+
+                        // -----------------------------
+                        // Total count
+                        // -----------------------------
+                        metadata: [{ $count: "total" }]
+                    }
+                }
+            ];
+
+            const [result] = await db.get().collection(COLLECTION.EVENTS).aggregate(pipeline).toArray();
 
             return {
-                activities: result[0]?.data ?? [],
-                total,
+                activities: result?.data ?? [],
+                total: result?.metadata?.[0]?.total ?? 0,
                 page: parsedPage,
                 limit: parsedLimit,
-                totalPages: Math.ceil(total / parsedLimit)
+                totalPages: Math.ceil((result?.metadata?.[0]?.total ?? 0) / parsedLimit)
             };
 
         } catch (err) {

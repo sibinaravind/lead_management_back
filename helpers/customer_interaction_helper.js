@@ -438,7 +438,6 @@ module.exports = {
                                     );
                                 }
                             }
-
                             // If it is already a Date or ISO string, just use it
                             else if (data.next_schedule instanceof Date) {
                                 nextScheduleDate = data.next_schedule;
@@ -558,7 +557,6 @@ module.exports = {
             .toString()
             .replace(/^(\+?91|0+)/, '')
             .trim();
-
         const data = await db.get()
             .collection(COLLECTION.CALL_LOG_ACTIVITY)
             .aggregate([

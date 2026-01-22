@@ -344,6 +344,9 @@ module.exports = {
                     // 4️⃣ Add required + uploaded documents
                     {
                         $addFields: {
+                            steps: {
+                                $ifNull: ["$product.stepList", []]
+                            },
                             required_documents: {
                                 $ifNull: ["$product.documentsRequired", []]
                             },
@@ -427,7 +430,6 @@ module.exports = {
                 todayStart.getMonth() + 1,
                 1
             );
-
             /* ---------------- AGGREGATION ---------------- */
             const result = await db
                 .get()
@@ -1236,55 +1238,86 @@ module.exports = {
                     { booking_no: { $regex: searchRegex } },
                 ];
             }
+            const [result] = await collection.aggregate([
+                // 1️⃣ Filter first
+                { $match: matchFilter },
 
-            const [result] = await collection
-                .aggregate([
-                    { $match: matchFilter },
-                    {
-                        $lookup: {
-                            from: COLLECTION.OFFICERS,
-                            localField: "officer_id",
-                            foreignField: "_id",
-                            as: "officers",
-                        },
-                    },
-                    { $unwind: { path: "$officers", preserveNullAndEmptyArrays: true } },
-                    {
-                        $project: {
-                            _id: 1,
-                            booking_date: 1,
-                            expected_closure_date: 1,
-                            booking_id: 1,
-                            customer_id: 1,
-                            customer_name: 1,
-                            customer_phone: 1,
-                            product_id: 1,
-                            product_name: 1,
-                            total_amount: 1,
-                            grand_total: 1,
-                            status: 1,
-                            officer_id: 1,
-                            created_at: 1,
-                            officer_name: "$officers.name",
-                            // officer_id: "$officers.officer_id",
-                            payed: {
-                                $sum: "$payment_schedule.paid_amount"
-                            }
+                // 2️⃣ Facet: separate pagination & total count
+                {
+                    $facet: {
+                        // -------------------------
+                        // 📄 PAGINATED DATA
+                        // -------------------------
+                        data: [
+                            { $sort: { booking_date: 1 } },
+                            { $skip: skip },
+                            { $limit: limit },
 
-                        },
-                    },
+                            // 🔗 Lookup officer ONLY for paginated rows
+                            {
+                                $lookup: {
+                                    from: COLLECTION.OFFICERS,
+                                    localField: "officer_id",
+                                    foreignField: "_id",
+                                    as: "officers",
+                                },
+                            },
+                            {
+                                $unwind: {
+                                    path: "$officers",
+                                    preserveNullAndEmptyArrays: true,
+                                },
+                            },
 
-                    { $sort: { booking_date: 1 } },
-                    { $skip: skip },
-                    { $limit: limit },
-                    {
-                        $facet: {
-                            data: [],
-                            meta: [{ $count: "total" }],
-                        },
+                            // 💰 Calculate paid amount safely
+                            {
+                                $addFields: {
+                                    paid: {
+                                        $reduce: {
+                                            input: "$payment_schedule",
+                                            initialValue: 0,
+                                            in: {
+                                                $add: [
+                                                    "$$value",
+                                                    { $ifNull: ["$$this.paid_amount", 0] },
+                                                ],
+                                            },
+                                        },
+                                    },
+                                },
+                            },
+
+                            // 🎯 Final shape
+                            {
+                                $project: {
+                                    _id: 1,
+                                    booking_date: 1,
+                                    expected_closure_date: 1,
+                                    booking_id: 1,
+                                    customer_id: 1,
+                                    customer_name: 1,
+                                    customer_phone: 1,
+                                    product_id: 1,
+                                    product_name: 1,
+                                    total_amount: 1,
+                                    grand_total: 1,
+                                    status: 1,
+                                    officer_id: 1,
+                                    created_at: 1,
+                                    officer_name: "$officers.name",
+                                    paid: 1,
+                                },
+                            },
+                        ],
+
+                        // -------------------------
+                        // 📊 TOTAL COUNT
+                        // -------------------------
+                        meta: [{ $count: "total" }],
                     },
-                ])
-                .toArray();
+                },
+            ]).toArray();
+
             const total = result?.meta?.[0]?.total ?? 0;
             return {
                 bookings: result?.data ?? [],
@@ -1310,7 +1343,7 @@ module.exports = {
             const matchFilter = {
                 "payment_schedule.due_date": { $exists: true },
                 status: { $nin: ["CANCELLED", "COMPLETED"] },
-            
+
             };
 
             /* ---------------- OFFICER FILTER ---------------- */
@@ -1495,7 +1528,7 @@ module.exports = {
              * -------------------------------------------------- */
             const matchFilter = {
                 "payment_schedule.due_date": { $exists: true },
-                 "status": { $nin: ["CANCELLED", "COMPLETED"] },
+                "status": { $nin: ["CANCELLED", "COMPLETED"] },
             };
 
 
@@ -1560,56 +1593,87 @@ module.exports = {
                     matchFilter["payment_schedule.due_date"] = dateFilter;
                 }
             }
-            const pipeline = [
 
+            const pipeline = [
+                // 1️⃣ Unwind schedules
                 { $unwind: "$payment_schedule" },
+
+                // 2️⃣ Apply filters early (VERY important)
                 { $match: matchFilter },
                 {
-                    $lookup: {
-                        from: COLLECTION.OFFICERS,
-                        localField: "officer_id",
-                        foreignField: "_id",
-                        as: "officer_info",
-                    },
-                },
-                {
-                    $project: {
-                        _id: 1,
-                        booking_id: 1,
-                        customer_name: 1,
-                        customer_phone: 1,
-                        product_name: 1,
-                        officer_id: 1,
-                        grand_total: 1,
-                        booking_date: 1,
-                        status: 1,
-                        payment_schedule: 1,
-                        officer_name: { $arrayElemAt: ["$officer_info.name", 0] },
-                    },
-                },
-
-                // Stage 4: Facet for pagination and aggregates
-                {
                     $facet: {
+                        // -----------------------------
+                        // 📄 PAGINATED DATA (ONLY HERE lookup happens)
+                        // -----------------------------
                         data: [
                             { $sort: { "payment_schedule.due_date": 1 } },
                             { $skip: skip },
                             { $limit: limit },
+
+                            {
+                                $lookup: {
+                                    from: COLLECTION.OFFICERS,
+                                    localField: "officer_id",
+                                    foreignField: "_id",
+                                    as: "officer_info",
+                                },
+                            },
+
+                            {
+                                $project: {
+                                    _id: 1,
+                                    booking_id: 1,
+                                    customer_name: 1,
+                                    customer_phone: 1,
+                                    product_name: 1,
+                                    officer_id: 1,
+                                    grand_total: 1,
+                                    booking_date: 1,
+                                    status: 1,
+                                    payment_schedule: 1,
+                                    officer_name: {
+                                        $arrayElemAt: ["$officer_info.name", 0],
+                                    },
+                                },
+                            },
                         ],
-                        meta: [{ $count: "total" }],
+
+                        // -----------------------------
+                        // 📊 META DATA
+                        // -----------------------------
+                        meta: [
+                            { $count: "total" }
+                        ],
+
+                        // -----------------------------
+                        // 💰 TOTAL AMOUNT
+                        // -----------------------------
                         totalAmount: [
                             {
                                 $group: {
                                     _id: null,
-                                    amount: { $sum: "$payment_schedule.amount" },
+                                    amount: {
+                                        $sum: {
+                                            $ifNull: ["$payment_schedule.amount", 0],
+                                        },
+                                    },
                                 },
                             },
                         ],
+
+
+                        // -----------------------------
+                        // 💸 TOTAL PAID
+                        // -----------------------------
                         totalPaid: [
                             {
                                 $group: {
                                     _id: null,
-                                    amount: { $sum: "$payment_schedule.paid_amount" },
+                                    amount: {
+                                        $sum: {
+                                            $ifNull: ["$payment_schedule.paid_amount", 0],
+                                        },
+                                    },
                                 },
                             },
                         ],
@@ -1617,9 +1681,9 @@ module.exports = {
                 },
             ];
 
+
             // 🚀 OPTIMIZATION 10: Single database call
             const [response] = await collection.aggregate(pipeline).toArray();
-
             const total = response?.meta?.[0]?.total ?? 0;
             const totalAmount = response?.totalAmount?.[0]?.amount ?? 0;
 
@@ -1831,71 +1895,75 @@ module.exports = {
 
 
             /* ---------------- AGGREGATION ---------------- */
-            const [result] = await collection
-                .aggregate([
-                    { $match: matchFilter },
+            const [result] = await collection.aggregate([
+                // 1️⃣ Filter first
+                { $match: matchFilter },
 
-                    // 🔽 Latest transactions first
-                    { $sort: { created_at: -1 } },
+                { $sort: { created_at: -1 } },
+                {
+                    $facet: {
+                        // ✅ Paginated data ONLY
+                        data: [
+                            { $skip: skip },
+                            { $limit: limit },
 
-                    {
-                        $lookup: {
-                            from: COLLECTION.OFFICERS,
-                            localField: "created_by",
-                            foreignField: "_id",
-                            as: "officer"
-                        }
-                    },
-                    { $unwind: { path: "$officer", preserveNullAndEmptyArrays: true } },
-
-                    {
-                        $lookup: {
-                            from: COLLECTION.BOOKINGS,
-                            localField: "booking_id",
-                            foreignField: "_id",
-                            as: "booking"
-                        }
-                    },
-                    { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
-
-                    {
-                        $project: {
-                            _id: 1,
-                            booking_no: 1,
-                            booking_id: 1,
-                            booking_date: 1,
-                            amount: 1,
-                            payment_method: 1,
-                            transaction_id: 1,
-                            remarks: 1,
-                            created_at: 1,
-                            officer_name: "$officer.name",
-                            customer_name: "$booking.customer_name",
-                            customer_phone: "$booking.customer_phone"
-                        }
-                    },
-
-                    {
-                        $facet: {
-                            data: [
-                                { $skip: skip },
-                                { $limit: limit }
-                            ],
-                            meta: [
-                                { $count: "total" }
-                            ],
-                            totalAmount: [
-                                {
-                                    $group: {
-                                        _id: null,
-                                        amount: { $sum: "$amount" }
-                                    }
+                            // 🔽 Lookup AFTER pagination
+                            {
+                                $lookup: {
+                                    from: COLLECTION.OFFICERS,
+                                    localField: "created_by",
+                                    foreignField: "_id",
+                                    as: "officer"
                                 }
-                            ]
-                        }
+                            },
+                            { $unwind: { path: "$officer", preserveNullAndEmptyArrays: true } },
+
+                            {
+                                $lookup: {
+                                    from: COLLECTION.BOOKINGS,
+                                    localField: "booking_id",
+                                    foreignField: "_id",
+                                    as: "booking"
+                                }
+                            },
+                            { $unwind: { path: "$booking", preserveNullAndEmptyArrays: true } },
+
+                            {
+                                $project: {
+                                    _id: 1,
+                                    booking_no: 1,
+                                    booking_id: 1,
+                                    booking_date: 1,
+                                    amount: 1,
+                                    payment_method: 1,
+                                    transaction_id: 1,
+                                    remarks: 1,
+                                    created_at: 1,
+                                    officer_name: "$officer.name",
+                                    customer_name: "$booking.customer_name",
+                                    customer_phone: "$booking.customer_phone"
+                                }
+                            }
+                        ],
+
+                        // ✅ Total count (no lookup needed)
+                        meta: [
+                            { $count: "total" }
+                        ],
+
+                        // ✅ Total amount (no lookup needed)
+                        totalAmount: [
+                            {
+                                $group: {
+                                    _id: null,
+                                    amount: { $sum: "$amount" }
+                                }
+                            }
+                        ]
                     }
-                ])
-                .toArray();
+                }
+            ]).toArray();
+
 
             const total = result?.meta?.[0]?.total ?? 0;
             const grandTotal = result?.totalAmount?.[0]?.amount ?? 0;
