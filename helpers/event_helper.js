@@ -303,7 +303,7 @@ module.exports = {
                 ...officerMatch,
 
             };
-            console.log("Base Filter for Event Count:", baseFilter);
+        
 
             const result = await db
                 .get()
@@ -401,7 +401,9 @@ module.exports = {
                 client_id,
                 booking_id,
                 startDate,
-                endDate
+                endDate,
+                status,
+                filterCategory,
             } = query;
             const parsedPage = Math.max(parseInt(page), 1);
             const parsedLimit = Math.max(parseInt(limit), 1);
@@ -442,11 +444,14 @@ module.exports = {
                 ...(client_id && { client_id: safeObjectId(client_id) }),
                 ...officerMatchForEvents  // Apply officer filter
             };
-
-
+       
+            if (status) {
+                eventMatch.status = status;
+            }else if (filterCategory === 'PENDING') {
+                eventMatch.status = { $nin: ['COMPLETED', 'CANCELLED'] };
+            }
             const pipeline = [
                 { $match: eventMatch },
-
                 // Sort first
                 { $sort: { next_schedule: 1 } },
 

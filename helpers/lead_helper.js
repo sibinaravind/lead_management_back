@@ -380,8 +380,8 @@ editLead: async (leadId, updateData, officer_id) => {
                           }
                       );
                   } else {
-                    console.log("Adding new document entry for doc_type:", doc_type);
-                      // ➕ Add new document entry if it doesn't exist
+                    // console.log("Adding new document entry for doc_type:", doc_type);
+                    //   // ➕ Add new document entry if it doesn't exist
                       updateResult = await collection.updateOne(
                           { _id: ObjectId(id) },
                           {
@@ -1187,6 +1187,7 @@ editLead: async (leadId, updateData, officer_id) => {
                       officer_gen_id: "$officer.officer_id",
                       dead_lead_reason: 1,
                       source_campaign: 1,
+                      lastcalldate:1,
                       // lastcall: 0 // Optional: expose if needed for frontend
                     },
                   },

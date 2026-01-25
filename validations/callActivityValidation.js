@@ -13,8 +13,7 @@ const callActivityValidation = Joi.object({
       return value;
     }, 'ObjectId Validator'),
   duration: Joi.number().optional(),
-  next_schedule: Joi.date()
-    .required()
+  next_schedule: Joi.date().optional()
    .allow(null,''),
 
   // dead_lead_reason: Joi.string()

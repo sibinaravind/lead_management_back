@@ -16,10 +16,7 @@ const eventSchema = Joi.object({
             'date.base': 'Valid event date and time is required',
             'any.required': 'Event date and time is required'
         }),
-    url: Joi.string().allow("", null).uri().trim()
-        .messages({
-            'string.uri': 'Please provide a valid URL'
-        }),
+    url: Joi.string().allow("", null).trim(),
     address: Joi.string().allow("", null).trim().max(500),
     booking_id: Joi.string().hex().length(24).allow("", null).custom((value, helpers) => {
         if (!value) return value;
