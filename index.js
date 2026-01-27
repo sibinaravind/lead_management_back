@@ -1,7 +1,7 @@
 
 global.whatsappInitialized = false;
 const express = require("express");
-const https = require('https');
+
 const session = require('express-session');
 const bodyParser = require('body-parser');
 const cookieParser = require('cookie-parser');
@@ -9,18 +9,19 @@ const path = require('path');
 const hbs = require('express-handlebars');
 const db = require('./config/connection');
 const fileUpload = require('express-fileupload');
-const fs = require('fs');
-const cron = require('node-cron');
+
 const http = require('http');
 const cors = require('cors');
 const PORT = process.env.PORT || 3000;
-// const functions = require("firebase-functions");
 const compression = require('compression');
 const functions = require('firebase-functions');
-const { createWriteStream } = require('fs');
+// const { createWriteStream } = require('fs');
 const app = express();
 const server = http.createServer(app);
-const whatsappService = require('./services/whatsapp-service');
+// const fs = require('fs');
+// const cron = require('node-cron');
+// const https = require('https');
+// const whatsappService = require('./services/whatsapp-service');
 
 
 // https.createServer({
@@ -118,7 +119,7 @@ app.use((req, res, next) => {
 exports.api = functions.https.onRequest(app);
 
 // Start the server
-server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
+// server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port ${PORT}`));
 
 // server.listen(PORT, "0.0.0.0", () => {
 //   console.log(`Server listening on port ${PORT}`);

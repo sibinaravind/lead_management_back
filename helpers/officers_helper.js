@@ -45,6 +45,7 @@ loginOfficer: async (officer_id, password) => {
   const JWT_SECRET = process.env.JWT_SECRET;
   return new Promise(async (resolve, reject) => {
     try {
+      // console.log("Attempting login for officer_id:", officer_id);
       const collection = db.get().collection(COLLECTION.OFFICERS);
       const permissionsCollection = db.get().collection(COLLECTION.CONFIG); 
       
