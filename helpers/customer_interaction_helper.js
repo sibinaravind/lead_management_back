@@ -188,7 +188,7 @@ module.exports = {
                     type: 'call_event',
                     client_id: clientDoc ? ObjectId(clientDoc._id) : null,
                     officer_id: data.officer_id ? ObjectId(data.officer_id) : null,
-                    officer_phone: data.officer_phone || null,
+                    officer_phone: data.received_phone || null,
                     phone: normalizedPhone,
                     duration: parseFloat(data.duration || 0),
                     call_type: data.call_type || '',
@@ -543,17 +543,17 @@ module.exports = {
                     next_schedule: { $gt: now }
                 },
                 {
-                    sort: { next_schedule: 1 } 
+                    sort: { next_schedule: 1 }
                 }
             );
-            if(nextUpcoming){
-            await leadsCollection.updateOne(
-                { _id: updatedLog.client_id },
-                nextUpcoming
-                    ? { $set: { lastcall: nextUpcoming } }
-                    : { $unset: { lastcall: "" } }
-            );
-         }
+            if (nextUpcoming) {
+                await leadsCollection.updateOne(
+                    { _id: updatedLog.client_id },
+                    nextUpcoming
+                        ? { $set: { lastcall: nextUpcoming } }
+                        : { $unset: { lastcall: "" } }
+                );
+            }
 
             return {
                 success: true,
@@ -628,56 +628,79 @@ module.exports = {
                 .toString()
                 .replace(/^(\+?91|0+)/, '')
                 .trim();
+
+
             const data = await db.get()
-                .collection(COLLECTION.CALL_LOG_ACTIVITY)
+                .collection(COLLECTION.LEADS)
                 .aggregate([
+                    // 1️⃣ Match lead by phone
                     {
-                        $match: { phone: normalizedPhone }
-                    },
-                    {
-                        $sort: { created_at: -1 }
-                    },
-                    {
-                        $limit: 1
-                    },
-                    {
-                        $lookup: {
-                            from: COLLECTION.LEADS,
-                            localField: "client_id",
-                            foreignField: "_id",
-                            as: "client"
+                        $match: {
+                            phone: normalizedPhone
                         }
                     },
+
+                    // 2️⃣ Lookup call logs for this lead
+                    {
+                        $lookup: {
+                            from: COLLECTION.CALL_LOG_ACTIVITY,
+                            let: { leadId: "$_id" },
+                            pipeline: [
+                                {
+                                    $match: {
+                                        $expr: {
+                                            $eq: ["$client_id", "$$leadId"]
+                                        }
+                                    }
+                                },
+                                {
+                                    $sort: { created_at: -1 }
+                                },
+                                {
+                                    $limit: 1
+                                }
+                            ],
+                            as: "latest_call"
+                        }
+                    },
+
+                    // 3️⃣ Unwind latest call
                     {
                         $unwind: {
-                            path: "$client",
+                            path: "$latest_call",
                             preserveNullAndEmptyArrays: true
                         }
                     },
+
+                    // 4️⃣ Final projection
                     {
                         $project: {
-                            _id: 1,
-                            phone: 1,
-                            call_type: 1,
-                            call_status: 1,
-                            comment: 1,
-                            duration: 1,
-                            created_at: 1,
+                            _id: "$latest_call._id",
+                            phone: "$latest_call.phone",
+                            call_type: "$latest_call.call_type",
+                            call_status: "$latest_call.call_status",
+                            duration: "$latest_call.duration",
+                            created_at: "$latest_call.created_at",
+                            comment: { $ifNull: ["$note", null] },
 
-                            // SAFE lead fields
-                            lead_name: { $ifNull: ["$client.name", null] },
-                            interested_in: { $ifNull: ["$client.interested_in", null] },
-                            status: { $ifNull: ["$client.status", null] }
+                            // Lead details
+                            lead_id: "$client_id",
+                            lead_name: "$name",
+                            interested_in: "$interested_in",
+                            status: "$status"
                         }
                     }
                 ])
                 .toArray();
-
-            return data.length ? data[0] : 'not Client found';
+            if (data.length > 0) {
+             return  data[0]
+            }
+            else {
+                throw new Error("No client found");
+            }
 
         } catch (err) {
-            console.error(err);
-            throw new Error("Error fetching latest call log");
+            throw new Error(err || "Error fetching latest call log");
         }
     },
 

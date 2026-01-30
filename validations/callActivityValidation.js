@@ -47,6 +47,7 @@ const mobilecallLogValidation = Joi.object({
       }
       return value;
     }, 'Received Phone Validator').error(new Error('officer_phone is invalid')),
+  received_phone:Joi.string().allow('',null),
   officer_id: Joi.string()
     .trim()
     .required()

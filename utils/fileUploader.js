@@ -196,6 +196,9 @@ async function processAndStoreBase64File({
 
 // Export the function
 module.exports = { processAndStoreBase64File };
+
+
+
 // const fs = require('fs');
 // const path = require('path');
 // const sharp = require('sharp');
