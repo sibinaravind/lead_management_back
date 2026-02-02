@@ -93,6 +93,7 @@ const routes = [
   { path: '/', route: require("./routes/webiste/website") },
   { path: '/whatsapp', route: require("./routes/officers/whatsapp_router") },
   { path: '/email', route: require("./routes/officers/email_tracking_router") },
+   { path: '/whatsapp_api', route: require("./helpers/whatsapp_sucess") },
 ];
 
 // whatsappService.initialize().catch(err => {

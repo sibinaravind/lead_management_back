@@ -42,7 +42,6 @@ router.get('/qr', async (req, res) => {
     try {
         const qr = whatsappService.getQRCode();
         const isConnected = whatsappService.getConnectionStatus();
-        
         if (isConnected) {
             return res.send(`
                 <!DOCTYPE html>
