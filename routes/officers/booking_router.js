@@ -42,6 +42,12 @@ app.get("/bookingDetails/:_id", middleware.checkToken, (req, res) => {
   );
 });
 
+app.get("/bookingsByPhone/:phone", middleware.checkToken, (req, res) => {
+  return response.handle(res, () =>
+    bookinghelper.getBookingsByPhone(req.params.phone, req.query)
+  );
+});
+
 app.post(
   "/payment/add",
   middleware.checkToken,

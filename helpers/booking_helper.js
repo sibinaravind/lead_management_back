@@ -870,6 +870,58 @@ module.exports = {
         }
     },
 
+    getBookingsByPhone: async (phone, query = {}) => {
+        try {
+            if (!phone) throw new Error("Phone number is required");
+
+            const digits = String(phone).replace(/\D/g, '');
+            if (!digits) throw new Error("Invalid phone number");
+
+            const last10 = digits.slice(-10);
+            const variants = Array.from(new Set([digits, last10, `91${last10}`, `+91 ${last10}`]));
+            const regexLast10 = new RegExp(`${last10}$`);
+            const limit = Math.min(parseInt(query.limit || 50, 10), 200);
+
+            const bookings = await db.get()
+                .collection(COLLECTION.BOOKINGS)
+                .find(
+                    {
+                        $or: [
+                            { customer_phone: { $in: variants } },
+                            { customer_phone: regexLast10 }
+                        ]
+                    },
+                    {
+                        projection: {
+                            _id: 1,
+                            booking_id: 1,
+                            customer_name: 1,
+                            customer_phone: 1,
+                            product_name: 1,
+                            booking_date: 1,
+                            expected_closure_date: 1,
+                            status: 1,
+                            total_amount: 1,
+                            grand_total: 1,
+                            created_at: 1,
+                            updated_at: 1
+                        }
+                    }
+                )
+                .sort({ created_at: -1 })
+                .limit(limit)
+                .toArray();
+
+            return {
+                phone: last10,
+                total: bookings.length,
+                bookings
+            };
+        } catch (err) {
+            throw new Error(err.message || "Error fetching bookings by phone");
+        }
+    },
+
 
     uploadBookingDocument: (id, { doc_type, base64 }) => {
         let filePath = null;

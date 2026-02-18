@@ -20,6 +20,7 @@ module.exports = {
     BOOKINGS: 'bookings',
     TRANSACTIONS: 'transactions',
     EVENTS: 'events',
+    WHATSAPP_MESSAGES: 'whatsapp_messages'
 
 
 }

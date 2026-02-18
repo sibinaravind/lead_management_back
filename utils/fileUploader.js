@@ -8,13 +8,12 @@ async function processAndStoreBase64File({
   clientName = 'default', 
   uploadsDir
 }) {
-  const sizeLimit = 3 * 1024 * 1024; // 3MB
+  const sizeLimit = 3 * 1024 * 1024; 
   const fileSuffix = `${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
-  
   // Sanitize client name
   const safeClientName = (clientName || 'default').replace(/\s+/g, '_').toLowerCase();
   const safeOriginalName = (originalName || 'oname').replace(/\s+/g, '_').toLowerCase();
-  
+
   let fileName, documentPath;
   
   try {

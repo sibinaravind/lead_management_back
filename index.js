@@ -1,5 +1,6 @@
 
 global.whatsappInitialized = false;
+require('dotenv').config();
 const express = require("express");
 
 const session = require('express-session');
@@ -9,7 +10,7 @@ const path = require('path');
 const hbs = require('express-handlebars');
 const db = require('./config/connection');
 const fileUpload = require('express-fileupload');
-
+const { initSocket } = require('./services/socket_server');
 const http = require('http');
 const cors = require('cors');
 const PORT = process.env.PORT || 3000;
@@ -18,10 +19,10 @@ const functions = require('firebase-functions');
 // const { createWriteStream } = require('fs');
 const app = express();
 const server = http.createServer(app);
-// const fs = require('fs');
-// const cron = require('node-cron');
-// const https = require('https');
-// const whatsappService = require('./services/whatsapp-service');
+const fs = require('fs');
+const cron = require('node-cron');
+const https = require('https');
+const whatsappService = require('./services/whatsapp_nonapi_service');
 
 
 // https.createServer({
@@ -75,6 +76,9 @@ app.engine('hbs', hbs.engine({
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'hbs');
 
+
+initSocket(server);
+
 // Route imports
 const routes = [
   { path: '/officer', route: require("./routes/officers/officers_router") },
@@ -91,14 +95,14 @@ const routes = [
   { path: '/event', route: require("./routes/officers/event_router") },
   // {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") },
-  { path: '/whatsapp', route: require("./routes/officers/whatsapp_router") },
+  { path: '/whatsapp_nonapi', route: require("./routes/officers/whatsapp_nonapi_router") },
   { path: '/email', route: require("./routes/officers/email_tracking_router") },
-   { path: '/whatsapp_api', route: require("./helpers/whatsapp_sucess") },
+   { path: '/whatsapp_api', route: require("./routes/officers/whatsapp_api_router") },
 ];
 
-// whatsappService.initialize().catch(err => {
-//   console.error('Failed to initialize WhatsApp:', err);
-// });
+whatsappService.initialize().catch(err => {
+  console.error('Failed to initialize WhatsApp:', err);
+});
 
 // Use routes
 routes.forEach(({ path, route }) => app.use(path, route));
@@ -188,5 +192,4 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http:
 
 
   */
-
 
