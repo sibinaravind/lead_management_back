@@ -32,7 +32,6 @@ function normalizePhone(phone) {
         '81'   // Japan
     ];
 
-    // Sort longest first (important!)
     countryCodes.sort((a, b) => b.length - a.length);
 
     // Remove country code only if number looks valid after removing
@@ -87,6 +86,32 @@ function addCountryCodeFormatted(phone, defaultCode = '91') {
     return `+${code} ${number}`;
 }
 
+function toBooleanOrNull(value) {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+        if (value.toLowerCase() === 'true') return true;
+        if (value.toLowerCase() === 'false') return false;
+    }
+    return null;
+}
+
+function normalizeViewMessage(message) {
+    return {
+        id: message?._id?.toString?.() || null,
+        message_id: message?.message_id || null,
+        phone: message?.phone || null,
+        message_text: message?.message_text || '',
+        has_media: !!message?.has_media,
+        media_path: message?.media_path || null,
+        outgoing: !!message?.outgoing,
+        direction: message?.direction || (message?.outgoing ? 'outgoing' : 'incoming'),
+        is_viewed: !!message?.is_viewed,
+        timestamp: message?.timestamp || message?.created_at || null,
+        lead_id: message?.lead_id || null,
+        user: message?.user || null,
+    };
+}
+
 const whatsappHelpers = {
 
     saveMessage: async (details) => {
@@ -105,6 +130,8 @@ const whatsappHelpers = {
             const formattedPhone = addCountryCodeFormatted(cleanPhone);
 
             value.phone = cleanPhone;
+            value.direction = value.outgoing ? 'outgoing' : 'incoming';
+            value.is_viewed = value.outgoing ? true : !!value.is_viewed;
           
           
             const dbInstance = db.get();
@@ -160,6 +187,27 @@ const whatsappHelpers = {
         });
     },
 
+    getMessageById: async (messageId) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const dbInstance = db.get();
+                const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
+
+                const query = ObjectId.isValid(messageId)
+                    ? { _id: new ObjectId(messageId) }
+                    : { message_id: messageId };
+
+                const message = await collection.findOne(query);
+                if (!message) return reject('Message not found');
+
+                resolve(message);
+            } catch (err) {
+                console.error('Error fetching message:', err);
+                reject(err);
+            }
+        });
+    },
+
     /**
      * Get unviewed messages
      */
@@ -170,7 +218,7 @@ const whatsappHelpers = {
                 const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
 
                 const query = { is_viewed: false };
-                if (phone) query.phone = phone;
+                if (phone) query.phone = normalizePhone(phone);
 
                 const messages = await collection
                     .find(query)
@@ -195,9 +243,13 @@ const whatsappHelpers = {
                 const dbInstance = db.get();
                 const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
 
+                const query = ObjectId.isValid(messageId)
+                    ? { _id: new ObjectId(messageId) }
+                    : { message_id: messageId };
+
                 const result = await collection.updateOne(
-                    { _id: new ObjectId(messageId) },
-                    { $set: { is_viewed: true } }
+                    query,
+                    { $set: { is_viewed: true, viewed_at: new Date() } }
                 );
 
                 if (result.matchedCount === 0) {
@@ -221,13 +273,12 @@ const whatsappHelpers = {
             try {
                 const dbInstance = db.get();
                 const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
-
+                const cleanPhone = normalizePhone(phone);
                 const result = await collection.updateMany(
-                    { phone: phone, is_viewed: false },
-                    { $set: { is_viewed: true } }
+                    { phone: cleanPhone, is_viewed: false, outgoing: false },
+                    { $set: { is_viewed: true, viewed_at: new Date() } }
                 );
-
-                resolve({ success: true, count: result.modifiedCount });
+             resolve({ success: true, count: result.modifiedCount });
 
             } catch (err) {
                 console.error('Error marking messages as viewed:', err);
@@ -248,7 +299,8 @@ const whatsappHelpers = {
                     direction,
                     phone,
                     is_viewed,
-                    has_media
+                    has_media,
+                    search
                 } = filters;
 
                 const dbInstance = db.get();
@@ -256,10 +308,18 @@ const whatsappHelpers = {
 
                 // Build query
                 const query = {};
-                if (direction) query.direction = direction;
+                if (direction) {
+                    query.direction = direction;
+                    query.outgoing = direction === 'outgoing';
+                }
                 if (phone) query.phone = phone;
-                if (typeof is_viewed !== 'undefined') query.is_viewed = is_viewed;
-                if (typeof has_media !== 'undefined') query.has_media = has_media;
+                const viewedFilter = toBooleanOrNull(is_viewed);
+                if (viewedFilter !== null) query.is_viewed = viewedFilter;
+                const mediaFilter = toBooleanOrNull(has_media);
+                if (mediaFilter !== null) query.has_media = mediaFilter;
+                if (search && String(search).trim()) {
+                    query.message_text = { $regex: String(search).trim(), $options: 'i' };
+                }
 
                 // Get total count
                 const total = await collection.countDocuments(query);
@@ -272,8 +332,41 @@ const whatsappHelpers = {
                     .limit(parseInt(limit))
                     .toArray();
 
+                const phones = [...new Set(messages.map(m => m.phone).filter(Boolean))];
+                let leadMap = new Map();
+                if (phones.length > 0) {
+                    const leads = await dbInstance.collection(COLLECTION.LEADS).find(
+                        { $or: [{ phone: { $in: phones } }, { whatsapp: { $in: phones.map(p => `+91 ${p}`) } }] },
+                        { projection: { _id: 1, name: 1, phone: 1, whatsapp: 1, email: 1 } }
+                    ).toArray();
+
+                    leadMap = new Map(leads.map(l => [normalizePhone(l.phone || l.whatsapp || ''), l]));
+                }
+
+                const normalized = messages.map((m) => {
+                    const lead = leadMap.get(normalizePhone(m.phone));
+                    return normalizeViewMessage({
+                        ...m,
+                        user: lead
+                            ? {
+                                lead_id: lead._id,
+                                name: lead.name || 'Unknown',
+                                phone: lead.phone || m.phone,
+                                whatsapp: lead.whatsapp || null,
+                                email: lead.email || null,
+                            }
+                            : {
+                                lead_id: m.lead_id || null,
+                                name: m.sender_name || 'Unknown',
+                                phone: m.phone,
+                                whatsapp: null,
+                                email: null,
+                            },
+                    });
+                });
+
                 resolve({
-                    data: messages,
+                    data: normalized,
                     pagination: {
                         page: parseInt(page),
                         limit: parseInt(limit),
@@ -284,6 +377,124 @@ const whatsappHelpers = {
 
             } catch (err) {
                 console.error('Error fetching messages:', err);
+                reject(err);
+            }
+        });
+    },
+
+    getThreadSummaries: async (filters = {}) => {
+        return new Promise(async (resolve, reject) => {
+            try {
+                const {
+                    page = 1,
+                    limit = 50,
+                    unread_only,
+                    search
+                } = filters;
+
+                const dbInstance = db.get();
+                const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
+
+                const query = {};
+                const unreadOnly = toBooleanOrNull(unread_only) === true;
+                if (search && String(search).trim()) {
+                    const s = String(search).trim();
+                    const digits = s.replace(/\D/g, '');
+                    query.$or = [
+                        { message_text: { $regex: s, $options: 'i' } }
+                    ];
+                    if (digits) {
+                        query.$or.push({ phone: { $regex: digits, $options: 'i' } });
+                    }
+                }
+
+                const aggregate = [
+                    { $match: query },
+                    { $sort: { timestamp: -1 } },
+                    {
+                        $group: {
+                            _id: '$phone',
+                            last_message: { $first: '$$ROOT' },
+                            unread_count: {
+                                $sum: {
+                                    $cond: [
+                                        { $and: [{ $eq: ['$outgoing', false] }, { $eq: ['$is_viewed', false] }] },
+                                        1,
+                                        0
+                                    ]
+                                }
+                            },
+                            total_messages: { $sum: 1 },
+                        }
+                    },
+                    ...(unreadOnly ? [{ $match: { unread_count: { $gt: 0 } } }] : []),
+                    { $sort: { 'last_message.timestamp': -1 } },
+                ];
+
+                const allThreads = await collection.aggregate(aggregate).toArray();
+                const total = allThreads.length;
+                const start = (parseInt(page) - 1) * parseInt(limit);
+                const pagedThreads = allThreads.slice(start, start + parseInt(limit));
+
+                const phones = [...new Set(pagedThreads.map(t => t._id).filter(Boolean))];
+                let leadMap = new Map();
+                if (phones.length > 0) {
+                    const leads = await dbInstance.collection(COLLECTION.LEADS).find(
+                        { $or: [{ phone: { $in: phones } }, { whatsapp: { $in: phones.map(p => `+91 ${p}`) } }] },
+                        { projection: { _id: 1, name: 1, phone: 1, whatsapp: 1, email: 1 } }
+                    ).toArray();
+
+                    leadMap = new Map(leads.map(l => [normalizePhone(l.phone || l.whatsapp || ''), l]));
+                }
+
+                const threads = pagedThreads.map((t) => {
+                    const phone = t._id;
+                    const lead = leadMap.get(normalizePhone(phone));
+                    const last = t.last_message || {};
+
+                    return {
+                        thread_id: phone,
+                        phone,
+                        unread_count: t.unread_count || 0,
+                        total_messages: t.total_messages || 0,
+                        last_message: normalizeViewMessage(last),
+                        user: lead
+                            ? {
+                                lead_id: lead._id,
+                                name: lead.name || 'Unknown',
+                                phone: lead.phone || phone,
+                                whatsapp: lead.whatsapp || null,
+                                email: lead.email || null,
+                            }
+                            : {
+                                lead_id: last.lead_id || null,
+                                name: last.sender_name || 'Unknown',
+                                phone,
+                                whatsapp: null,
+                                email: null,
+                            }
+                    };
+                });
+
+                const unreadConversations = allThreads.filter(t => (t.unread_count || 0) > 0).length;
+                const unreadMessages = allThreads.reduce((sum, t) => sum + (t.unread_count || 0), 0);
+
+                resolve({
+                    data: threads,
+                    pagination: {
+                        page: parseInt(page),
+                        limit: parseInt(limit),
+                        total,
+                        pages: Math.ceil(total / parseInt(limit)),
+                    },
+                    summary: {
+                        unread_conversations: unreadConversations,
+                        unread_messages: unreadMessages,
+                        total_conversations: total,
+                    }
+                });
+            } catch (err) {
+                console.error('Error fetching thread summaries:', err);
                 reject(err);
             }
         });
@@ -395,3 +606,5 @@ const whatsappHelpers = {
 
 module.exports = whatsappHelpers;
 module.exports.extractPhoneNumber = extractPhoneNumber;
+module.exports.normalizePhone = normalizePhone;
+module.exports.toBooleanOrNull = toBooleanOrNull;

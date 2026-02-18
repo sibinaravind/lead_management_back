@@ -96,6 +96,7 @@ const routes = [
   // {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") },
   { path: '/whatsapp_nonapi', route: require("./routes/officers/whatsapp_nonapi_router") },
+  { path: '/whatsapp', route: require("./routes/officers/whatsapp_data_router") },
   { path: '/email', route: require("./routes/officers/email_tracking_router") },
    { path: '/whatsapp_api', route: require("./routes/officers/whatsapp_api_router") },
 ];
@@ -192,4 +193,3 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http:
 
 
   */
-

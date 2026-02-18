@@ -139,6 +139,66 @@ class WhatsAppMediaHandler {
         }
     }
 
+
+}
+
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
+
+/**
+ * Get file extension from MIME type
+ */
+function getExtensionFromMimeType(mimeType) {
+    const extensions = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'image/gif': '.gif',
+        'audio/ogg': '.ogg',
+        'audio/mpeg': '.mp3',
+        'audio/amr': '.amr',
+        'audio/mp4': '.m4a',
+        'video/mp4': '.mp4',
+        'video/3gpp': '.3gp',
+        'application/pdf': '.pdf',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx'
+    };
+
+    return extensions[mimeType] || '';
+}
+
+/**
+ * Sanitize filename
+ */
+function sanitizeFilename(filename) {
+    return filename
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .substring(0, 100);
+}
+
+/**
+ * Validate MIME type
+ */
+function validateMimeType(type, mimeType, config) {
+    const allowedTypes = {
+        'image': config.allowedImageTypes,
+        'audio': config.allowedAudioTypes,
+        'video': config.allowedVideoTypes,
+        'document': config.allowedDocTypes
+    };
+
+    if (allowedTypes[type] && !allowedTypes[type].includes(mimeType)) {
+        throw new Error(`MIME type ${mimeType} not allowed for ${type}`);
+    }
+}
+
+module.exports = WhatsAppMediaHandler;
+
+
     // /**
     //  * Get message by ID
     //  */
@@ -273,63 +333,6 @@ class WhatsAppMediaHandler {
     //         throw error;
     //     }
     // }
-}
-
-// ==========================================
-// HELPER FUNCTIONS
-// ==========================================
-
-/**
- * Get file extension from MIME type
- */
-function getExtensionFromMimeType(mimeType) {
-    const extensions = {
-        'image/jpeg': '.jpg',
-        'image/png': '.png',
-        'image/webp': '.webp',
-        'image/gif': '.gif',
-        'audio/ogg': '.ogg',
-        'audio/mpeg': '.mp3',
-        'audio/amr': '.amr',
-        'audio/mp4': '.m4a',
-        'video/mp4': '.mp4',
-        'video/3gpp': '.3gp',
-        'application/pdf': '.pdf',
-        'application/msword': '.doc',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
-        'application/vnd.ms-excel': '.xls',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx'
-    };
-
-    return extensions[mimeType] || '';
-}
-
-/**
- * Sanitize filename
- */
-function sanitizeFilename(filename) {
-    return filename
-        .replace(/[^a-zA-Z0-9._-]/g, '_')
-        .substring(0, 100);
-}
-
-/**
- * Validate MIME type
- */
-function validateMimeType(type, mimeType, config) {
-    const allowedTypes = {
-        'image': config.allowedImageTypes,
-        'audio': config.allowedAudioTypes,
-        'video': config.allowedVideoTypes,
-        'document': config.allowedDocTypes
-    };
-
-    if (allowedTypes[type] && !allowedTypes[type].includes(mimeType)) {
-        throw new Error(`MIME type ${mimeType} not allowed for ${type}`);
-    }
-}
-
-module.exports = WhatsAppMediaHandler;
 // // WhatsApp Media Handler Utility
 // const fs = require('fs').promises;
 // const path = require('path');

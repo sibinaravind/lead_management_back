@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const whatsappService = require('../../services/whatsapp_nonapi_service');
+const whatsappHelpers = require('../../helpers/whatsapp_data_helper');
 const qrcode = require('qrcode');
 
 // Store received messages in memory (use DB in production)
@@ -258,36 +259,6 @@ router.get('/disconnect', async (req, res) => {
 });
 
 
-// // Send single message
-// router.post('/send', async (req, res) => {
-//     try {
-//         const { phone, message } = req.body;
-        
-//         console.log('Received request to send message:', { phone, message });
-        
-//         if (!phone || !message) {
-//             return res.status(400).json({ 
-//                 success: false, 
-//                 message: 'Phone and message are required' 
-//             });
-//         }
-
-//         // Format phone number
-//         let recipient = phone.replace(/[^0-9]/g, '');
-        
-//         if (!recipient.startsWith('91') && recipient.length === 10) {
-//             recipient = '91' + recipient;
-//         }
-        
-//         recipient = `${recipient}@s.whatsapp.net`;
-
-//         const result = await whatsappService.sendMessage(recipient, { text: message });
-        
-//         res.json(result);
-//     } catch (error) {
-//         res.status(500).json({ success: false, error: error.message });
-//     }
-// });
 
 // Send image
 router.post('/send', async (req, res) => {
@@ -326,6 +297,37 @@ router.post('/send', async (req, res) => {
     }
 });
 
+
+// // Send single message
+// router.post('/send', async (req, res) => {
+//     try {
+//         const { phone, message } = req.body;
+        
+//         console.log('Received request to send message:', { phone, message });
+        
+//         if (!phone || !message) {
+//             return res.status(400).json({ 
+//                 success: false, 
+//                 message: 'Phone and message are required' 
+//             });
+//         }
+
+//         // Format phone number
+//         let recipient = phone.replace(/[^0-9]/g, '');
+        
+//         if (!recipient.startsWith('91') && recipient.length === 10) {
+//             recipient = '91' + recipient;
+//         }
+        
+//         recipient = `${recipient}@s.whatsapp.net`;
+
+//         const result = await whatsappService.sendMessage(recipient, { text: message });
+        
+//         res.json(result);
+//     } catch (error) {
+//         res.status(500).json({ success: false, error: error.message });
+//     }
+// });
 
 // Send bulk messages
 // router.post('/send-bulk', async (req, res) => {

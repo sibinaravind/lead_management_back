@@ -31,27 +31,27 @@ function initMediaHandler() {
     return mediaHandler;
 }
 
-const replyHandler = new WhatsAppReplyHandler({
-    companyName: 'Alead Solutions',
-    supportEmail: 'support@aleadsolutions.com',
-    supportPhone: '+91 8301031955',
-    businessHours: 'Mon-Fri, 9AM - 6PM IST',
-    websiteUrl: 'www.aleadsolutions.com',
-});
+// const replyHandler = new WhatsAppReplyHandler({
+//     companyName: 'Alead Solutions',
+//     supportEmail: 'support@aleadsolutions.com',
+//     supportPhone: '+91 8301031955',
+//     businessHours: 'Mon-Fri, 9AM - 6PM IST',
+//     websiteUrl: 'www.aleadsolutions.com',
+// });
 
-replyHandler.registerHandler(
-    'special_offer',
-    /offer|discount|promo/i,
-    async () => ({
-        type: 'text',
-        text:
-            `🎉 *Special Offers*\n\n` +
-            `• 20% off Premium\n` +
-            `• Buy 2 Get 1\n` +
-            `• First-time Discount\n\n` +
-            `Type *contact* to claim`,
-    })
-);
+// replyHandler.registerHandler(
+//     'special_offer',
+//     /offer|discount|promo/i,
+//     async () => ({
+//         type: 'text',
+//         text:
+//             `🎉 *Special Offers*\n\n` +
+//             `• 20% off Premium\n` +
+//             `• Buy 2 Get 1\n` +
+//             `• First-time Discount\n\n` +
+//             `Type *contact* to claim`,
+//     })
+// );
 
 
 // ══════════════════════════════════════════════════════════════════════════════
