@@ -95,7 +95,17 @@ function toBooleanOrNull(value) {
     return null;
 }
 
-function normalizeViewMessage(message) {
+function buildMediaUrl(mediaPath, baseUrl = null) {
+    if (!mediaPath) return null;
+    if (/^https?:\/\//i.test(mediaPath)) return mediaPath;
+    const cleanBaseUrl = String(baseUrl || process.env.MEDIA_BASE_URL || process.env.DOMAIN_URL || process.env.APP_URL || '').replace(/\/+$/, '');
+    if (!cleanBaseUrl) return null;
+    const normalizedPath = String(mediaPath).replace(/^\/+/, '');
+    return `${cleanBaseUrl}/uploads/whatsapp_media/${normalizedPath}`;
+}
+
+function normalizeViewMessage(message, options = {}) {
+    const mediaUrl = buildMediaUrl(message?.media_path, options.baseUrl);
     return {
         id: message?._id?.toString?.() || null,
         message_id: message?.message_id || null,
@@ -103,6 +113,7 @@ function normalizeViewMessage(message) {
         message_text: message?.message_text || '',
         has_media: !!message?.has_media,
         media_path: message?.media_path || null,
+        media_url: mediaUrl,
         outgoing: !!message?.outgoing,
         direction: message?.direction || (message?.outgoing ? 'outgoing' : 'incoming'),
         is_viewed: !!message?.is_viewed,
@@ -187,7 +198,7 @@ const whatsappHelpers = {
         });
     },
 
-    getMessageById: async (messageId) => {
+    getMessageById: async (messageId, options = {}) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const dbInstance = db.get();
@@ -200,7 +211,7 @@ const whatsappHelpers = {
                 const message = await collection.findOne(query);
                 if (!message) return reject('Message not found');
 
-                resolve(message);
+                resolve(normalizeViewMessage(message, { baseUrl: options.base_url }));
             } catch (err) {
                 console.error('Error fetching message:', err);
                 reject(err);
@@ -300,7 +311,8 @@ const whatsappHelpers = {
                     phone,
                     is_viewed,
                     has_media,
-                    search
+                    search,
+                    base_url
                 } = filters;
 
                 const dbInstance = db.get();
@@ -362,7 +374,7 @@ const whatsappHelpers = {
                                 whatsapp: null,
                                 email: null,
                             },
-                    });
+                    }, { baseUrl: base_url });
                 });
 
                 resolve({
@@ -457,7 +469,7 @@ const whatsappHelpers = {
                         phone,
                         unread_count: t.unread_count || 0,
                         total_messages: t.total_messages || 0,
-                        last_message: normalizeViewMessage(last),
+                        last_message: normalizeViewMessage(last, { baseUrl: filters.base_url }),
                         user: lead
                             ? {
                                 lead_id: lead._id,

@@ -15,11 +15,38 @@ class WhatsAppNonApiService {
         this.retryCount = 0;
         this.maxRetries = 5;
         this.messageHandlers = [];
+        this.isManualDisconnect = false;
 
         this.mediaDir = process.env.WHATSAPP_UPLOADS_DIR || 'uploads/whatsapp_media';
         this.maxFileSize = 16 * 1024 * 1024; // 16MB
 
         this.ensureDirectories();
+    }
+
+    getMediaBaseUrl() {
+        const configuredBaseUrl = process.env.MEDIA_BASE_URL
+            || process.env.DOMAIN_URL
+            || process.env.APP_URL;
+        if (configuredBaseUrl) {
+            return configuredBaseUrl.replace(/\/+$/, '');
+        }
+        const port = process.env.PORT || 3000;
+        return `http://localhost:${port}`;
+    }
+
+    toPublicMediaUrl(mediaPath) {
+        if (!mediaPath) return null;
+        if (/^https?:\/\//i.test(mediaPath)) return mediaPath;
+        const normalizedPath = String(mediaPath).replace(/^\/+/, '');
+        return `${this.getMediaBaseUrl()}/uploads/whatsapp_media/${normalizedPath}`;
+    }
+
+    emitSocketMessage(payload = {}) {
+        const eventPayload = {
+            ...payload,
+            media_url: this.toPublicMediaUrl(payload.media_path),
+        };
+        getIO()?.emit('new_message', eventPayload);
     }
 
     ensureDirectories() {
@@ -54,7 +81,23 @@ class WhatsAppNonApiService {
                 defaultQueryTimeoutMs: undefined,
             });
 
-            this.sock.ev.on('creds.update', saveCreds);
+            this.sock.ev.on('creds.update', async () => {
+                try {
+                    if (!fs.existsSync(authPath)) fs.mkdirSync(authPath, { recursive: true });
+                    await saveCreds();
+                } catch (saveError) {
+                    if (saveError?.code === 'ENOENT') {
+                        try {
+                            fs.mkdirSync(authPath, { recursive: true });
+                            await saveCreds();
+                        } catch (retryError) {
+                            console.error('Failed to save creds after retry:', retryError);
+                        }
+                    } else {
+                        console.error('Failed to save creds:', saveError);
+                    }
+                }
+            });
             this.sock.ev.on('connection.update', async (update) => {
                 await this.handleConnectionUpdate(update);
             });
@@ -80,10 +123,12 @@ class WhatsAppNonApiService {
         if (qr) {
             this.qrCode = qr;
             console.log('📱 QR Code available');
+            getIO()?.emit('wa_qr', { qr });
         }
 
         if (connection === 'close') {
             this.isConnected = false;
+            getIO()?.emit('wa_status', { connected: false });
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             const reason = lastDisconnect?.error;
 
@@ -99,8 +144,10 @@ class WhatsAppNonApiService {
 
             if (statusCode === DisconnectReason.loggedOut) {
                 this.qrCode = null;
-                const authPath = path.join(__dirname, '../auth_info_baileys');
-                if (fs.existsSync(authPath)) fs.rmSync(authPath, { recursive: true, force: true });
+                if (!this.isManualDisconnect) {
+                    const authPath = path.join(__dirname, '../auth_info_baileys');
+                    if (fs.existsSync(authPath)) fs.rmSync(authPath, { recursive: true, force: true });
+                }
                 return;
             }
 
@@ -114,23 +161,6 @@ class WhatsAppNonApiService {
             this.qrCode = null;
             this.retryCount = 0;
             getIO()?.emit('wa_status', { connected: true });
-
-            // when connection === 'close':
-            getIO()?.emit('wa_status', { connected: false });
-
-            // when qr is received:
-            getIO()?.emit('wa_qr', { qr });
-
-            // Inside sendText() and sendMedia(), after sock.sendMessage():
-            // getIO()?.emit('new_message', {
-            //     message_id: result.key.id,
-            //     phone,
-            //     message_text: messageText,
-            //     has_media: hasMedia,
-            //     media_path: mediaPath,
-            //     outgoing: true,
-            //     timestamp: new Date().toISOString(),
-            // });
         }
     }
 
@@ -208,7 +238,7 @@ class WhatsAppNonApiService {
                     timestamp,
                 });
                 console.log('Saved message to DB:', msg.key.id);
-            var result=await    getIO()?.emit('new_message', {
+                const eventPayload = {
                     message_id: msg.key.id,
                     outgoing: direction === 'outgoing',
                     phone: cleanPhone,
@@ -218,8 +248,13 @@ class WhatsAppNonApiService {
                     media_path: mediaPath,
                     is_viewed: direction === 'outgoing',
                     timestamp,
-                });
-                console.log('Emitted new_message event to Flutter:', result);
+                };
+                this.emitSocketMessage(eventPayload);
+                console.log('Emitted new_message event to clients:', msg.key.id);
+
+                for (const handler of this.messageHandlers) {
+                    await handler(eventPayload);
+                }
    
                 // if (direction === 'incoming') {
                     await this.processAutoReply(sender, messageText);
@@ -332,6 +367,18 @@ class WhatsAppNonApiService {
                 mediaPath: null,
             });
 
+            this.emitSocketMessage({
+                message_id: result.key.id,
+                outgoing: true,
+                phone: extractPhoneNumber(jid),
+                isFromGroup: false,
+                message_text: text,
+                has_media: false,
+                media_path: null,
+                is_viewed: true,
+                timestamp: new Date(),
+            });
+
             return { success: true, result };
         } catch (error) {
             console.error('sendText error:', error);
@@ -367,6 +414,18 @@ class WhatsAppNonApiService {
                 messageText: caption,
                 hasMedia: true,
                 mediaPath,
+            });
+
+            this.emitSocketMessage({
+                message_id: result.key.id,
+                outgoing: true,
+                phone: extractPhoneNumber(jid),
+                isFromGroup: false,
+                message_text: caption,
+                has_media: true,
+                media_path: mediaPath,
+                is_viewed: true,
+                timestamp: new Date(),
             });
 
             return { success: true, result };
@@ -424,17 +483,40 @@ class WhatsAppNonApiService {
     onMessage(handler) { this.messageHandlers.push(handler); }
     getQRCode() { return this.qrCode; }
     getConnectionStatus() { return this.isConnected; }
-
-    async disconnect() {
-        try {
-            if (this.sock) {
-                await this.sock.logout();
-                this.isConnected = false;
+async disconnect(reinitialize = true) {
+    this.isManualDisconnect = true;
+    
+    try {
+        if (this.sock) {
+            try {
+                if (reinitialize) {
+                    this.sock.end(undefined); // graceful close, keeps session
+                } else {
+                    await this.sock.logout(); // full logout, wipes session
+                }
+            } catch (err) {
+                console.error('Socket close error (non-fatal):', err);
             }
-        } catch (error) {
-            console.error('Error disconnecting:', error);
+        }
+    } finally {
+        this.sock = null;
+        this.isConnected = false;
+        this.qrCode = null;
+        this.retryCount = 0;
+        getIO()?.emit('wa_status', { connected: false });
+
+        if (reinitialize) {
+            setTimeout(() => {
+                this.isManualDisconnect = false;
+                this.initialize().catch((err) => {
+                    console.error('Reinitialize after disconnect failed:', err);
+                });
+            }, 500);
+        } else {
+            this.isManualDisconnect = false;
         }
     }
+}
 }
 
 const whatsappService = new WhatsAppNonApiService();

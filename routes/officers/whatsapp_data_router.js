@@ -3,6 +3,10 @@ const router = express.Router();
 const whatsappHelpers = require('../../helpers/whatsapp_data_helper');
 const whatsappService = require('../../services/whatsapp_nonapi_service');
 
+function resolveBaseUrl(req) {
+    return req.query.domain || `${req.protocol}://${req.get('host')}`;
+}
+
 router.get('/threads', async (req, res) => {
     try {
         const result = await whatsappHelpers.getThreadSummaries({
@@ -10,6 +14,7 @@ router.get('/threads', async (req, res) => {
             limit: req.query.limit,
             unread_only: req.query.unread_only ?? req.query.unreadOnly,
             search: req.query.search,
+            base_url: resolveBaseUrl(req),
         });
 
         return res.status(200).json({
@@ -39,6 +44,7 @@ router.get('/messages', async (req, res) => {
             is_viewed: req.query.is_viewed,
             has_media: req.query.has_media,
             search: req.query.search,
+            base_url: resolveBaseUrl(req),
         });
 
         return res.status(200).json({
@@ -59,7 +65,9 @@ router.get('/messages', async (req, res) => {
 
 router.get('/messages/:id', async (req, res) => {
     try {
-        const message = await whatsappHelpers.getMessageById(req.params.id);
+        const message = await whatsappHelpers.getMessageById(req.params.id, {
+            base_url: resolveBaseUrl(req),
+        });
         return res.status(200).json({ success: true, data: message });
     } catch (error) {
         return res.status(404).json({
@@ -75,6 +83,7 @@ router.get('/conversation/:phone', async (req, res) => {
             page: req.query.page,
             limit: req.query.limit,
             phone: req.params.phone,
+            base_url: resolveBaseUrl(req),
         });
 
         return res.status(200).json({

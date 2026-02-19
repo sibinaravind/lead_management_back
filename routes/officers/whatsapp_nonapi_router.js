@@ -41,33 +41,41 @@ router.get('/qr', async (req, res) => {
                     <title>WhatsApp Connected</title>
                     <style>
                         body { 
-                            font-family: Arial; 
-                            text-align: center; 
-                            padding: 50px; 
-                           
-                            color: white;
+                            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                            min-height: 100vh;
+                            margin: 0;
+                            display: grid;
+                            place-items: center;
+                            background: radial-gradient(circle at top, #1b9f6f 0%, #0f3d2e 100%);
                         }
                         .container {
-                            background: white;
-                            color: #333;
-                            padding: 40px;
+                            background: #fff;
+                            color: #1e293b;
+                            padding: 36px;
                             border-radius: 20px;
-                            max-width: 500px;
-                            margin: 0 auto;
-                            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                            max-width: 540px;
+                            box-shadow: 0 24px 60px rgba(0,0,0,0.22);
+                            text-align: center;
                         }
-                        h1 { font-size: 3em; margin: 0; color: #25D366; }
-                        .checkmark { font-size: 5em; }
-                        a { 
+                        h1 { font-size: 2.3rem; margin: 8px 0 12px; color: #166534; }
+                        p { margin: 0 0 24px; color: #475569; }
+                        .checkmark { font-size: 3rem; }
+                        a {
                             display: inline-block;
                             margin: 10px;
-                            padding: 12px 24px;
-                            background: #d32825ff;
+                            padding: 12px 22px;
+                            background: #ef4444;
                             color: white;
                             text-decoration: none;
-                            border-radius: 25px;
+                            border-radius: 999px;
+                            font-weight: 600;
+                            transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
                         }
-                        a:hover { background: #8c4b12ff; }
+                        a:hover {
+                            transform: translateY(-1px);
+                            box-shadow: 0 8px 18px rgba(239, 68, 68, 0.35);
+                            background: #dc2626;
+                        }
                     </style>
                 </head>
                 <body>
@@ -94,14 +102,24 @@ router.get('/qr', async (req, res) => {
                     <meta http-equiv="refresh" content="2">
                     <style>
                         body { 
-                            font-family: Arial; 
-                            text-align: center; 
-                            padding: 50px;
-                            background: #f5f5f5;
+                            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                            margin: 0;
+                            min-height: 100vh;
+                            display: grid;
+                            place-items: center;
+                            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+                            color: #0f172a;
+                        }
+                        .card {
+                            background: #fff;
+                            padding: 32px 40px;
+                            border-radius: 20px;
+                            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+                            text-align: center;
                         }
                         .loader { 
                             border: 8px solid #f3f3f3; 
-                            border-top: 8px solid #25D366; 
+                            border-top: 8px solid #16a34a; 
                             border-radius: 50%; 
                             width: 60px; 
                             height: 60px; 
@@ -112,25 +130,14 @@ router.get('/qr', async (req, res) => {
                             0% { transform: rotate(0deg); } 
                             100% { transform: rotate(360deg); } 
                         }
-                        .refresh-btn {
-                            background: #25D366;
-                            color: white;
-                            border: none;
-                            padding: 12px 30px;
-                            border-radius: 25px;
-                            cursor: pointer;
-                            font-size: 16px;
-                            margin-top: 20px;
-                        }
-                        .refresh-btn:hover {
-                            background: #128C7E;
-                        }
                     </style>
                 </head>
                 <body>
-                    <h2>⏳ Initializing WhatsApp...</h2>
-                    <div class="loader"></div>
-                    <p>Please wait... Page will refresh automatically</p>
+                    <div class="card">
+                        <h2>Initializing WhatsApp...</h2>
+                        <div class="loader"></div>
+                        <p>Please wait, this page refreshes automatically.</p>
+                    </div>
                 </body>
                 </html>
             `);
@@ -146,31 +153,36 @@ router.get('/qr', async (req, res) => {
                 <title>Scan WhatsApp QR Code</title>
                 <style>
                     body {
-                        font-family: Arial, sans-serif;
+                        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
                         display: flex;
                         justify-content: center;
                         align-items: center;
                         min-height: 100vh;
                         margin: 0;
-                      
+                        background: radial-gradient(circle at top right, #22c55e, #0f172a 72%);
                     }
                     .container {
                         background: white;
-                        padding: 40px;
+                        padding: 34px;
                         border-radius: 20px;
-                        box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                        box-shadow: 0 24px 60px rgba(0,0,0,0.28);
                         text-align: center;
-                        max-width: 500px;
+                        max-width: 560px;
                     }
                     h1 {
-                        color: #128C7E;
-                        margin-bottom: 20px;
+                        color: #14532d;
+                        margin-bottom: 10px;
+                    }
+                    .hint {
+                        color: #64748b;
+                        margin-bottom: 22px;
                     }
                     .qr-code {
-                        margin: 30px 0;
-                        padding: 20px;
-                        background: #f5f5f5;
-                        border-radius: 10px;
+                        margin: 0 auto 24px;
+                        padding: 16px;
+                        width: fit-content;
+                        background: linear-gradient(180deg, #f8fafc, #ecfeff);
+                        border-radius: 14px;
                     }
                     .qr-code img {
                         max-width: 300px;
@@ -178,27 +190,35 @@ router.get('/qr', async (req, res) => {
                     }
                     .instructions {
                         text-align: left;
-                        margin: 20px 0;
-                        color: #666;
+                        margin: 8px 0 20px;
+                        color: #334155;
+                        background: #f8fafc;
+                        padding: 16px 18px;
+                        border-radius: 12px;
                     }
                     .instructions ol {
-                        padding-left: 20px;
+                        padding-left: 18px;
+                        margin-bottom: 0;
                     }
                     .instructions li {
-                        margin: 10px 0;
+                        margin: 8px 0;
                     }
                     .refresh-btn {
-                        background: #25D366;
+                        background: #16a34a;
                         color: white;
                         border: none;
-                        padding: 12px 30px;
-                        border-radius: 25px;
+                        padding: 12px 24px;
+                        border-radius: 999px;
                         cursor: pointer;
-                        font-size: 16px;
+                        font-size: 15px;
+                        font-weight: 600;
                         margin-top: 20px;
+                        transition: transform .2s ease, box-shadow .2s ease, background .2s ease;
                     }
                     .refresh-btn:hover {
-                        background: #128C7E;
+                        transform: translateY(-1px);
+                        box-shadow: 0 8px 18px rgba(22, 163, 74, 0.34);
+                        background: #15803d;
                     }
                 </style>
                 <script>
@@ -208,6 +228,7 @@ router.get('/qr', async (req, res) => {
             <body>
                 <div class="container">
                     <h1>📱 Scan WhatsApp QR Code</h1>
+                    <p class="hint">This code refreshes every 30 seconds for security.</p>
                     
                     <div class="qr-code">
                         <img src="${qrImage}" alt="WhatsApp QR Code">
@@ -247,17 +268,12 @@ router.get('/status', (req, res) => {
 // Disconnect WhatsApp
 router.get('/disconnect', async (req, res) => {
     try {
-        await whatsappService.disconnect();
-
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        await whatsappService.disconnect(false); // don't reinitialize yet
         return res.redirect('/whatsapp_nonapi/qr');
-
-        
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
-
 
 
 // Send image
@@ -295,6 +311,289 @@ router.post('/send', async (req, res) => {
         console.error('POST /send error:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
+});
+
+router.get('/live', (_req, res) => {
+    return res.send(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WhatsApp Live Messages</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --panel: #ffffff;
+            --line: #e2e8f0;
+            --text: #0f172a;
+            --muted: #64748b;
+            --in: #e0f2fe;
+            --out: #dcfce7;
+            --accent: #16a34a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+            background: radial-gradient(circle at top, #dbeafe, #f8fafc 40%);
+            color: var(--text);
+            padding: 20px;
+        }
+        .app {
+            max-width: 980px;
+            margin: 0 auto;
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(2, 6, 23, 0.08);
+            overflow: hidden;
+        }
+        .top {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 12px;
+            border-bottom: 1px solid var(--line);
+            background: #f8fafc;
+        }
+        .top input, .composer textarea {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            outline: none;
+        }
+        .top input:focus, .composer textarea:focus { border-color: #93c5fd; }
+        button {
+            border: 0;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-weight: 600;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+        }
+        .muted-btn { background: #334155; }
+        .status {
+            padding: 10px 14px;
+            border-bottom: 1px solid var(--line);
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .messages {
+            height: 58vh;
+            overflow: auto;
+            padding: 16px;
+            background: #fff;
+        }
+        .bubble {
+            max-width: 72%;
+            margin-bottom: 10px;
+            border-radius: 12px;
+            padding: 10px 12px;
+            border: 1px solid #dbeafe;
+        }
+        .in { background: var(--in); margin-right: auto; }
+        .out { background: var(--out); margin-left: auto; border-color: #bbf7d0; }
+        .meta {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .media {
+            margin-top: 8px;
+            display: block;
+            max-width: 100%;
+            border-radius: 10px;
+            border: 1px solid var(--line);
+            background: #fff;
+        }
+        img.media, video.media { max-height: 260px; object-fit: cover; }
+        audio.media { width: 100%; }
+        .composer {
+            display: flex;
+            gap: 8px;
+            align-items: flex-end;
+            padding: 12px;
+            border-top: 1px solid var(--line);
+            background: #f8fafc;
+        }
+        .composer textarea {
+            min-height: 44px;
+            max-height: 120px;
+            resize: vertical;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="top">
+            <input id="phone" placeholder="Phone number (example: 919876543210)" />
+            <button id="load">Load</button>
+            <button id="clear" class="muted-btn" type="button">Clear</button>
+        </div>
+        <div class="status" id="status">Enter phone and click Load</div>
+        <div class="messages" id="messages"></div>
+        <form class="composer" id="sendForm">
+            <textarea id="text" placeholder="Type message and press Send"></textarea>
+            <button type="submit">Send</button>
+        </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const messagesEl = document.getElementById('messages');
+        const statusEl = document.getElementById('status');
+        const phoneEl = document.getElementById('phone');
+        const loadBtn = document.getElementById('load');
+        const clearBtn = document.getElementById('clear');
+        const formEl = document.getElementById('sendForm');
+        const textEl = document.getElementById('text');
+
+        const params = new URLSearchParams(window.location.search);
+        const initialPhone = params.get('phone') || '';
+        phoneEl.value = initialPhone;
+
+        const socket = io();
+
+        const toAbsMediaUrl = (m) => {
+            if (m.media_url) return m.media_url;
+            if (!m.media_path) return null;
+            if (/^https?:\\/\\//i.test(m.media_path)) return m.media_path;
+            return \`\${window.location.origin}/uploads/whatsapp_media/\${String(m.media_path).replace(/^\\/+/, '')}\`;
+        };
+
+        const mediaTypeFromUrl = (url = '') => {
+            const lower = url.toLowerCase();
+            if (/\\.(jpg|jpeg|png|gif|webp|bmp)$/.test(lower)) return 'image';
+            if (/\\.(mp4|webm|mov|mkv)$/.test(lower)) return 'video';
+            if (/\\.(mp3|ogg|wav|m4a|aac)$/.test(lower)) return 'audio';
+            return 'document';
+        };
+
+        const formatTs = (value) => {
+            const d = new Date(value || Date.now());
+            if (Number.isNaN(d.getTime())) return '';
+            return d.toLocaleString();
+        };
+
+        const renderMessage = (m, append = true) => {
+            const bubble = document.createElement('div');
+            bubble.className = \`bubble \${m.outgoing ? 'out' : 'in'}\`;
+            const text = (m.message_text || '').trim();
+            if (text) {
+                const p = document.createElement('div');
+                p.textContent = text;
+                bubble.appendChild(p);
+            }
+
+            const mediaUrl = toAbsMediaUrl(m);
+            if (mediaUrl) {
+                const type = mediaTypeFromUrl(mediaUrl);
+                if (type === 'image') {
+                    const img = document.createElement('img');
+                    img.src = mediaUrl;
+                    img.className = 'media';
+                    img.alt = 'media';
+                    bubble.appendChild(img);
+                } else if (type === 'video') {
+                    const video = document.createElement('video');
+                    video.src = mediaUrl;
+                    video.controls = true;
+                    video.className = 'media';
+                    bubble.appendChild(video);
+                } else if (type === 'audio') {
+                    const audio = document.createElement('audio');
+                    audio.src = mediaUrl;
+                    audio.controls = true;
+                    audio.className = 'media';
+                    bubble.appendChild(audio);
+                } else {
+                    const a = document.createElement('a');
+                    a.href = mediaUrl;
+                    a.target = '_blank';
+                    a.rel = 'noreferrer';
+                    a.className = 'media';
+                    a.style.padding = '10px 12px';
+                    a.style.textDecoration = 'none';
+                    a.textContent = 'Open attachment';
+                    bubble.appendChild(a);
+                }
+            }
+
+            const meta = document.createElement('div');
+            meta.className = 'meta';
+            meta.textContent = \`\${m.outgoing ? 'Outgoing' : 'Incoming'} • \${formatTs(m.timestamp)}\`;
+            bubble.appendChild(meta);
+
+            if (append) messagesEl.appendChild(bubble);
+            else messagesEl.prepend(bubble);
+        };
+
+        const loadConversation = async () => {
+            const phone = phoneEl.value.trim();
+            if (!phone) {
+                statusEl.textContent = 'Phone is required';
+                return;
+            }
+            statusEl.textContent = \`Loading messages for \${phone}...\`;
+            messagesEl.innerHTML = '';
+            const url = \`/whatsapp/conversation/\${encodeURIComponent(phone)}?limit=100&domain=\${encodeURIComponent(window.location.origin)}\`;
+            const resp = await fetch(url);
+            const data = await resp.json();
+            const list = data?.data?.messages || [];
+            list.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            list.forEach((m) => renderMessage(m, true));
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+            statusEl.textContent = \`Loaded \${list.length} messages for \${phone}\`;
+        };
+
+        loadBtn.addEventListener('click', loadConversation);
+        clearBtn.addEventListener('click', () => {
+            messagesEl.innerHTML = '';
+            statusEl.textContent = 'Cleared';
+        });
+
+        formEl.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = phoneEl.value.trim();
+            const message = textEl.value.trim();
+            if (!phone || !message) return;
+            const resp = await fetch('/whatsapp/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone, message }),
+            });
+            const result = await resp.json();
+            if (!resp.ok || !result.success) {
+                statusEl.textContent = result.message || result.error || 'Failed to send';
+                return;
+            }
+            textEl.value = '';
+            statusEl.textContent = 'Message sent';
+        });
+
+        socket.on('connect', () => {
+            statusEl.textContent = 'Socket connected';
+        });
+
+        socket.on('new_message', (msg) => {
+            const activePhone = phoneEl.value.trim();
+            if (!activePhone) return;
+            const msgPhone = String(msg.phone || '').trim();
+            if (msgPhone !== activePhone) return;
+            renderMessage(msg, true);
+            messagesEl.scrollTop = messagesEl.scrollHeight;
+        });
+
+        if (initialPhone) loadConversation();
+    </script>
+</body>
+</html>
+    `);
 });
 
 
