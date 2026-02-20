@@ -266,9 +266,21 @@ router.get('/status', (req, res) => {
 });
 
 // Disconnect WhatsApp
+
+// Improved disconnect: logout, then reinitialize to show QR
+
+// Improved: Wait for QR to be available before redirecting
 router.get('/disconnect', async (req, res) => {
     try {
-        await whatsappService.disconnect(false); // don't reinitialize yet
+        await whatsappService.disconnect(false); // full logout, wipes session
+        // Poll for QR code to be available (max 10s)
+        let waited = 0;
+        const pollInterval = 400;
+        const maxWait = 10000;
+        while (!whatsappService.getQRCode() && waited < maxWait) {
+            await new Promise(r => setTimeout(r, pollInterval));
+            waited += pollInterval;
+        }
         return res.redirect('/whatsapp_nonapi/qr');
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });

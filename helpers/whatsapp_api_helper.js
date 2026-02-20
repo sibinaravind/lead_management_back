@@ -205,7 +205,7 @@ async function saveAndEmit({ messageId, phone, messageText, hasMedia, mediaPath,
             is_viewed: outgoing,
             timestamp: timestamp || new Date(),
         });
-
+console.log('Message saved to DB, emitting socket event...');
         getIO()?.emit('new_message', {
             message_id: messageId,
             outgoing,
