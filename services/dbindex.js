@@ -117,3 +117,17 @@ module.exports = {
     listAllIndexes,
     indexes
 };
+
+
+
+
+//                 db.whatsapp_messages.createIndex({ timestamp: -1 });
+// db.whatsapp_messages.createIndex({ lead_id: 1 });
+// db.whatsapp_messages.createIndex({ phone: 1 });
+// db.whatsapp_messages.createIndex({ is_viewed: 1, outgoing: 1 });
+
+// // Leads
+// db.leads.createIndex({ officer_id: 1 });
+
+// // Officers
+// db.officers.createIndex({ _id: 1 });

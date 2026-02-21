@@ -1,6 +1,8 @@
 
 const crypto = require('crypto');
 const https = require('https');
+const fs = require('fs');
+const path = require('path');
 const WhatsAppMediaHandler = require('../services/whatsapp_media_handler');
 const { WhatsAppReplyHandler } = require('../services/whatsapp_reply_handler');
 const whatsappHelpers = require('../helpers/whatsapp_data_helper');
@@ -60,7 +62,6 @@ function initMediaHandler() {
 function callGraphApi(phoneId, payload) {
     return new Promise((resolve, reject) => {
         console.log('📤 Calling Graph API with payload:', payload);
-         console.log('📤 Calling Graph API with payload:', payload);
         const body = JSON.stringify(payload);
         const options = {
             hostname: 'graph.facebook.com',
@@ -503,7 +504,7 @@ exports.sendText = async (phoneId, to, text) => {
 
 // ─── Send image ───────────────────────────────────────────────────────────────
 // { link, caption? }  OR  { id, caption? }
-exports.sendImage = async (phoneId, to, { link, id, caption }) => {
+exports.sendImage = async (phoneId, to, { link, id, caption, mediaPath }) => {
     const result = await callGraphApi(phoneId, {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -518,7 +519,7 @@ exports.sendImage = async (phoneId, to, { link, id, caption }) => {
             phone:       to,
             messageText: caption || '',
             hasMedia:    true,
-            mediaPath:   link || id,
+            mediaPath:   mediaPath || link || id,
             outgoing:    true,
         });
     }
@@ -527,7 +528,7 @@ exports.sendImage = async (phoneId, to, { link, id, caption }) => {
 };
 
 // ─── Send video ───────────────────────────────────────────────────────────────
-exports.sendVideo = async (phoneId, to, { link, id, caption }) => {
+exports.sendVideo = async (phoneId, to, { link, id, caption, mediaPath }) => {
     const result = await callGraphApi(phoneId, {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -542,7 +543,7 @@ exports.sendVideo = async (phoneId, to, { link, id, caption }) => {
             phone:       to,
             messageText: caption || '',
             hasMedia:    true,
-            mediaPath:   link || id,
+            mediaPath:   mediaPath || link || id,
             outgoing:    true,
         });
     }
@@ -551,7 +552,7 @@ exports.sendVideo = async (phoneId, to, { link, id, caption }) => {
 };
 
 // ─── Send audio ───────────────────────────────────────────────────────────────
-exports.sendAudio = async (phoneId, to, { link, id }) => {
+exports.sendAudio = async (phoneId, to, { link, id, mediaPath }) => {
     const result = await callGraphApi(phoneId, {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -566,7 +567,7 @@ exports.sendAudio = async (phoneId, to, { link, id }) => {
             phone:       to,
             messageText: '',
             hasMedia:    true,
-            mediaPath:   link || id,
+            mediaPath:   mediaPath || link || id,
             outgoing:    true,
         });
     }
@@ -575,7 +576,7 @@ exports.sendAudio = async (phoneId, to, { link, id }) => {
 };
 
 // ─── Send document ────────────────────────────────────────────────────────────
-exports.sendDocument = async (phoneId, to, { link, id, filename, caption }) => {
+exports.sendDocument = async (phoneId, to, { link, id, filename, caption, mediaPath }) => {
     const result = await callGraphApi(phoneId, {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
@@ -590,7 +591,7 @@ exports.sendDocument = async (phoneId, to, { link, id, filename, caption }) => {
             phone:       to,
             messageText: caption || '',
             hasMedia:    true,
-            mediaPath:   link || id,
+            mediaPath:   mediaPath || link || id,
             outgoing:    true,
         });
     }
@@ -648,22 +649,72 @@ async function uploadMediaFromBase64(phoneId, { fileBase64, mimeType, filename }
         throw new Error('Media upload succeeded but media id was not returned');
     }
 
-    return { mediaId: data.id, mimeType: resolvedMimeType };
+    return { mediaId: data.id, mimeType: resolvedMimeType, buffer, filename: safeFilename };
+}
+
+function extensionFromMime(mimeType = '', mediaType = 'document', filename = '') {
+    if (filename && path.extname(filename)) return path.extname(filename);
+
+    const byMime = {
+        'image/jpeg': '.jpg',
+        'image/png': '.png',
+        'image/webp': '.webp',
+        'video/mp4': '.mp4',
+        'video/3gpp': '.3gp',
+        'audio/ogg': '.ogg',
+        'audio/mpeg': '.mp3',
+        'audio/amr': '.amr',
+        'audio/mp4': '.m4a',
+        'application/pdf': '.pdf',
+        'application/msword': '.doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/vnd.ms-excel': '.xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+    };
+    if (byMime[mimeType]) return byMime[mimeType];
+
+    const byType = {
+        image: '.jpg',
+        video: '.mp4',
+        audio: '.ogg',
+        document: '.bin',
+    };
+    return byType[mediaType] || '.bin';
+}
+
+function saveOutgoingMediaBuffer(buffer, mediaType, mimeType, filename) {
+    const baseDir = process.env.WHATSAPP_UPLOADS_DIR || 'uploads/whatsapp_media';
+    const folders = {
+        image: 'images',
+        video: 'videos',
+        audio: 'audios',
+        document: 'documents',
+    };
+    const folder = folders[mediaType] || 'documents';
+    const fullDir = path.join(baseDir, folder);
+    if (!fs.existsSync(fullDir)) fs.mkdirSync(fullDir, { recursive: true });
+
+    const ext = extensionFromMime(mimeType, mediaType, filename);
+    const name = `${mediaType}_${Date.now()}${ext}`;
+    const fullPath = path.join(fullDir, name);
+    fs.writeFileSync(fullPath, buffer);
+    return path.join(folder, name);
 }
 
 exports.sendMediaFromBinary = async (phoneId, to, { mediaType, fileBase64, mimeType, filename, caption }) => {
     const normalizedType = (mediaType || '').toLowerCase();
-    const { mediaId } = await uploadMediaFromBase64(phoneId, { fileBase64, mimeType, filename });
+    const { mediaId, mimeType: resolvedMimeType, buffer } = await uploadMediaFromBase64(phoneId, { fileBase64, mimeType, filename });
+    const localMediaPath = saveOutgoingMediaBuffer(buffer, normalizedType, resolvedMimeType, filename);
 
     switch (normalizedType) {
         case 'image':
-            return exports.sendImage(phoneId, to, { id: mediaId, caption });
+            return exports.sendImage(phoneId, to, { id: mediaId, caption, mediaPath: localMediaPath });
         case 'video':
-            return exports.sendVideo(phoneId, to, { id: mediaId, caption });
+            return exports.sendVideo(phoneId, to, { id: mediaId, caption, mediaPath: localMediaPath });
         case 'audio':
-            return exports.sendAudio(phoneId, to, { id: mediaId });
+            return exports.sendAudio(phoneId, to, { id: mediaId, mediaPath: localMediaPath });
         case 'document':
-            return exports.sendDocument(phoneId, to, { id: mediaId, filename, caption });
+            return exports.sendDocument(phoneId, to, { id: mediaId, filename, caption, mediaPath: localMediaPath });
         default:
             throw new Error('Unsupported mediaType for binary send. Use image, video, audio, or document.');
     }

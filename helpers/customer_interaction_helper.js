@@ -81,6 +81,7 @@ module.exports = {
             }
 
             data = value;
+            
             if (!data.client_id) throw new Error("Client ID is required");
 
             const clientId = new ObjectId(data.client_id);
@@ -148,7 +149,6 @@ module.exports = {
                 data.client_status !== clientDoc.status
             ) {
                 update.status = data.client_status;
-
                 await module.exports.logActivity({
                     type: "status_update",
                     client_id: clientId,

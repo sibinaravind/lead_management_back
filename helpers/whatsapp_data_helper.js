@@ -4,7 +4,7 @@ const { ObjectId } = require('mongodb');
 const COLLECTION = require('../config/collections');
 const { messageSchema } = require("../validations/whatsappValidation");
 const { formatJoiErrors } = require("../utils/validatePartial");
-
+const { safeObjectId } = require('../utils/safeObjectId');
 function extractPhoneNumber(jid) {
     // Extract phone number from JID
     // Examples:
@@ -124,6 +124,7 @@ function normalizeViewMessage(message, options = {}) {
 }
 
 const whatsappHelpers = {
+
 
     saveMessage: async (details) => {
         try {
@@ -276,23 +277,46 @@ const whatsappHelpers = {
         });
     },
 
-    /**
-     * Mark all messages from phone as viewed
-     */
     markAllAsViewed: async (phone) => {
         return new Promise(async (resolve, reject) => {
             try {
                 const dbInstance = db.get();
                 const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
-                const cleanPhone = normalizePhone(phone);
+
+                let query = {
+                    is_viewed: false,
+                    outgoing: false,
+                };
+
+                // If input is valid ObjectId → treat as lead_id
+                if (phone && ObjectId.isValid(phone) && String(phone).length === 24) {
+
+                    query.lead_id = new ObjectId(phone);
+                }
+                // Else treat as phone number
+                else if (phone) {
+
+                    const cleanPhone = normalizePhone(phone);
+                    query.phone = cleanPhone;
+                }
+
                 const result = await collection.updateMany(
-                    { phone: cleanPhone, is_viewed: false, outgoing: false },
-                    { $set: { is_viewed: true, viewed_at: new Date() } }
+                    query,
+                    {
+                        $set: {
+                            is_viewed: true,
+                            viewed_at: new Date(),
+                        },
+                    }
                 );
-                resolve({ success: true, count: result.modifiedCount });
+
+                resolve({
+                    success: true,
+                    count: result.modifiedCount,
+                });
 
             } catch (err) {
-                console.error('Error marking messages as viewed:', err);
+                console.error("Error marking messages as viewed:", err);
                 reject(err);
             }
         });
@@ -324,7 +348,14 @@ const whatsappHelpers = {
                     query.direction = direction;
                     query.outgoing = direction === 'outgoing';
                 }
-                if (phone) query.phone = phone;
+                if (phone) {
+                    // If phone is a valid Mongo ObjectId, search by lead_id
+                    if (ObjectId.isValid(phone) && String(phone).length === 24) {
+                        query.lead_id = new ObjectId(phone);
+                    } else {
+                        query.phone = phone;
+                    }
+                }
                 const viewedFilter = toBooleanOrNull(is_viewed);
                 if (viewedFilter !== null) query.is_viewed = viewedFilter;
                 const mediaFilter = toBooleanOrNull(has_media);
@@ -394,6 +425,356 @@ const whatsappHelpers = {
         });
     },
 
+    getThreadSummaries: async (filters = {}, decoded) => {
+        try {
+            const {
+                page = 1,
+                limit = 50,
+                unread_only,
+                search,
+                base_url,
+                employee
+            } = filters;
+
+            const dbInstance = db.get();
+            const collection =
+                dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
+
+            const pageNum = parseInt(page);
+            const limitNum = parseInt(limit);
+
+            const unreadOnly =
+                toBooleanOrNull(unread_only) === true;
+
+            /* -----------------------------------
+               Officer Access (Same as Leads)
+            ----------------------------------- */
+
+            const isAdmin =
+                Array.isArray(decoded?.designation) &&
+                decoded.designation.includes('ADMIN');
+
+            let officerIdList = [];
+
+            if (!isAdmin) {
+                officerIdList = Array.isArray(decoded?.officers)
+                    ? decoded.officers
+                        .map(o => safeObjectId(o?.officer_id))
+                        .filter(Boolean)
+                    : [];
+            }
+
+            let officerFilter = null;
+
+            if (employee) {
+                officerFilter = safeObjectId(employee);
+            }
+            else if (!isAdmin && officerIdList.length) {
+                officerFilter = {
+                    $in: [
+                        safeObjectId(decoded?._id),
+                        ...officerIdList
+                    ]
+                };
+            }
+            else if (!isAdmin) {
+                officerFilter = safeObjectId(decoded?._id);
+            }
+
+            /* -----------------------------------
+               Search Filter
+            ----------------------------------- */
+
+            const matchQuery = {};
+
+            if (search && search.trim()) {
+                const s = search.trim();
+                const digits = s.replace(/\D/g, '');
+
+                matchQuery.$or = [
+                    { message_text: { $regex: s, $options: 'i' } },
+                    { sender_name: { $regex: s, $options: 'i' } },
+                    {phone: { $regex: s, $options: 'i' } }
+                ];
+
+                if (digits) {
+                    matchQuery.$or.push({
+                        phone: { $regex: digits, $options: 'i' }
+                    });
+                }
+            }
+
+            /* -----------------------------------
+               Aggregation Pipeline
+            ----------------------------------- */
+
+            const pipeline = [
+
+                /* 1️⃣ Filter Early */
+                { $match: matchQuery },
+
+                /* 2️⃣ Sort for Latest */
+                { $sort: { timestamp: -1 } },
+
+                /* 3️⃣ Group Threads */
+                {
+                    $group: {
+                        _id: { $ifNull: ['$lead_id', '$phone'] },
+
+                        lead_id: { $first: '$lead_id' },
+
+                        last_message: { $first: '$$ROOT' },
+
+                        unread_count: {
+                            $sum: {
+                                $cond: [
+                                    {
+                                        $and: [
+                                            { $eq: ['$outgoing', false] },
+                                            { $eq: ['$is_viewed', false] }
+                                        ]
+                                    },
+                                    1,
+                                    0
+                                ]
+                            }
+                        },
+
+                        total_messages: { $sum: 1 }
+                    }
+                },
+
+                /* 4️⃣ Unread Only */
+                ...(unreadOnly
+                    ? [{ $match: { unread_count: { $gt: 0 } } }]
+                    : []),
+
+                /* 5️⃣ Join Leads */
+                {
+                    $lookup: {
+                        from: COLLECTION.LEADS,
+                        localField: 'lead_id',
+                        foreignField: '_id',
+                        as: 'lead'
+                    }
+                },
+
+                {
+                    $unwind: {
+                        path: '$lead',
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+
+                /* 6️⃣ Officer Filter EARLY */
+                ...(officerFilter
+                    ? [{
+                        $match: {
+                            'lead.officer_id': officerFilter
+                        }
+                    }]
+                    : []),
+
+                /* 7️⃣ Join Officer (Lightweight) */
+                {
+                    $lookup: {
+                        from: COLLECTION.OFFICERS,
+                        let: { oid: '$lead.officer_id' },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: { $eq: ['$_id', '$$oid'] }
+                                }
+                            },
+                            {
+                                $project: {
+                                    _id: 1,
+                                    name: 1,
+                                    officer_id: 1
+                                }
+                            }
+                        ],
+                        as: 'officer'
+                    }
+                },
+
+                {
+                    $unwind: {
+                        path: '$officer',
+                        preserveNullAndEmptyArrays: true
+                    }
+                },
+
+                /* 8️⃣ Reduce Payload */
+                {
+                    $project: {
+
+                        lead_id: 1,
+
+                        unread_count: 1,
+                        total_messages: 1,
+
+                        last_message: {
+                            phone: 1,
+                            message_text: 1,
+                            timestamp: 1,
+                            outgoing: 1,
+                            sender_name: 1,
+                            lead_id: 1
+                        },
+
+                        lead: {
+                            _id: 1,
+                            name: 1,
+                            phone: 1,
+                            whatsapp: 1,
+                            email: 1,
+                            client_id: 1,
+                            officer_id: 1
+                        },
+
+                        officer: 1
+                    }
+                },
+
+                /* 9️⃣ Sort Again */
+                { $sort: { 'last_message.timestamp': -1 } },
+
+                /* 🔟 Pagination + Stats */
+                {
+                    $facet: {
+
+                        data: [
+                            { $skip: (pageNum - 1) * limitNum },
+                            { $limit: limitNum }
+                        ],
+
+                        totalCount: [
+                            { $count: 'count' }
+                        ],
+
+                        unreadSummary: [
+                            {
+                                $group: {
+                                    _id: null,
+
+                                    unread_conversations: {
+                                        $sum: {
+                                            $cond: [
+                                                { $gt: ['$unread_count', 0] },
+                                                1,
+                                                0
+                                            ]
+                                        }
+                                    },
+
+                                    unread_messages: {
+                                        $sum: '$unread_count'
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ];
+
+            /* -----------------------------------
+               Execute
+            ----------------------------------- */
+
+            const result = await collection
+                .aggregate(pipeline, { allowDiskUse: true })
+                .toArray();
+
+            const facet = result[0] || {};
+
+            const rows = facet.data || [];
+
+            const total =
+                facet.totalCount?.[0]?.count || 0;
+
+            const unreadSummary =
+                facet.unreadSummary?.[0] || {};
+
+            /* -----------------------------------
+               Format
+            ----------------------------------- */
+
+            const threads = rows.map(t => {
+
+                const last = t.last_message || {};
+                const lead = t.lead || {};
+                const officer = t.officer || {};
+
+                return {
+
+                    threadId: String(t._id),
+
+                    phone: last.phone || lead.phone || '',
+
+                    unreadCount: t.unread_count || 0,
+
+                    totalMessages: t.total_messages || 0,
+
+                    lastMessage: last
+                        ? normalizeViewMessage(last, {
+                            baseUrl: base_url
+                        })
+                        : null,
+
+                    leadId: lead?._id
+                        ? String(lead._id)
+                        : null,
+
+                    clientGenId: lead.client_id || null,
+
+                    name: lead.name || last.sender_name || 'Unknown',
+
+                    whatsapp: lead.whatsapp || null,
+
+                    email: lead.email || null,
+
+                    officerId: officer?._id
+                        ? String(officer._id)
+                        : null,
+
+                    officerGenId: officer?.officer_id || null,
+
+                    officerName: officer?.name || null
+                };
+            });
+
+            /* -----------------------------------
+               Response
+            ----------------------------------- */
+
+            return {
+
+                data: threads,
+
+                pagination: {
+                    page: pageNum,
+                    limit: limitNum,
+                    total,
+                    pages: Math.ceil(total / limitNum)
+                },
+
+                summary: {
+                    unread_conversations:
+                        unreadSummary.unread_conversations || 0,
+
+                    unread_messages:
+                        unreadSummary.unread_messages || 0,
+
+                    total_conversations: total
+                }
+            };
+
+        } catch (err) {
+            console.error('Thread summary error:', err);
+            throw err;
+        }
+    },
     // getThreadSummaries: async (filters = {}) => {
     //     return new Promise(async (resolve, reject) => {
     //         try {
@@ -401,347 +782,232 @@ const whatsappHelpers = {
     //                 page = 1,
     //                 limit = 50,
     //                 unread_only,
-    //                 search
+    //                 search,
+    //                 base_url
     //             } = filters;
 
     //             const dbInstance = db.get();
     //             const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
-    //             const query = {};
+
+    //             const pageNum = parseInt(page);
+    //             const limitNum = parseInt(limit);
+
     //             const unreadOnly = toBooleanOrNull(unread_only) === true;
+
+    //             /* -----------------------------------
+    //                Build Match Query
+    //             ----------------------------------- */
+    //             const query = {};
+
     //             if (search && String(search).trim()) {
     //                 const s = String(search).trim();
     //                 const digits = s.replace(/\D/g, '');
+
     //                 query.$or = [
-    //                     { message_text: { $regex: s, $options: 'i' } }
+    //                     { message_text: { $regex: s, $options: 'i' } },
+    //                     { sender_name: { $regex: s, $options: 'i' } }
     //                 ];
+
     //                 if (digits) {
     //                     query.$or.push({ phone: { $regex: digits, $options: 'i' } });
     //                 }
     //             }
-    //             const aggregate = [
+
+    //             /* -----------------------------------
+    //                Aggregation Pipeline
+    //             ----------------------------------- */
+    //             const pipeline = [
+    //                 // Filter first
     //                 { $match: query },
+
+    //                 // Latest messages first
     //                 { $sort: { timestamp: -1 } },
+
+    //                 // Group by lead_id OR phone
     //                 {
     //                     $group: {
-    //                         _id: '$phone',
+    //                         _id: {
+    //                             $ifNull: ['$lead_id', '$phone']
+    //                         },
+
+    //                         lead_id: { $first: '$lead_id' },
+
     //                         last_message: { $first: '$$ROOT' },
+
     //                         unread_count: {
     //                             $sum: {
     //                                 $cond: [
-    //                                     { $and: [{ $eq: ['$outgoing', false] }, { $eq: ['$is_viewed', false] }] },
+    //                                     {
+    //                                         $and: [
+    //                                             { $eq: ['$outgoing', false] },
+    //                                             { $eq: ['$is_viewed', false] }
+    //                                         ]
+    //                                     },
     //                                     1,
     //                                     0
     //                                 ]
     //                             }
     //                         },
-    //                         total_messages: { $sum: 1 },
+
+    //                         total_messages: { $sum: 1 }
     //                     }
     //                 },
-    //                 ...(unreadOnly ? [{ $match: { unread_count: { $gt: 0 } } }] : []),
+
+    //                 // Only unread if needed
+    //                 ...(unreadOnly
+    //                     ? [{ $match: { unread_count: { $gt: 0 } } }]
+    //                     : []),
+
+    //                 // Join leads using lead_id
+    //                 {
+    //                     $lookup: {
+    //                         from: COLLECTION.LEADS,
+    //                         localField: 'lead_id',
+    //                         foreignField: '_id',
+    //                         as: 'lead'
+    //                     }
+    //                 },
+
+    //                 // Convert lead array → object
+    //                 {
+    //                     $unwind: {
+    //                         path: '$lead',
+    //                         preserveNullAndEmptyArrays: true
+    //                     }
+    //                 },
+
+    //                 // Sort again by latest msg
     //                 { $sort: { 'last_message.timestamp': -1 } },
+
+    //                 // Pagination + Count + Summary
+    //                 {
+    //                     $facet: {
+    //                         data: [
+    //                             { $skip: (pageNum - 1) * limitNum },
+    //                             { $limit: limitNum }
+    //                         ],
+
+    //                         totalCount: [
+    //                             { $count: 'count' }
+    //                         ],
+
+    //                         unreadSummary: [
+    //                             {
+    //                                 $group: {
+    //                                     _id: null,
+
+    //                                     unread_conversations: {
+    //                                         $sum: {
+    //                                             $cond: [
+    //                                                 { $gt: ['$unread_count', 0] },
+    //                                                 1,
+    //                                                 0
+    //                                             ]
+    //                                         }
+    //                                     },
+
+    //                                     unread_messages: {
+    //                                         $sum: '$unread_count'
+    //                                     }
+    //                                 }
+    //                             }
+    //                         ]
+    //                     }
+    //                 }
     //             ];
 
-    //             const allThreads = await collection.aggregate(aggregate).toArray();
-    //             const total = allThreads.length;
-    //             const start = (parseInt(page) - 1) * parseInt(limit);
-    //             const pagedThreads = allThreads.slice(start, start + parseInt(limit));
+    //             /* -----------------------------------
+    //                Execute
+    //             ----------------------------------- */
+    //             const result = await collection
+    //                 .aggregate(pipeline, { allowDiskUse: true })
+    //                 .toArray();
 
-    //             const phones = [...new Set(pagedThreads.map(t => t._id).filter(Boolean))];
-    //             let leadMap = new Map();
-    //             if (phones.length > 0) {
-    //                 const leads = await dbInstance.collection(COLLECTION.LEADS).find(
-    //                     { $or: [{ phone: { $in: phones } }, { whatsapp: { $in: phones.map(p => `+91 ${p}`) } }] },
-    //                     { projection: { _id: 1, name: 1, phone: 1, whatsapp: 1, email: 1 } }
-    //                 ).toArray();
+    //             const facet = result[0] || {};
 
-    //                 leadMap = new Map(leads.map(l => [normalizePhone(l.phone || l.whatsapp || ''), l]));
-    //             }
+    //             const rows = facet.data || [];
 
-    //             const threads = pagedThreads.map((t) => {
-    //                 const phone = t._id;
-    //                 const lead = leadMap.get(normalizePhone(phone));
+    //             const total =
+    //                 facet.totalCount?.[0]?.count || 0;
+
+    //             const unreadSummary =
+    //                 facet.unreadSummary?.[0] || {};
+
+    //             /* -----------------------------------
+    //                Format for Flutter
+    //             ----------------------------------- */
+    //             const threads = rows.map(t => {
     //                 const last = t.last_message || {};
+    //                 const lead = t.lead || null;
 
     //                 return {
-    //                     thread_id: phone,
-    //                     phone,
-    //                     unread_count: t.unread_count || 0,
-    //                     total_messages: t.total_messages || 0,
-    //                     last_message: normalizeViewMessage(last, { baseUrl: filters.base_url }),
-    //                     user: lead
-    //                         ? {
-    //                             lead_id: lead._id,
-    //                             name: lead.name || 'Unknown',
-    //                             phone: lead.phone || phone,
-    //                             whatsapp: lead.whatsapp || null,
-    //                             email: lead.email || null,
-    //                         }
-    //                         : {
-    //                             lead_id: last.lead_id || null,
-    //                             name: last.sender_name || 'Unknown',
-    //                             phone,
-    //                             whatsapp: null,
-    //                             email: null,
-    //                         }
+    //                     // Flutter: threadId
+    //                     threadId: String(t._id),
+
+    //                     // Flutter: phone
+    //                     phone: last.phone || lead?.phone || '',
+
+    //                     // Flutter: unreadCount
+    //                     unreadCount: t.unread_count || 0,
+
+    //                     // Flutter: totalMessages
+    //                     totalMessages: t.total_messages || 0,
+
+    //                     // Flutter: lastMessage
+    //                     lastMessage: last
+    //                         ? normalizeViewMessage(last, {
+    //                             baseUrl: base_url
+    //                         })
+    //                         : null,
+
+    //                     // Flutter: leadId
+    //                     leadId: lead?._id
+    //                         ? String(lead._id)
+    //                         : last.lead_id
+    //                             ? String(last.lead_id)
+    //                             : null,
+
+    //                     // Flutter: name
+    //                     name: lead?.name || last.sender_name || 'Unknown',
+
+    //                     // Flutter: whatsapp
+    //                     whatsapp: lead?.whatsapp || null,
+
+    //                     // Flutter: email
+    //                     email: lead?.email || null
     //                 };
     //             });
 
-    //             const unreadConversations = allThreads.filter(t => (t.unread_count || 0) > 0).length;
-    //             const unreadMessages = allThreads.reduce((sum, t) => sum + (t.unread_count || 0), 0);
-
+    //             /* -----------------------------------
+    //                Response
+    //             ----------------------------------- */
     //             resolve({
     //                 data: threads,
+
     //                 pagination: {
-    //                     page: parseInt(page),
-    //                     limit: parseInt(limit),
+    //                     page: pageNum,
+    //                     limit: limitNum,
     //                     total,
-    //                     pages: Math.ceil(total / parseInt(limit)),
+    //                     pages: Math.ceil(total / limitNum)
     //                 },
+
     //                 summary: {
-    //                     unread_conversations: unreadConversations,
-    //                     unread_messages: unreadMessages,
-    //                     total_conversations: total,
+    //                     unread_conversations:
+    //                         unreadSummary.unread_conversations || 0,
+
+    //                     unread_messages:
+    //                         unreadSummary.unread_messages || 0,
+
+    //                     total_conversations: total
     //                 }
     //             });
+
     //         } catch (err) {
     //             console.error('Error fetching thread summaries:', err);
     //             reject(err);
     //         }
     //     });
     // },
-    getThreadSummaries: async (filters = {}) => {
-        return new Promise(async (resolve, reject) => {
-            try {
-                const {
-                    page = 1,
-                    limit = 50,
-                    unread_only,
-                    search,
-                    base_url
-                } = filters;
-
-                const dbInstance = db.get();
-                const collection = dbInstance.collection(COLLECTION.WHATSAPP_MESSAGES);
-
-                const pageNum = parseInt(page);
-                const limitNum = parseInt(limit);
-
-                const unreadOnly = toBooleanOrNull(unread_only) === true;
-
-                /* -----------------------------------
-                   Build Match Query
-                ----------------------------------- */
-                const query = {};
-
-                if (search && String(search).trim()) {
-                    const s = String(search).trim();
-                    const digits = s.replace(/\D/g, '');
-
-                    query.$or = [
-                        { message_text: { $regex: s, $options: 'i' } },
-                        { sender_name: { $regex: s, $options: 'i' } }
-                    ];
-
-                    if (digits) {
-                        query.$or.push({ phone: { $regex: digits, $options: 'i' } });
-                    }
-                }
-
-                /* -----------------------------------
-                   Aggregation Pipeline
-                ----------------------------------- */
-                const pipeline = [
-                    // Filter first
-                    { $match: query },
-
-                    // Latest messages first
-                    { $sort: { timestamp: -1 } },
-
-                    // Group by lead_id OR phone
-                    {
-                        $group: {
-                            _id: {
-                                $ifNull: ['$lead_id', '$phone']
-                            },
-
-                            lead_id: { $first: '$lead_id' },
-
-                            last_message: { $first: '$$ROOT' },
-
-                            unread_count: {
-                                $sum: {
-                                    $cond: [
-                                        {
-                                            $and: [
-                                                { $eq: ['$outgoing', false] },
-                                                { $eq: ['$is_viewed', false] }
-                                            ]
-                                        },
-                                        1,
-                                        0
-                                    ]
-                                }
-                            },
-
-                            total_messages: { $sum: 1 }
-                        }
-                    },
-
-                    // Only unread if needed
-                    ...(unreadOnly
-                        ? [{ $match: { unread_count: { $gt: 0 } } }]
-                        : []),
-
-                    // Join leads using lead_id
-                    {
-                        $lookup: {
-                            from: COLLECTION.LEADS,
-                            localField: 'lead_id',
-                            foreignField: '_id',
-                            as: 'lead'
-                        }
-                    },
-
-                    // Convert lead array → object
-                    {
-                        $unwind: {
-                            path: '$lead',
-                            preserveNullAndEmptyArrays: true
-                        }
-                    },
-
-                    // Sort again by latest msg
-                    { $sort: { 'last_message.timestamp': -1 } },
-
-                    // Pagination + Count + Summary
-                    {
-                        $facet: {
-                            data: [
-                                { $skip: (pageNum - 1) * limitNum },
-                                { $limit: limitNum }
-                            ],
-
-                            totalCount: [
-                                { $count: 'count' }
-                            ],
-
-                            unreadSummary: [
-                                {
-                                    $group: {
-                                        _id: null,
-
-                                        unread_conversations: {
-                                            $sum: {
-                                                $cond: [
-                                                    { $gt: ['$unread_count', 0] },
-                                                    1,
-                                                    0
-                                                ]
-                                            }
-                                        },
-
-                                        unread_messages: {
-                                            $sum: '$unread_count'
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                ];
-
-                /* -----------------------------------
-                   Execute
-                ----------------------------------- */
-                const result = await collection
-                    .aggregate(pipeline, { allowDiskUse: true })
-                    .toArray();
-
-                const facet = result[0] || {};
-
-                const rows = facet.data || [];
-
-                const total =
-                    facet.totalCount?.[0]?.count || 0;
-
-                const unreadSummary =
-                    facet.unreadSummary?.[0] || {};
-
-                /* -----------------------------------
-                   Format for Flutter
-                ----------------------------------- */
-                const threads = rows.map(t => {
-                    const last = t.last_message || {};
-                    const lead = t.lead || null;
-
-                    return {
-                        // Flutter: threadId
-                        threadId: String(t._id),
-
-                        // Flutter: phone
-                        phone: lead?.phone || last.phone || '',
-
-                        // Flutter: unreadCount
-                        unreadCount: t.unread_count || 0,
-
-                        // Flutter: totalMessages
-                        totalMessages: t.total_messages || 0,
-
-                        // Flutter: lastMessage
-                        lastMessage: last
-                            ? normalizeViewMessage(last, {
-                                baseUrl: base_url
-                            })
-                            : null,
-
-                        // Flutter: leadId
-                        leadId: lead?._id
-                            ? String(lead._id)
-                            : last.lead_id
-                                ? String(last.lead_id)
-                                : null,
-
-                        // Flutter: name
-                        name: lead?.name || last.sender_name || 'Unknown',
-
-                        // Flutter: whatsapp
-                        whatsapp: lead?.whatsapp || null,
-
-                        // Flutter: email
-                        email: lead?.email || null
-                    };
-                });
-
-                /* -----------------------------------
-                   Response
-                ----------------------------------- */
-                resolve({
-                    data: threads,
-
-                    pagination: {
-                        page: pageNum,
-                        limit: limitNum,
-                        total,
-                        pages: Math.ceil(total / limitNum)
-                    },
-
-                    summary: {
-                        unread_conversations:
-                            unreadSummary.unread_conversations || 0,
-
-                        unread_messages:
-                            unreadSummary.unread_messages || 0,
-
-                        total_conversations: total
-                    }
-                });
-
-            } catch (err) {
-                console.error('Error fetching thread summaries:', err);
-                reject(err);
-            }
-        });
-    },
     /**
      * Get statistics
      */

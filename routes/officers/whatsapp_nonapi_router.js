@@ -46,7 +46,7 @@ router.get('/qr', async (req, res) => {
                             margin: 0;
                             display: grid;
                             place-items: center;
-                            background: radial-gradient(circle at top, #1b9f6f 0%, #0f3d2e 100%);
+                           background: radial-gradient(circle at top right, #8ecfa5, #6e81ab 72%);
                         }
                         .container {
                             background: #fff;
@@ -159,7 +159,7 @@ router.get('/qr', async (req, res) => {
                         align-items: center;
                         min-height: 100vh;
                         margin: 0;
-                        background: radial-gradient(circle at top right, #22c55e, #0f172a 72%);
+                        background: radial-gradient(circle at top right, #8ecfa5, #6e81ab 72%);
                     }
                     .container {
                         background: white;

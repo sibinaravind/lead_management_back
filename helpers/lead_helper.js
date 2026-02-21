@@ -1700,6 +1700,652 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
 }
 
 
+/***  
+ 
+//   getCallCountByCategory: async (decoded, query) => {
+//   try {
+//     const { employee } = query;
+
+//     const isAdmin =
+//       Array.isArray(decoded?.designation) &&
+//       decoded.designation.includes("ADMIN");
+
+//     const filter = {};
+
+//     // Officer filter
+//     if (employee) {
+//       filter.officer_id = safeObjectId(employee);
+//     } else if (!isAdmin) {
+//       filter.officer_id = Array.isArray(decoded?.officers)
+//         ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+//         : safeObjectId(decoded?._id);
+//     }
+
+//     const now = new Date();
+
+//     // Date calculations
+//     const todayStart = new Date();
+//     todayStart.setHours(0, 0, 0, 0);
+
+//     const tomorrowStart = new Date(todayStart);
+//     tomorrowStart.setDate(todayStart.getDate() + 1);
+
+//     const yesterdayStart = new Date(todayStart);
+//     yesterdayStart.setDate(todayStart.getDate() - 1);
+
+//     const weekStart = new Date(todayStart);
+//     weekStart.setDate(todayStart.getDate() - todayStart.getDay()); // Sunday
+
+//     const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+
+//     // const result = await db
+//     //   .get()
+//     //   .collection(COLLECTION.CALL_LOG_ACTIVITY)
+//     //   .aggregate([
+//     //     { $match: filter },
+//     //     {
+//     //       $facet: {
+//     //         TOTAL: [{ $count: "count" }],
+
+//     //         TODAY: [
+//     //           {
+//     //             $match: {
+//     //               created_at: { $gte: todayStart, $lt: tomorrowStart }
+//     //             }
+//     //           },
+//     //           { $count: "count" }
+//     //         ],
+
+//     //         YESTERDAY: [
+//     //           {
+//     //             $match: {
+//     //               created_at: { $gte: yesterdayStart, $lt: todayStart }
+//     //             }
+//     //           },
+//     //           { $count: "count" }
+//     //         ],
+
+//     //         THIS_WEEK: [
+//     //           {
+//     //             $match: {
+//     //               created_at: { $gte: weekStart, $lt: tomorrowStart }
+//     //             }
+//     //           },
+//     //           { $count: "count" }
+//     //         ],
+
+//     //         THIS_MONTH: [
+//     //           {
+//     //             $match: {
+//     //               created_at: { $gte: monthStart, $lt: tomorrowStart }
+//     //             }
+//     //           },
+//     //           { $count: "count" }
+//     //         ],
+           
+//     //       }
+//     //     }
+//     //   ])
+//     //   .toArray();
+//     const result = await db
+//   .get()
+//   .collection(COLLECTION.CALL_LOG_ACTIVITY)
+//   .aggregate([
+
+//     /* ---------------- Base Filter ---------------- */
+//     { $match: filter },
+
+//     /* ---------------- Latest Call Per Client ---------------- */
+//     { $sort: { created_at: -1 } },
+
+//     {
+//       $group: {
+//         _id: "$client_id",
+//         lastCall: { $first: "$$ROOT" }
+//       }
+//     },
+
+//     /* ---------------- Facets ---------------- */
+//     {
+//       $facet: {
+
+//         /* -------- Total Leads With Calls -------- */
+//         TOTAL: [
+//           { $count: "count" }
+//         ],
+
+//         /* -------- Today -------- */
+//         TODAY: [
+//           {
+//             $match: {
+//               "lastCall.created_at": {
+//                 $gte: todayStart,
+//                 $lt: tomorrowStart
+//               }
+//             }
+//           },
+//           { $count: "count" }
+//         ],
+
+//         /* -------- Yesterday -------- */
+//         YESTERDAY: [
+//           {
+//             $match: {
+//               "lastCall.created_at": {
+//                 $gte: yesterdayStart,
+//                 $lt: todayStart
+//               }
+//             }
+//           },
+//           { $count: "count" }
+//         ],
+
+//         /* -------- This Week -------- */
+//         THIS_WEEK: [
+//           {
+//             $match: {
+//               "lastCall.created_at": {
+//                 $gte: weekStart,
+//                 $lt: tomorrowStart
+//               }
+//             }
+//           },
+//           { $count: "count" }
+//         ],
+
+//         /* -------- This Month -------- */
+//         THIS_MONTH: [
+//           {
+//             $match: {
+//               "lastCall.created_at": {
+//                 $gte: monthStart,
+//                 $lt: tomorrowStart
+//               }
+//             }
+//           },
+//           { $count: "count" }
+//         ],
+
+//         /* ✅ -------- Pending -------- */
+//        PENDING: [
+//           {
+//             $match: {
+//               "lastCall.duration": { $lte: 0 }
+//             }
+//           },
+//           { $count: "count" }
+//         ]
+//       }
+//     }
+//   ])
+//   .toArray();
+
+//     const counts = result[0] || {};
+//     const getCount = (key) => counts[key]?.[0]?.count ?? 0;
+
+//     return {
+//       TOTAL: getCount("TOTAL"),
+//       TODAY: getCount("TODAY"),
+//       YESTERDAY: getCount("YESTERDAY"),
+//       THIS_WEEK: getCount("THIS_WEEK"),
+//       THIS_MONTH: getCount("THIS_MONTH"),
+//         PENDING: getCount("PENDING")
+//     };
+
+//   } catch (err) {
+//     console.error("getCallCountByCategory error:", err);
+//     throw new Error("Server Error");
+//   }
+// },
+
+
+// getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
+//         try {
+//           const {
+//             page = 1,
+//             limit = 10,
+//             callType,
+//             callStatus,
+//             employee,
+//             startDate,
+//             endDate,
+//             searchString,
+//             status,
+//             filterCategory,
+//           } = query;
+
+//           const parsedPage = parseInt(page);
+//           const parsedLimit = parseInt(limit);
+//           const skip = (parsedPage - 1) * parsedLimit;
+//           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
+//           let officerIdList = [];
+//           if (!isAdmin) {
+//             officerIdList = Array.isArray(decoded?.officers)
+//               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
+//               : [];
+//           }
+//            const filter = { };
+//           // Officer filtering
+//           if (employee) {
+//             filter.officer_id = safeObjectId(employee);
+//           } else if (!isAdmin) {
+//             if (officerIdList.length > 0) {
+//               filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
+//             } else {
+//               filter.officer_id = safeObjectId(decoded?._id);
+//             }
+//           }else if (isAdmin) {
+//                 // const officerList = await db.get().collection(COLLECTION.OFFICERS)
+//                 //     .find() // works if designation is an array
+//                 //     .project({ _id: 1 })
+//                 //     .toArray();
+//                 //   const officerIds = officerList.map(officer => officer._id);
+//                 //   filter.officer_id = { $in: officerIds };
+//           }
+//           // Additional filters
+//           if (callType) filter.call_type = callType;
+//           if (callStatus) filter.call_status = callStatus;
+           
+//           // Date range filtering
+//           if (startDate || endDate) {
+//             const parseDate = (str) => {
+//               if (!str) return null;
+//               const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+//               if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+//               return new Date(str);
+//             };
+
+//             filter.created_at = {};
+//             if (startDate) {
+//               const start = parseDate(startDate);
+//               if (!isNaN(start)) filter.created_at.$gte = start;
+//             }
+//             if (endDate) {
+//               const end = parseDate(endDate);
+//               if (!isNaN(end)) {
+//                 end.setHours(23, 59, 59, 999);
+//                 filter.created_at.$lte = end;
+//               }
+//             }
+//           }
+
+//         /* -------- Pending Tab Pipeline -------- */
+
+//         let pendingPipeline = [];
+//         if (filterCategory === "PENDING") {
+//             pendingPipeline = [
+//               { $sort: { created_at: -1 } },
+//               {
+//                 $group: {
+//                   _id: "$client_id",
+//                   lastCall: { $first: "$$ROOT" }
+//                 }
+//               },
+//               /* ✅ Only Duration Check */
+//               {
+//                 $match: {
+//                   "lastCall.duration": { $lte: 0 }
+//                 }
+//               },
+
+//               {
+//                 $replaceRoot: {
+//                   newRoot: "$lastCall"
+//                 }
+//               }
+//             ];
+//           }
+//         const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
+//        const result = await callLogCollection.aggregate([
+//         { $match: filter },
+//         ...pendingPipeline,
+//         {
+//           $facet: {
+//             data: [
+//               { $sort: { created_at: -1 } },
+//               { $skip: skip },
+//               { $limit: parsedLimit },
+
+//               // Lookup Officer Details
+//               {
+//                 $lookup: {
+//                   from: COLLECTION.OFFICERS,
+//                   localField: "officer_id",
+//                   foreignField: "_id",
+//                   as: "officer"
+//                 }
+//               },
+//               {
+//                 $unwind: {
+//                   path: "$officer",
+//                   preserveNullAndEmptyArrays: true
+//                 }
+//               },
+
+//               // Lookup Client Details
+//                 {
+//                 $lookup: {
+//                   from: COLLECTION.LEADS,
+//                   localField: "client_id",
+//                   foreignField: "_id", // Assuming client_id is an ObjectId
+//                     pipeline: [
+//                     //for status
+//                     ...(status
+//                       ? [{ $match: { status: status } }]
+//                       : []
+//                     ),
+//                     //for search
+//                     ...(searchString
+//                       ? [{
+//                         $match: {
+//                         $or: [
+//                           { phone: { $regex: new RegExp(searchString, 'i') } },
+//                           { client_id: { $regex: new RegExp(searchString, 'i') } }
+//                         ]
+//                         }
+//                       }]
+//                       : []
+//                     )
+//                     ],
+//                     as: "client"
+//                     }
+//                     },
+//                     {
+//                     $unwind: {
+//                     path: "$client",
+//                     preserveNullAndEmptyArrays: true
+//                     }
+//                     },
+//               // Final Project
+//               {
+//                 $project: {
+//                   _id:"$client._id",
+//                   type: 1,
+//                   client_id: "$client.client_id",
+//                   officer_id: 1,
+//                   recruiter_id: 1,
+//                   lastcall: {
+//                   _id: "$_id",
+//                   duration: "$duration",
+//                   next_schedule: "$next_schedule",
+//                   comment: "$comment",
+//                   call_type: "$call_type",
+//                   call_status: "$call_status",
+              
+//                   created_at: "$created_at",
+//                  },
+//                   // Officer Info
+//                   officer_name: "$officer.name",
+//                   officer_gen_id: "$officer.officer_id",
+//                   officer_email: "$officer.email",
+//                   // Client Info
+//                   name: "$client.name",
+//                   email: "$client.email",
+//                   phone: "$client.phone",
+//                   status: "$client.status",
+//                   branch: "$client.branch",
+//                   lead_source: "$client.lead_source",
+//                   service_type: "$client.service_type",
+//                   interested_in: "$client.interested_in",
+//                   created_at: "$client.created_at"
+//                 }
+//               }
+//             ],
+//                 // Total count (for pagination)
+//                 totalCount: [{ $count: "count" }]
+//               }
+//             }
+//           ]).toArray();
+//           const callData = result[0]?.data || [];
+//           const totalCount = result[0]?.totalCount?.[0]?.count || 0;
+
+//           return {
+//             leads: callData,
+//             limit: parsedLimit,
+//             page: parsedPage,
+//             totalMatch: totalCount,
+//             totalPages: Math.ceil(totalCount / parsedLimit),
+//           };
+
+//         } catch (err) {
+//           console.error("getCallHistoryWithFilters error:", err);
+//           throw new Error("Server Error");
+//         }
+//     },
+//     // Get lead/client by ID
+
+//    getCallCountForAllOfficers: async (query) => {
+//    try {
+//     const { startDate, endDate } = query;
+
+//     /* ---------------- Date Parser ---------------- */
+//     const parseDate = (str) => {
+//       if (!str) return null;
+//       const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+//       if (match) {
+//         return new Date(
+//           Number(match[3]),
+//           Number(match[2]) - 1,
+//           Number(match[1]),
+//           0, 0, 0, 0
+//         );
+//       }
+//       return new Date(str);
+//     };
+
+//     /* ---------------- Date Filter ---------------- */
+//     const filter = {};
+//     const dateField = "created_at";
+
+//     const start = parseDate(startDate);
+//     const end = parseDate(endDate);
+
+//     if (start || end) {
+//       filter[dateField] = {};
+
+//       if (start instanceof Date && !isNaN(start)) {
+//         filter[dateField].$gte = start;
+//       }
+
+//       if (end instanceof Date && !isNaN(end)) {
+//         end.setHours(23, 59, 59, 999);
+//         filter[dateField].$lte = end;
+//       }
+
+//       if (Object.keys(filter[dateField]).length === 0) {
+//         delete filter[dateField];
+//       }
+//     }
+
+//     /* ---------------- Day Calculations ---------------- */
+//     const todayStart = new Date();
+//     todayStart.setHours(0, 0, 0, 0);
+
+//     const tomorrowStart = new Date(todayStart);
+//     tomorrowStart.setDate(todayStart.getDate() + 1);
+
+//     const yesterdayStart = new Date(todayStart);
+//     yesterdayStart.setDate(todayStart.getDate() - 1);
+
+//     const weekStart = new Date(todayStart);
+//     weekStart.setDate(todayStart.getDate() - todayStart.getDay());
+
+//     const monthStart = new Date(
+//       todayStart.getFullYear(),
+//       todayStart.getMonth(),
+//       1
+//     );
+
+//     /* ---------------- Aggregation ---------------- */
+//   const result = await db
+//   .get()
+//   .collection(COLLECTION.CALL_LOG_ACTIVITY)
+//   .aggregate([
+
+//     /* ---------------- Base Filter ---------------- */
+//     { $match: filter },
+
+//     /* ---------------- Latest First ---------------- */
+//     { $sort: { created_at: -1 } },
+
+//     /* ---------------- Last Call Per Client Per Officer ---------------- */
+//     {
+//       $group: {
+//         _id: {
+//           officer_id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
+//           client_id: "$client_id"
+//         },
+
+//         lastCall: { $first: "$$ROOT" }
+//       }
+//     },
+
+//     /* ---------------- Group By Officer ---------------- */
+//     {
+//       $group: {
+//         _id: "$_id.officer_id",
+
+//         TOTAL: { $sum: 1 },
+
+//         TODAY: {
+//           $sum: {
+//             $cond: [
+//               {
+//                 $and: [
+//                   { $gte: ["$lastCall.created_at", todayStart] },
+//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
+//                 ]
+//               },
+//               1,
+//               0
+//             ]
+//           }
+//         },
+
+//         YESTERDAY: {
+//           $sum: {
+//             $cond: [
+//               {
+//                 $and: [
+//                   { $gte: ["$lastCall.created_at", yesterdayStart] },
+//                   { $lt: ["$lastCall.created_at", todayStart] }
+//                 ]
+//               },
+//               1,
+//               0
+//             ]
+//           }
+//         },
+
+//         THIS_WEEK: {
+//           $sum: {
+//             $cond: [
+//               {
+//                 $and: [
+//                   { $gte: ["$lastCall.created_at", weekStart] },
+//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
+//                 ]
+//               },
+//               1,
+//               0
+//             ]
+//           }
+//         },
+
+//         THIS_MONTH: {
+//           $sum: {
+//             $cond: [
+//               {
+//                 $and: [
+//                   { $gte: ["$lastCall.created_at", monthStart] },
+//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
+//                 ]
+//               },
+//               1,
+//               0
+//             ]
+//           }
+//         },
+
+//         /* ✅ Pending = Last Call Duration = 0 */
+//         PENDING: {
+//           $sum: {
+//             $cond: [
+//               { $lte: ["$lastCall.duration", 0] },
+//               1,
+//               0
+//             ]
+//           }
+//         }
+//       }
+//     },
+
+//     /* ---------------- Join OFFICERS ---------------- */
+//     {
+//       $lookup: {
+//         from: COLLECTION.OFFICERS,
+//         localField: "_id",
+//         foreignField: "_id",
+//         as: "officer"
+//       }
+//     },
+
+//     {
+//       $unwind: {
+//         path: "$officer",
+//         preserveNullAndEmptyArrays: true
+//       }
+//     },
+
+//     /* ---------------- Final Shape ---------------- */
+//     {
+//       $project: {
+//         _id: 1,
+
+//         officer_id: {
+//           $cond: [
+//             { $eq: ["$_id", "UNASSIGNED"] },
+//             "UNASSIGNED",
+//             "$officer.officer_id"
+//           ]
+//         },
+
+//         officer_name: {
+//           $cond: [
+//             { $eq: ["$_id", "UNASSIGNED"] },
+//             "UNASSIGNED",
+//             "$officer.name"
+//           ]
+//         },
+
+//         TOTAL: 1,
+//         TODAY: 1,
+//         YESTERDAY: 1,
+//         THIS_WEEK: 1,
+//         THIS_MONTH: 1,
+//         PENDING: 1
+//       }
+//     },
+
+//     { $sort: { TOTAL: -1 } }
+
+//   ])
+//   .toArray();
+
+//     return result;
+//   } catch (err) {
+//     console.error("getCallCountForAllOfficers error:", err);
+//     throw new Error("Server Error");
+//   }
+// },
+
+
+
+
+//  ****/
+
+
+
 
   // bulkInsertLeads: async (leadsArray) => {
   //   try {

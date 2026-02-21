@@ -2,20 +2,21 @@ const express = require('express');
 const router = express.Router();
 const whatsappHelpers = require('../../helpers/whatsapp_data_helper');
 const whatsappService = require('../../services/whatsapp_nonapi_service');
-
+let middleware = require("../../middleware");
 function resolveBaseUrl(req) {
     return req.query.domain || `${req.protocol}://${req.get('host')}`;
 }
 
-router.get('/threads', async (req, res) => {
+router.get('/threads', middleware.checkToken, async (req, res) => {
     try {
         const result = await whatsappHelpers.getThreadSummaries({
             page: req.query.page,
             limit: req.query.limit,
             unread_only: req.query.unread_only ?? req.query.unreadOnly,
             search: req.query.search,
+            employee: req.query.employee,
             base_url: resolveBaseUrl(req),
-        });
+        },req.decoded);
 
         return res.status(200).json({
             success: true,
@@ -119,6 +120,7 @@ router.patch('/messages/:id/view', async (req, res) => {
 
 router.patch('/threads/:phone/view', async (req, res) => {
     try {
+    
         const result = await whatsappHelpers.markAllAsViewed(req.params.phone);
         return res.status(200).json({
             success: true,

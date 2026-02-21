@@ -34,22 +34,22 @@ const officerValidation = Joi.object({
     .optional().allow(null, ''),
   password: Joi.string()
     .required().allow(null, '')
-    .custom((value, helpers) => {
-      if (
-        typeof value !== 'string' ||
-        value.length < 8 ||
-        !/[A-Z]/.test(value) ||       
-        !/[a-z]/.test(value) ||      
-        !/\d/.test(value) ||       
-        !/[!@#$%^&*(),.?":{}|<>]/.test(value)
-      ) {
-        return helpers.error('any.invalid');
-      }
-      return value;
-    }, 'Password Strength Validator')
-    .messages({
-      'any.invalid': 'Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a digit, and a special symbol.',
-    }),
+    // .custom((value, helpers) => {
+    //   if (
+    //     typeof value !== 'string' ||
+    //     value.length < 8 ||
+    //     !/[A-Z]/.test(value) ||       
+    //     !/[a-z]/.test(value) ||      
+    //     !/\d/.test(value) ||       
+    //     !/[!@#$%^&*(),.?":{}|<>]/.test(value)
+    //   ) {
+    //     return helpers.error('any.invalid');
+    //   }
+    //   return value;
+    // }, 'Password Strength Validator')
+    // .messages({
+    //   'any.invalid': 'Password must be at least 8 characters long and include an uppercase letter, a lowercase letter, a digit, and a special symbol.',
+    // }),
 });
 
 module.exports = officerValidation ;
