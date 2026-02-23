@@ -93,6 +93,7 @@ const routes = [
   // {path: '/customer/register', route: require("./routes/officers/customer_registration_router") },
   {path: '/announcement', route: require("./routes/officers/announcement_router") },
   { path: '/event', route: require("./routes/officers/event_router") },
+  { path: '/analysis', route: require("./routes/officers/analysis_router") },
   // {path: '/cre', route: require("./routes/officers/cre_router") },
   { path: '/', route: require("./routes/webiste/website") },
   { path: '/whatsapp_nonapi', route: require("./routes/officers/whatsapp_nonapi_router") },
@@ -171,6 +172,10 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http:
  filter admin call history with department like now admin will see all officers call history without cre or recruiter filter
 
 
+ note and status update 
+
+ 
+
  *    ***/
 
 
@@ -193,4 +198,3 @@ server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http:
 
 
   */
-
