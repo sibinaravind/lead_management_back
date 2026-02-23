@@ -1018,6 +1018,7 @@ editLead: async (leadId, updateData, officer_id) => {
           const parsedPage = parseInt(page);
           const parsedLimit = parseInt(limit);
           const skip = (parsedPage - 1) * parsedLimit;
+          let sortField = "created_at";
           const filter = {};
           // Officer filtering
           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes('ADMIN');
@@ -1072,6 +1073,7 @@ editLead: async (leadId, updateData, officer_id) => {
         };
           // Override for filterCategory
           if (['TODAY', 'TOMORROW', 'PENDING', 'UPCOMING'].includes(filterCategory)) {
+            sortField = 'lastcall.next_schedule';
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const tomorrow = new Date(today);
@@ -1138,7 +1140,7 @@ editLead: async (leadId, updateData, officer_id) => {
             {
               $facet: {
                 data: [
-                  { $sort: { created_at: -1 } },
+                  { $sort: { [sortField]: -1 } },
                   { $skip: skip },
                   { $limit: parsedLimit },
                   {
@@ -1294,7 +1296,26 @@ editLead: async (leadId, updateData, officer_id) => {
                 }
               },
               { $count: "count" }
-            ]
+            ],
+          PENDING: [
+            {
+              $group: {
+                _id: "$client_id",
+                lastCall: {
+                  $top: {
+                    sortBy: { created_at: -1 },
+                    output: "$duration"
+                  }
+                }
+              }
+            },
+            {
+              $match: {
+                lastCall: 0
+              }
+            },
+            { $count: "count" }
+          ]
           }
         }
       ])
@@ -1308,7 +1329,8 @@ editLead: async (leadId, updateData, officer_id) => {
       TODAY: getCount("TODAY"),
       YESTERDAY: getCount("YESTERDAY"),
       THIS_WEEK: getCount("THIS_WEEK"),
-      THIS_MONTH: getCount("THIS_MONTH")
+      THIS_MONTH: getCount("THIS_MONTH"),
+      PENDING: getCount("PENDING")
     };
 
   } catch (err) {
@@ -1318,7 +1340,8 @@ editLead: async (leadId, updateData, officer_id) => {
 },
 
 
-getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
+
+getCallHistoryWithFilters: async (query, decoded, ) => { 
         try {
           const {
             page = 1,
@@ -1330,6 +1353,7 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
             endDate,
             searchString,
             status,
+            filterCategory,
           } = query;
 
           const parsedPage = parseInt(page);
@@ -1387,9 +1411,36 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
             }
           }
 
+        /* -------- Pending Tab Pipeline -------- */
+
+        let pendingPipeline = [];
+        if (filterCategory === "PENDING") {
+            pendingPipeline = [
+              { $sort: { created_at: -1 } },
+              {
+                $group: {
+                  _id: "$client_id",
+                  lastCall: { $first: "$$ROOT" }
+                }
+              },
+              /* ✅ Only Duration Check */
+              {
+                $match: {
+                  "lastCall.duration": { $lte: 0 }
+                }
+              },
+
+              {
+                $replaceRoot: {
+                  newRoot: "$lastCall"
+                }
+              }
+            ];
+          }
         const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
        const result = await callLogCollection.aggregate([
         { $match: filter },
+        ...pendingPipeline,
         {
           $facet: {
             data: [
@@ -1503,16 +1554,18 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
           throw new Error("Server Error");
         }
     },
-    // Get lead/client by ID
 
-   getCallCountForAllOfficers: async (query) => {
-   try {
+
+     getCallCountForAllOfficers: async (query) => {
+  try {
     const { startDate, endDate } = query;
 
-    /* ---------------- Date Parser ---------------- */
+    /* ================= Date Parser ================= */
     const parseDate = (str) => {
       if (!str) return null;
+
       const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+
       if (match) {
         return new Date(
           Number(match[3]),
@@ -1521,178 +1574,216 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
           0, 0, 0, 0
         );
       }
+
       return new Date(str);
     };
 
-    /* ---------------- Date Filter ---------------- */
+    /* ================= Date Filter ================= */
     const filter = {};
-    const dateField = "created_at";
-
     const start = parseDate(startDate);
     const end = parseDate(endDate);
 
     if (start || end) {
-      filter[dateField] = {};
+      filter.created_at = {};
 
-      if (start instanceof Date && !isNaN(start)) {
-        filter[dateField].$gte = start;
+      if (start && !isNaN(start)) {
+        filter.created_at.$gte = start;
       }
 
-      if (end instanceof Date && !isNaN(end)) {
+      if (end && !isNaN(end)) {
         end.setHours(23, 59, 59, 999);
-        filter[dateField].$lte = end;
+        filter.created_at.$lte = end;
       }
 
-      if (Object.keys(filter[dateField]).length === 0) {
-        delete filter[dateField];
+      if (!Object.keys(filter.created_at).length) {
+        delete filter.created_at;
       }
     }
 
-    /* ---------------- Day Calculations ---------------- */
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    /* ================= Date Ranges ================= */
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-    const tomorrowStart = new Date(todayStart);
-    tomorrowStart.setDate(todayStart.getDate() + 1);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
 
-    const yesterdayStart = new Date(todayStart);
-    yesterdayStart.setDate(todayStart.getDate() - 1);
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
 
-    const weekStart = new Date(todayStart);
-    weekStart.setDate(todayStart.getDate() - todayStart.getDay());
+    const weekStart = new Date(today);
+    weekStart.setDate(today.getDate() - today.getDay());
 
     const monthStart = new Date(
-      todayStart.getFullYear(),
-      todayStart.getMonth(),
+      today.getFullYear(),
+      today.getMonth(),
       1
     );
 
-    /* ---------------- Aggregation ---------------- */
+    /* ================= Aggregation ================= */
+
     const result = await db
       .get()
       .collection(COLLECTION.CALL_LOG_ACTIVITY)
       .aggregate([
+
+        /* ================= Filter ================= */
         { $match: filter },
 
+        /* ================= Split Pipelines ================= */
         {
-          $group: {
-            _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
+          $facet: {
 
-            TOTAL: { $sum: 1 },
+            /* ---------- Normal Stats ---------- */
+            stats: [
+              {
+                $group: {
+                  _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
 
-            TODAY: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ["$created_at", todayStart] },
-                      { $lt: ["$created_at", tomorrowStart] }
-                    ]
+                  TOTAL: { $sum: 1 },
+
+                  TODAY: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $gte: ["$created_at", today] },
+                            { $lt: ["$created_at", tomorrow] }
+                          ]
+                        },
+                        1, 0
+                      ]
+                    }
                   },
-                  1,
-                  0
-                ]
-              }
-            },
 
-            YESTERDAY: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ["$created_at", yesterdayStart] },
-                      { $lt: ["$created_at", todayStart] }
-                    ]
+                  YESTERDAY: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $gte: ["$created_at", yesterday] },
+                            { $lt: ["$created_at", today] }
+                          ]
+                        },
+                        1, 0
+                      ]
+                    }
                   },
-                  1,
-                  0
-                ]
-              }
-            },
 
-            THIS_WEEK: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ["$created_at", weekStart] },
-                      { $lt: ["$created_at", tomorrowStart] }
-                    ]
+                  THIS_WEEK: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $gte: ["$created_at", weekStart] },
+                            { $lt: ["$created_at", tomorrow] }
+                          ]
+                        },
+                        1, 0
+                      ]
+                    }
                   },
-                  1,
-                  0
-                ]
-              }
-            },
 
-            THIS_MONTH: {
-              $sum: {
-                $cond: [
-                  {
-                    $and: [
-                      { $gte: ["$created_at", monthStart] },
-                      { $lt: ["$created_at", tomorrowStart] }
-                    ]
-                  },
-                  1,
-                  0
-                ]
+                  THIS_MONTH: {
+                    $sum: {
+                      $cond: [
+                        {
+                          $and: [
+                            { $gte: ["$created_at", monthStart] },
+                            { $lt: ["$created_at", tomorrow] }
+                          ]
+                        },
+                        1, 0
+                      ]
+                    }
+                  }
+                }
               }
-            }
+            ],
+
+            /* ---------- Pending (GLOBAL) ---------- */
+            pending: [
+
+              { $sort: { created_at: -1 } },
+
+              {
+                $group: {
+                  _id: "$client_id",
+
+                  lastOfficer: {
+                    $first: { $ifNull: ["$officer_id", "UNASSIGNED"] }
+                  },
+
+                  lastDuration: { $first: "$duration" }
+                }
+              },
+
+              { $match: { lastDuration: 0 } },
+
+              {
+                $group: {
+                  _id: "$lastOfficer",
+                  count: { $sum: 1 }
+                }
+              }
+            ]
           }
         },
 
-        /* ---------------- Join OFFICERS ---------------- */
-        {
-          $lookup: {
-            from: COLLECTION.OFFICERS,
-            localField: "_id",
-            foreignField: "_id",
-            as: "officer"
-          }
-        },
-        {
-          $unwind: {
-            path: "$officer",
-            preserveNullAndEmptyArrays: true
-          }
-        },
-
+        /* ================= Merge Results ================= */
         {
           $project: {
-            _id: 1,
-            officer_id: {
-              $cond: [
-                { $eq: ["$_id", "UNASSIGNED"] },
-                "UNASSIGNED",
-                "$officer.officer_id"
-              ]
-            },
-            officer_name: {
-              $cond: [
-                { $eq: ["$_id", "UNASSIGNED"] },
-                "UNASSIGNED",
-                "$officer.name"
-              ]
-            },
-            TOTAL: 1,
-            TODAY: 1,
-            YESTERDAY: 1,
-            THIS_WEEK: 1,
-            THIS_MONTH: 1
+            stats: 1,
+            pending: 1
           }
-        },
+        }
 
-        { $sort: { TOTAL: -1 } }
       ])
       .toArray();
 
-    return result;
+    const stats = result[0]?.stats || [];
+    const pending = result[0]?.pending || [];
+
+    /* ================= Merge in JS ================= */
+
+    const pendingMap = {};
+
+    for (const p of pending) {
+      pendingMap[p._id?.toString()] = p.count;
+    }
+
+    const final = await Promise.all(
+      stats.map(async (row) => {
+
+        const officer =
+          row._id === "UNASSIGNED"
+            ? null
+            : await db
+                .get()
+                .collection(COLLECTION.OFFICERS)
+                .findOne({ _id: row._id });
+
+        return {
+          officer_id: officer?.officer_id || "UNASSIGNED",
+          officer_name: officer?.name || "UNASSIGNED",
+
+          TOTAL: row.TOTAL,
+          TODAY: row.TODAY,
+          YESTERDAY: row.YESTERDAY,
+          THIS_WEEK: row.THIS_WEEK,
+          THIS_MONTH: row.THIS_MONTH,
+
+          PENDING: pendingMap[row._id?.toString()] || 0
+        };
+      })
+    );
+
+    return final;
+
   } catch (err) {
     console.error("getCallCountForAllOfficers error:", err);
     throw new Error("Server Error");
   }
-},
+}
 
 
 
@@ -1700,6 +1791,195 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
 }
 
 
+
+
+//    getCallCountForAllOfficers: async (query) => {
+//    try {
+//     const { startDate, endDate } = query;
+
+//     /* ---------------- Date Parser ---------------- */
+//     const parseDate = (str) => {
+//       if (!str) return null;
+//       const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
+//       if (match) {
+//         return new Date(
+//           Number(match[3]),
+//           Number(match[2]) - 1,
+//           Number(match[1]),
+//           0, 0, 0, 0
+//         );
+//       }
+//       return new Date(str);
+//     };
+
+//     /* ---------------- Date Filter ---------------- */
+//     const filter = {};
+//     const dateField = "created_at";
+
+//     const start = parseDate(startDate);
+//     const end = parseDate(endDate);
+
+//     if (start || end) {
+//       filter[dateField] = {};
+
+//       if (start instanceof Date && !isNaN(start)) {
+//         filter[dateField].$gte = start;
+//       }
+
+//       if (end instanceof Date && !isNaN(end)) {
+//         end.setHours(23, 59, 59, 999);
+//         filter[dateField].$lte = end;
+//       }
+
+//       if (Object.keys(filter[dateField]).length === 0) {
+//         delete filter[dateField];
+//       }
+//     }
+
+//     /* ---------------- Day Calculations ---------------- */
+//     const todayStart = new Date();
+//     todayStart.setHours(0, 0, 0, 0);
+
+//     const tomorrowStart = new Date(todayStart);
+//     tomorrowStart.setDate(todayStart.getDate() + 1);
+
+//     const yesterdayStart = new Date(todayStart);
+//     yesterdayStart.setDate(todayStart.getDate() - 1);
+
+//     const weekStart = new Date(todayStart);
+//     weekStart.setDate(todayStart.getDate() - todayStart.getDay());
+
+//     const monthStart = new Date(
+//       todayStart.getFullYear(),
+//       todayStart.getMonth(),
+//       1
+//     );
+
+//     /* ---------------- Aggregation ---------------- */
+//     const result = await db
+//       .get()
+//       .collection(COLLECTION.CALL_LOG_ACTIVITY)
+//       .aggregate([
+//         { $match: filter },
+//         {
+//           $group: {
+//             _id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
+
+//             TOTAL: { $sum: 1 },
+
+//             TODAY: {
+//               $sum: {
+//                 $cond: [
+//                   {
+//                     $and: [
+//                       { $gte: ["$created_at", todayStart] },
+//                       { $lt: ["$created_at", tomorrowStart] }
+//                     ]
+//                   },
+//                   1,
+//                   0
+//                 ]
+//               }
+//             },
+
+//             YESTERDAY: {
+//               $sum: {
+//                 $cond: [
+//                   {
+//                     $and: [
+//                       { $gte: ["$created_at", yesterdayStart] },
+//                       { $lt: ["$created_at", todayStart] }
+//                     ]
+//                   },
+//                   1,
+//                   0
+//                 ]
+//               }
+//             },
+
+//             THIS_WEEK: {
+//               $sum: {
+//                 $cond: [
+//                   {
+//                     $and: [
+//                       { $gte: ["$created_at", weekStart] },
+//                       { $lt: ["$created_at", tomorrowStart] }
+//                     ]
+//                   },
+//                   1,
+//                   0
+//                 ]
+//               }
+//             },
+
+//             THIS_MONTH: {
+//               $sum: {
+//                 $cond: [
+//                   {
+//                     $and: [
+//                       { $gte: ["$created_at", monthStart] },
+//                       { $lt: ["$created_at", tomorrowStart] }
+//                     ]
+//                   },
+//                   1,
+//                   0
+//                 ]
+//               }
+//             }
+//           }
+//         },
+
+//         /* ---------------- Join OFFICERS ---------------- */
+//         {
+//           $lookup: {
+//             from: COLLECTION.OFFICERS,
+//             localField: "_id",
+//             foreignField: "_id",
+//             as: "officer"
+//           }
+//         },
+//         {
+//           $unwind: {
+//             path: "$officer",
+//             preserveNullAndEmptyArrays: true
+//           }
+//         },
+
+//         {
+//           $project: {
+//             _id: 1,
+//             officer_id: {
+//               $cond: [
+//                 { $eq: ["$_id", "UNASSIGNED"] },
+//                 "UNASSIGNED",
+//                 "$officer.officer_id"
+//               ]
+//             },
+//             officer_name: {
+//               $cond: [
+//                 { $eq: ["$_id", "UNASSIGNED"] },
+//                 "UNASSIGNED",
+//                 "$officer.name"
+//               ]
+//             },
+//             TOTAL: 1,
+//             TODAY: 1,
+//             YESTERDAY: 1,
+//             THIS_WEEK: 1,
+//             THIS_MONTH: 1
+//           }
+//         },
+
+//         { $sort: { TOTAL: -1 } }
+//       ])
+//       .toArray();
+
+//     return result;
+//   } catch (err) {
+//     console.error("getCallCountForAllOfficers error:", err);
+//     throw new Error("Server Error");
+//   }
+//  },
 /***  
  
 //   getCallCountByCategory: async (decoded, query) => {
@@ -1897,453 +2177,6 @@ getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total cal
 //     throw new Error("Server Error");
 //   }
 // },
-
-
-// getCallHistoryWithFilters: async (query, decoded, ) => { // will setup total calls made on today, yesterday, calender select
-//         try {
-//           const {
-//             page = 1,
-//             limit = 10,
-//             callType,
-//             callStatus,
-//             employee,
-//             startDate,
-//             endDate,
-//             searchString,
-//             status,
-//             filterCategory,
-//           } = query;
-
-//           const parsedPage = parseInt(page);
-//           const parsedLimit = parseInt(limit);
-//           const skip = (parsedPage - 1) * parsedLimit;
-//           const isAdmin = Array.isArray(decoded?.designation) && decoded.designation.includes("ADMIN");
-//           let officerIdList = [];
-//           if (!isAdmin) {
-//             officerIdList = Array.isArray(decoded?.officers)
-//               ? decoded.officers.map(o => safeObjectId(o?.officer_id)).filter(Boolean)
-//               : [];
-//           }
-//            const filter = { };
-//           // Officer filtering
-//           if (employee) {
-//             filter.officer_id = safeObjectId(employee);
-//           } else if (!isAdmin) {
-//             if (officerIdList.length > 0) {
-//               filter.officer_id = { $in: [safeObjectId(decoded?._id), ...officerIdList] };
-//             } else {
-//               filter.officer_id = safeObjectId(decoded?._id);
-//             }
-//           }else if (isAdmin) {
-//                 // const officerList = await db.get().collection(COLLECTION.OFFICERS)
-//                 //     .find() // works if designation is an array
-//                 //     .project({ _id: 1 })
-//                 //     .toArray();
-//                 //   const officerIds = officerList.map(officer => officer._id);
-//                 //   filter.officer_id = { $in: officerIds };
-//           }
-//           // Additional filters
-//           if (callType) filter.call_type = callType;
-//           if (callStatus) filter.call_status = callStatus;
-           
-//           // Date range filtering
-//           if (startDate || endDate) {
-//             const parseDate = (str) => {
-//               if (!str) return null;
-//               const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
-//               if (match) return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
-//               return new Date(str);
-//             };
-
-//             filter.created_at = {};
-//             if (startDate) {
-//               const start = parseDate(startDate);
-//               if (!isNaN(start)) filter.created_at.$gte = start;
-//             }
-//             if (endDate) {
-//               const end = parseDate(endDate);
-//               if (!isNaN(end)) {
-//                 end.setHours(23, 59, 59, 999);
-//                 filter.created_at.$lte = end;
-//               }
-//             }
-//           }
-
-//         /* -------- Pending Tab Pipeline -------- */
-
-//         let pendingPipeline = [];
-//         if (filterCategory === "PENDING") {
-//             pendingPipeline = [
-//               { $sort: { created_at: -1 } },
-//               {
-//                 $group: {
-//                   _id: "$client_id",
-//                   lastCall: { $first: "$$ROOT" }
-//                 }
-//               },
-//               /* ✅ Only Duration Check */
-//               {
-//                 $match: {
-//                   "lastCall.duration": { $lte: 0 }
-//                 }
-//               },
-
-//               {
-//                 $replaceRoot: {
-//                   newRoot: "$lastCall"
-//                 }
-//               }
-//             ];
-//           }
-//         const callLogCollection = db.get().collection(COLLECTION.CALL_LOG_ACTIVITY);
-//        const result = await callLogCollection.aggregate([
-//         { $match: filter },
-//         ...pendingPipeline,
-//         {
-//           $facet: {
-//             data: [
-//               { $sort: { created_at: -1 } },
-//               { $skip: skip },
-//               { $limit: parsedLimit },
-
-//               // Lookup Officer Details
-//               {
-//                 $lookup: {
-//                   from: COLLECTION.OFFICERS,
-//                   localField: "officer_id",
-//                   foreignField: "_id",
-//                   as: "officer"
-//                 }
-//               },
-//               {
-//                 $unwind: {
-//                   path: "$officer",
-//                   preserveNullAndEmptyArrays: true
-//                 }
-//               },
-
-//               // Lookup Client Details
-//                 {
-//                 $lookup: {
-//                   from: COLLECTION.LEADS,
-//                   localField: "client_id",
-//                   foreignField: "_id", // Assuming client_id is an ObjectId
-//                     pipeline: [
-//                     //for status
-//                     ...(status
-//                       ? [{ $match: { status: status } }]
-//                       : []
-//                     ),
-//                     //for search
-//                     ...(searchString
-//                       ? [{
-//                         $match: {
-//                         $or: [
-//                           { phone: { $regex: new RegExp(searchString, 'i') } },
-//                           { client_id: { $regex: new RegExp(searchString, 'i') } }
-//                         ]
-//                         }
-//                       }]
-//                       : []
-//                     )
-//                     ],
-//                     as: "client"
-//                     }
-//                     },
-//                     {
-//                     $unwind: {
-//                     path: "$client",
-//                     preserveNullAndEmptyArrays: true
-//                     }
-//                     },
-//               // Final Project
-//               {
-//                 $project: {
-//                   _id:"$client._id",
-//                   type: 1,
-//                   client_id: "$client.client_id",
-//                   officer_id: 1,
-//                   recruiter_id: 1,
-//                   lastcall: {
-//                   _id: "$_id",
-//                   duration: "$duration",
-//                   next_schedule: "$next_schedule",
-//                   comment: "$comment",
-//                   call_type: "$call_type",
-//                   call_status: "$call_status",
-              
-//                   created_at: "$created_at",
-//                  },
-//                   // Officer Info
-//                   officer_name: "$officer.name",
-//                   officer_gen_id: "$officer.officer_id",
-//                   officer_email: "$officer.email",
-//                   // Client Info
-//                   name: "$client.name",
-//                   email: "$client.email",
-//                   phone: "$client.phone",
-//                   status: "$client.status",
-//                   branch: "$client.branch",
-//                   lead_source: "$client.lead_source",
-//                   service_type: "$client.service_type",
-//                   interested_in: "$client.interested_in",
-//                   created_at: "$client.created_at"
-//                 }
-//               }
-//             ],
-//                 // Total count (for pagination)
-//                 totalCount: [{ $count: "count" }]
-//               }
-//             }
-//           ]).toArray();
-//           const callData = result[0]?.data || [];
-//           const totalCount = result[0]?.totalCount?.[0]?.count || 0;
-
-//           return {
-//             leads: callData,
-//             limit: parsedLimit,
-//             page: parsedPage,
-//             totalMatch: totalCount,
-//             totalPages: Math.ceil(totalCount / parsedLimit),
-//           };
-
-//         } catch (err) {
-//           console.error("getCallHistoryWithFilters error:", err);
-//           throw new Error("Server Error");
-//         }
-//     },
-//     // Get lead/client by ID
-
-//    getCallCountForAllOfficers: async (query) => {
-//    try {
-//     const { startDate, endDate } = query;
-
-//     /* ---------------- Date Parser ---------------- */
-//     const parseDate = (str) => {
-//       if (!str) return null;
-//       const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(str);
-//       if (match) {
-//         return new Date(
-//           Number(match[3]),
-//           Number(match[2]) - 1,
-//           Number(match[1]),
-//           0, 0, 0, 0
-//         );
-//       }
-//       return new Date(str);
-//     };
-
-//     /* ---------------- Date Filter ---------------- */
-//     const filter = {};
-//     const dateField = "created_at";
-
-//     const start = parseDate(startDate);
-//     const end = parseDate(endDate);
-
-//     if (start || end) {
-//       filter[dateField] = {};
-
-//       if (start instanceof Date && !isNaN(start)) {
-//         filter[dateField].$gte = start;
-//       }
-
-//       if (end instanceof Date && !isNaN(end)) {
-//         end.setHours(23, 59, 59, 999);
-//         filter[dateField].$lte = end;
-//       }
-
-//       if (Object.keys(filter[dateField]).length === 0) {
-//         delete filter[dateField];
-//       }
-//     }
-
-//     /* ---------------- Day Calculations ---------------- */
-//     const todayStart = new Date();
-//     todayStart.setHours(0, 0, 0, 0);
-
-//     const tomorrowStart = new Date(todayStart);
-//     tomorrowStart.setDate(todayStart.getDate() + 1);
-
-//     const yesterdayStart = new Date(todayStart);
-//     yesterdayStart.setDate(todayStart.getDate() - 1);
-
-//     const weekStart = new Date(todayStart);
-//     weekStart.setDate(todayStart.getDate() - todayStart.getDay());
-
-//     const monthStart = new Date(
-//       todayStart.getFullYear(),
-//       todayStart.getMonth(),
-//       1
-//     );
-
-//     /* ---------------- Aggregation ---------------- */
-//   const result = await db
-//   .get()
-//   .collection(COLLECTION.CALL_LOG_ACTIVITY)
-//   .aggregate([
-
-//     /* ---------------- Base Filter ---------------- */
-//     { $match: filter },
-
-//     /* ---------------- Latest First ---------------- */
-//     { $sort: { created_at: -1 } },
-
-//     /* ---------------- Last Call Per Client Per Officer ---------------- */
-//     {
-//       $group: {
-//         _id: {
-//           officer_id: { $ifNull: ["$officer_id", "UNASSIGNED"] },
-//           client_id: "$client_id"
-//         },
-
-//         lastCall: { $first: "$$ROOT" }
-//       }
-//     },
-
-//     /* ---------------- Group By Officer ---------------- */
-//     {
-//       $group: {
-//         _id: "$_id.officer_id",
-
-//         TOTAL: { $sum: 1 },
-
-//         TODAY: {
-//           $sum: {
-//             $cond: [
-//               {
-//                 $and: [
-//                   { $gte: ["$lastCall.created_at", todayStart] },
-//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
-//                 ]
-//               },
-//               1,
-//               0
-//             ]
-//           }
-//         },
-
-//         YESTERDAY: {
-//           $sum: {
-//             $cond: [
-//               {
-//                 $and: [
-//                   { $gte: ["$lastCall.created_at", yesterdayStart] },
-//                   { $lt: ["$lastCall.created_at", todayStart] }
-//                 ]
-//               },
-//               1,
-//               0
-//             ]
-//           }
-//         },
-
-//         THIS_WEEK: {
-//           $sum: {
-//             $cond: [
-//               {
-//                 $and: [
-//                   { $gte: ["$lastCall.created_at", weekStart] },
-//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
-//                 ]
-//               },
-//               1,
-//               0
-//             ]
-//           }
-//         },
-
-//         THIS_MONTH: {
-//           $sum: {
-//             $cond: [
-//               {
-//                 $and: [
-//                   { $gte: ["$lastCall.created_at", monthStart] },
-//                   { $lt: ["$lastCall.created_at", tomorrowStart] }
-//                 ]
-//               },
-//               1,
-//               0
-//             ]
-//           }
-//         },
-
-//         /* ✅ Pending = Last Call Duration = 0 */
-//         PENDING: {
-//           $sum: {
-//             $cond: [
-//               { $lte: ["$lastCall.duration", 0] },
-//               1,
-//               0
-//             ]
-//           }
-//         }
-//       }
-//     },
-
-//     /* ---------------- Join OFFICERS ---------------- */
-//     {
-//       $lookup: {
-//         from: COLLECTION.OFFICERS,
-//         localField: "_id",
-//         foreignField: "_id",
-//         as: "officer"
-//       }
-//     },
-
-//     {
-//       $unwind: {
-//         path: "$officer",
-//         preserveNullAndEmptyArrays: true
-//       }
-//     },
-
-//     /* ---------------- Final Shape ---------------- */
-//     {
-//       $project: {
-//         _id: 1,
-
-//         officer_id: {
-//           $cond: [
-//             { $eq: ["$_id", "UNASSIGNED"] },
-//             "UNASSIGNED",
-//             "$officer.officer_id"
-//           ]
-//         },
-
-//         officer_name: {
-//           $cond: [
-//             { $eq: ["$_id", "UNASSIGNED"] },
-//             "UNASSIGNED",
-//             "$officer.name"
-//           ]
-//         },
-
-//         TOTAL: 1,
-//         TODAY: 1,
-//         YESTERDAY: 1,
-//         THIS_WEEK: 1,
-//         THIS_MONTH: 1,
-//         PENDING: 1
-//       }
-//     },
-
-//     { $sort: { TOTAL: -1 } }
-
-//   ])
-//   .toArray();
-
-//     return result;
-//   } catch (err) {
-//     console.error("getCallCountForAllOfficers error:", err);
-//     throw new Error("Server Error");
-//   }
-// },
-
-
-
-
-//  ****/
-
 
 
 
