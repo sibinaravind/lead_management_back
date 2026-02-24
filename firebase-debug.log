@@ -1,0 +1,127 @@
+[debug] [2026-02-24T15:57:22.805Z] ----------------------------------------------------------------------
+[debug] [2026-02-24T15:57:22.806Z] Command:       /opt/homebrew/Cellar/node/24.3.0/bin/node /opt/homebrew/bin/firebase deploy --only functions
+[debug] [2026-02-24T15:57:22.807Z] CLI Version:   15.3.1
+[debug] [2026-02-24T15:57:22.807Z] Platform:      darwin
+[debug] [2026-02-24T15:57:22.807Z] Node Version:  v24.3.0
+[debug] [2026-02-24T15:57:22.807Z] Time:          Tue Feb 24 2026 21:27:22 GMT+0530 (India Standard Time)
+[debug] [2026-02-24T15:57:22.807Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-02-24T15:57:22.807Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-02-24T15:57:23.504Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-02-24T15:57:23.504Z] > authorizing via signed-in user (sibinjames.sibin@gmail.com)
+[debug] [2026-02-24T15:57:23.504Z] [iam] checking project affinix-cdff4 for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-02-24T15:57:23.504Z] Checked if tokens are valid: false, expires at: 1770620758074
+[debug] [2026-02-24T15:57:23.504Z] Checked if tokens are valid: false, expires at: 1770620758074
+[debug] [2026-02-24T15:57:23.504Z] > refreshing access token with scopes: []
+[debug] [2026-02-24T15:57:23.504Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-02-24T15:57:23.504Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-24T15:57:23.691Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-02-24T15:57:23.691Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-02-24T15:57:23.704Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4:testIamPermissions [none]
+[debug] [2026-02-24T15:57:23.704Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4:testIamPermissions x-goog-quota-user=projects/affinix-cdff4
+[debug] [2026-02-24T15:57:23.704Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-24T15:57:24.117Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-02-24T15:57:24.117Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-02-24T15:57:25.033Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4:testIamPermissions 200
+[debug] [2026-02-24T15:57:25.033Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-02-24T15:57:25.034Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:25.034Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:25.034Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/affinix-cdff4/serviceAccounts/affinix-cdff4@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-02-24T15:57:25.034Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/affinix-cdff4/serviceAccounts/affinix-cdff4@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-02-24T15:57:26.681Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/affinix-cdff4/serviceAccounts/affinix-cdff4@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-02-24T15:57:26.682Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/affinix-cdff4/serviceAccounts/affinix-cdff4@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'affinix-cdff4'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run lint
+[info] ✔  functions: Finished running predeploy script. 
+[debug] [2026-02-24T15:57:26.817Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:26.817Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:26.817Z] >>> [apiv2][query] GET https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4 [none]
+[debug] [2026-02-24T15:57:27.128Z] <<< [apiv2][status] GET https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4 200
+[debug] [2026-02-24T15:57:27.128Z] <<< [apiv2][body] GET https://cloudresourcemanager.googleapis.com/v1/projects/affinix-cdff4 {"projectNumber":"75989080000","projectId":"affinix-cdff4","lifecycleState":"ACTIVE","name":"alead-application","labels":{"firebase":"enabled","firebase-core":"disabled"},"createTime":"2025-08-08T05:59:33.389870Z"}
+[info] i  functions: preparing codebase default for deployment 
+[info] i  functions: ensuring required API cloudfunctions.googleapis.com is enabled... 
+[info] i  functions: ensuring required API cloudbuild.googleapis.com is enabled... 
+[info] i  artifactregistry: ensuring required API artifactregistry.googleapis.com is enabled... 
+[debug] [2026-02-24T15:57:27.129Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:27.129Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:27.129Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/affinix-cdff4/adminSdkConfig [none]
+[debug] [2026-02-24T15:57:27.575Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/affinix-cdff4/adminSdkConfig 200
+[debug] [2026-02-24T15:57:27.575Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/affinix-cdff4/adminSdkConfig {"projectId":"affinix-cdff4","storageBucket":"affinix-cdff4.firebasestorage.app"}
+[debug] [2026-02-24T15:57:27.575Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:27.576Z] Checked if tokens are valid: true, expires at: 1771952242691
+[debug] [2026-02-24T15:57:27.576Z] >>> [apiv2][query] GET https://runtimeconfig.googleapis.com/v1beta1/projects/affinix-cdff4/configs [none]
+[debug] [2026-02-24T15:57:28.138Z] <<< [apiv2][status] GET https://runtimeconfig.googleapis.com/v1beta1/projects/affinix-cdff4/configs 200
+[debug] [2026-02-24T15:57:28.138Z] <<< [apiv2][body] GET https://runtimeconfig.googleapis.com/v1beta1/projects/affinix-cdff4/configs {}
+[debug] [2026-02-24T15:57:28.140Z] Validating nodejs source
+[warn] ⚠  functions: package.json indicates an outdated version of firebase-functions. Please upgrade using npm install --save firebase-functions@latest in your functions directory. 
+[warn] ⚠  functions: Please note that there will be breaking changes when you upgrade. 
+[debug] [2026-02-24T15:57:29.347Z] > [functions] package.json contents: {
+  "name": "lead_management_backend",
+  "version": "1.0.0",
+  "description": "lead management application",
+  "main": "index.js",
+  "scripts": {
+    "lint": "echo 'Skipping lint check'",
+    "start": "node index.js",
+    "dev": "nodemon --ignore auth_info_baileys/ --ignore uploads/ index.js",
+    "deploy": "firebase deploy --only functions:api",
+    "serve": "firebase emulators:start --only functions"
+  },
+  "author": "Sibin",
+  "license": "ISC",
+  "dependencies": {
+    "@whiskeysockets/baileys": "^7.0.0-rc.9",
+    "adm-zip": "^0.5.16",
+    "axios": "^1.9.0",
+    "bcrypt": "^5.1.1",
+    "body-parser": "^1.20.0",
+    "bson": "^6.8.0",
+    "compression": "^1.7.5",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "express-fileupload": "^1.4.0",
+    "express-handlebars": "^6.0.7",
+    "express-session": "^1.17.3",
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.0.1",
+    "fs": "^0.0.1-security",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "luxon": "^3.6.1",
+    "mongodb": "^4.17.2",
+    "mongoose": "^8.15.1",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "nodemon": "^3.1.10",
+    "pino": "^10.2.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0",
+    "request": "^2.88.2",
+    "sharp": "^0.33.2",
+    "socket.io": "^4.8.3",
+    "ua-parser-js": "^2.0.8"
+  },
+  "engines": {
+    "node": "22"
+  }
+}
+[debug] [2026-02-24T15:57:29.347Z] Building nodejs source
+[info] i  functions: Loading and analyzing source code for codebase default to determine what to deploy 
+[debug] [2026-02-24T15:57:29.348Z] Could not find functions.yaml. Must use http discovery
+[debug] [2026-02-24T15:57:29.353Z] Found firebase-functions binary at '/Users/sibinjames/StudioProjects/backup/Lead_managemnet/lead_management_app_back/node_modules/.bin/firebase-functions'
+[info] Serving at port 8309
+
+[info] Initializing Socket.IO server...
+
+[debug] [2026-02-24T15:57:30.195Z] Got response from /__/functions.yaml {"endpoints":{"api":{"availableMemoryMb":null,"timeoutSeconds":null,"minInstances":null,"maxInstances":null,"ingressSettings":null,"concurrency":null,"serviceAccountEmail":null,"vpc":null,"platform":"gcfv2","labels":{},"httpsTrigger":{},"entryPoint":"api"}},"specVersion":"v1alpha1","requiredAPIs":[],"extensions":{}}
+[info] 📱 Using WA v2.3000.1033105955, isLatest: true
+
+[info] Mongo connected
+
+[info] 📱 QR Code available
+

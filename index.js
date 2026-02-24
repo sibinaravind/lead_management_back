@@ -126,7 +126,7 @@ app.use((req, res, next) => {
 exports.api = functions.https.onRequest(app);
 
 // Start the server:
-server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http://localhost:${PORT}`));
+// server.listen(PORT, "0.0.0.0", () => console.log(`Server listening on port http://localhost:${PORT}`));
 
 // server.listen(PORT, "0.0.0.0", () => {
 //   console.log(`Server listening on port ${PORT}`);
