@@ -157,6 +157,24 @@ module.exports = {
                     comment: data.comment || data.dead_lead_reason || "",
                 });
             }
+
+            if (Object.prototype.hasOwnProperty.call(data, "note")) {
+                update.note = data.note ?? "";
+            }
+
+            if (Object.prototype.hasOwnProperty.call(data, "interested_in")) {
+                if (Array.isArray(data.interested_in)) {
+                    update.interested_in = data.interested_in
+                        .map((item) => (item == null ? "" : String(item).trim()))
+                        .filter((item) => item.length > 0);
+                } else if (typeof data.interested_in === "string") {
+                    update.interested_in = data.interested_in.trim()
+                        ? data.interested_in.split(",").map((item) => item.trim()).filter(Boolean)
+                        : [];
+                } else {
+                    update.interested_in = [];
+                }
+            }
             update.lastcalldate = now;
             update.lastcallid = ObjectId(insertedId);
             await leadsCollection.updateOne(

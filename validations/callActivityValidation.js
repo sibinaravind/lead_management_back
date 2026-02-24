@@ -24,6 +24,14 @@ const callActivityValidation = Joi.object({
     //   otherwise: Joi.optional().allow('')
     // }).uppercase(),
     // client_status: Joi.string().trim().uppercase().required(),
+    client_status: Joi.string().trim().uppercase().optional().allow('', null),
+    dead_lead_reason: Joi.string().trim().optional().allow('', null),
+    note: Joi.string().optional().allow('', null),
+    interested_in: Joi.alternatives().try(
+      Joi.array().items(Joi.string()),
+      Joi.string().allow(''),
+      Joi.valid(null)
+    ).optional(),
     comment: Joi.string().optional().allow('',null),
     call_type: Joi.string().uppercase(), //.valid('INCOMING', 'OUTGOING')
     call_status: Joi.string().uppercase(), //.valid('ATTENDED', 'NOT_ATTENDED', 'BUSY'),

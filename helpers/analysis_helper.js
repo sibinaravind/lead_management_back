@@ -28,7 +28,20 @@ module.exports = {
                 ...buildOfficerMatch(decoded, query.employee, 'officer_id')
             };
 
-            const [eventCounts, followupCounts] = await Promise.all([
+            const bookingMatch = {
+                booking_date: { $gte: monthStart, $lte: monthEnd },
+                status: { $nin: ['CANCELLED', 'COMPLETED'] },
+                ...buildOfficerMatch(decoded, query.employee, 'officer_id')
+            };
+
+            const paymentScheduleMatch = {
+                'payment_schedule.due_date': { $gte: monthStart, $lte: monthEnd },
+                status: { $nin: ['CANCELLED', 'COMPLETED'] },
+                'payment_schedule.status': { $ne: 'PAID' },
+                ...buildOfficerMatch(decoded, query.employee, 'officer_id')
+            };
+
+            const [eventCounts, followupCounts, bookingCounts, paymentScheduleCounts] = await Promise.all([
                 db.get().collection(COLLECTION.EVENTS).aggregate([
                     { $match: eventMatch },
                     {
@@ -65,38 +78,107 @@ module.exports = {
                             followup_count: { $sum: 1 }
                         }
                     }
+                ]).toArray(),
+                db.get().collection(COLLECTION.BOOKINGS).aggregate([
+                    { $match: bookingMatch },
+                    {
+                        $group: {
+                            _id: {
+                                $dateToString: {
+                                    format: '%Y-%m-%d',
+                                    date: '$booking_date'
+                                }
+                            },
+                            booking_count: { $sum: 1 }
+                        }
+                    }
+                ]).toArray(),
+                db.get().collection(COLLECTION.BOOKINGS).aggregate([
+                    { $unwind: '$payment_schedule' },
+                    {
+                        $match: {
+                            ...paymentScheduleMatch,
+                            'payment_schedule.due_date': {
+                                $gte: monthStart,
+                                $lte: monthEnd,
+                                $ne: null
+                            }
+                        }
+                    },
+                    {
+                        $group: {
+                            _id: {
+                                $dateToString: {
+                                    format: '%Y-%m-%d',
+                                    date: '$payment_schedule.due_date'
+                                }
+                            },
+                            payment_schedule_count: { $sum: 1 }
+                        }
+                    }
                 ]).toArray()
             ]);
 
             const dayMap = new Map();
-            for (const row of eventCounts) {
-                dayMap.set(row._id, {
-                    date: row._id,
-                    event_count: row.event_count || 0,
-                    followup_count: 0,
-                    total_tasks: row.event_count || 0
-                });
-            }
 
-            for (const row of followupCounts) {
-                const existing = dayMap.get(row._id) || {
-                    date: row._id,
-                    event_count: 0,
-                    followup_count: 0,
-                    total_tasks: 0
-                };
-                existing.followup_count = row.followup_count || 0;
-                existing.total_tasks = (existing.event_count || 0) + existing.followup_count;
+            const ensureDay = (key) => dayMap.get(key) || {
+                date: key,
+                event_count: 0,
+                followup_count: 0,
+                booking_count: 0,
+                payment_schedule_count: 0,
+                total_tasks: 0
+            };
+
+            for (const row of eventCounts) {
+                const existing = ensureDay(row._id);
+                existing.event_count = row.event_count || 0;
                 dayMap.set(row._id, existing);
             }
 
-            const days = Array.from(dayMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+            for (const row of followupCounts) {
+                const existing = ensureDay(row._id);
+                existing.followup_count = row.followup_count || 0;
+                dayMap.set(row._id, existing);
+            }
+
+            for (const row of bookingCounts) {
+                const existing = ensureDay(row._id);
+                existing.booking_count = row.booking_count || 0;
+                dayMap.set(row._id, existing);
+            }
+
+            for (const row of paymentScheduleCounts) {
+                const existing = ensureDay(row._id);
+                existing.payment_schedule_count = row.payment_schedule_count || 0;
+                dayMap.set(row._id, existing);
+            }
+
+            const days = Array.from(dayMap.values())
+                .map((day) => ({
+                    ...day,
+                    total_tasks:
+                        (day.event_count || 0) +
+                        (day.followup_count || 0) +
+                        (day.booking_count || 0) +
+                        (day.payment_schedule_count || 0)
+                }))
+                .sort((a, b) => a.date.localeCompare(b.date));
+
             const totals = days.reduce((acc, day) => {
                 acc.total_tasks += day.total_tasks || 0;
                 acc.event_count += day.event_count || 0;
                 acc.followup_count += day.followup_count || 0;
+                acc.booking_count += day.booking_count || 0;
+                acc.payment_schedule_count += day.payment_schedule_count || 0;
                 return acc;
-            }, { total_tasks: 0, event_count: 0, followup_count: 0 });
+            }, {
+                total_tasks: 0,
+                event_count: 0,
+                followup_count: 0,
+                booking_count: 0,
+                payment_schedule_count: 0
+            });
 
             return {
                 month,
@@ -135,7 +217,20 @@ module.exports = {
                 ...buildOfficerMatch(decoded, employee, 'officer_id')
             };
 
-            const [events, followups] = await Promise.all([
+            const bookingMatch = {
+                booking_date: { $gte: dayStart, $lte: dayEnd },
+                status: { $nin: ['CANCELLED', 'COMPLETED'] },
+                ...buildOfficerMatch(decoded, employee, 'officer_id')
+            };
+
+            const paymentScheduleMatch = {
+                'payment_schedule.due_date': { $gte: dayStart, $lte: dayEnd, $ne: null },
+                status: { $nin: ['CANCELLED', 'COMPLETED'] },
+                'payment_schedule.status': { $ne: 'PAID' },
+                ...buildOfficerMatch(decoded, employee, 'officer_id')
+            };
+
+            const [events, followups, bookings, paymentSchedules] = await Promise.all([
                 db.get().collection(COLLECTION.EVENTS).aggregate([
                     { $match: eventMatch },
                     { $sort: { next_schedule: 1 } },
@@ -171,7 +266,8 @@ module.exports = {
                             client_id: '$lead._id',
                             client_name: '$lead.name',
                             client_phone: '$lead.phone',
-                            status: '$lead.status',
+                            status: '$status',
+                            lead_status: '$lead.status',
                             officers: {
                                 $map: {
                                     input: '$officer_info',
@@ -228,10 +324,102 @@ module.exports = {
                             ]
                         }
                     }
+                ]).toArray(),
+                db.get().collection(COLLECTION.BOOKINGS).aggregate([
+                    { $match: bookingMatch },
+                    { $sort: { booking_date: 1 } },
+                    {
+                        $lookup: {
+                            from: COLLECTION.OFFICERS,
+                            localField: 'officer_id',
+                            foreignField: '_id',
+                            as: 'officer_info'
+                        }
+                    },
+                    {
+                        $project: {
+                            type: { $literal: 'BOOKING' },
+                            _id: 1,
+                            title: {
+                                $ifNull: [
+                                    '$product_name',
+                                    'Booking'
+                                ]
+                            },
+                            description: '$customer_name',
+                            schedule: '$booking_date',
+                            status: '$status',
+                            booking_id: '$_id',
+                            booking_genid: '$booking_id',
+                            customer_id: 1,
+                            client_id: '$customer_id',
+                            client_name: '$customer_name',
+                            client_phone: '$customer_phone',
+                            officers: {
+                                $map: {
+                                    input: '$officer_info',
+                                    as: 'officer',
+                                    in: {
+                                        _id: '$$officer._id',
+                                        name: '$$officer.name',
+                                        officer_id: '$$officer.officer_id'
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ]).toArray(),
+                db.get().collection(COLLECTION.BOOKINGS).aggregate([
+                    { $unwind: '$payment_schedule' },
+                    { $match: paymentScheduleMatch },
+                    { $sort: { 'payment_schedule.due_date': 1 } },
+                    {
+                        $lookup: {
+                            from: COLLECTION.OFFICERS,
+                            localField: 'officer_id',
+                            foreignField: '_id',
+                            as: 'officer_info'
+                        }
+                    },
+                    {
+                        $project: {
+                            type: { $literal: 'PAYMENT_SCHEDULE' },
+                            _id: '$payment_schedule._id',
+                            title: {
+                                $ifNull: [
+                                    '$payment_schedule.payment_type',
+                                    'Payment Schedule'
+                                ]
+                            },
+                            description: '$customer_name',
+                            schedule: '$payment_schedule.due_date',
+                            status: '$payment_schedule.status',
+                            booking_id: '$_id',
+                            booking_genid: '$booking_id',
+                            payment_schedule_id: '$payment_schedule._id',
+                            amount: '$payment_schedule.amount',
+                            paid_amount: '$payment_schedule.paid_amount',
+                            customer_id: 1,
+                            client_id: '$customer_id',
+                            client_name: '$customer_name',
+                            client_phone: '$customer_phone',
+                            officers: {
+                                $map: {
+                                    input: '$officer_info',
+                                    as: 'officer',
+                                    in: {
+                                        _id: '$$officer._id',
+                                        name: '$$officer.name',
+                                        officer_id: '$$officer.officer_id'
+                                    }
+                                }
+                            }
+                        }
+                    }
                 ]).toArray()
             ]);
 
-            const tasks = [...events, ...followups]
+            const tasks = [...events, ...followups, ...bookings, ...paymentSchedules]
                 .sort((a, b) => new Date(a.schedule) - new Date(b.schedule));
 
             return {
@@ -239,7 +427,9 @@ module.exports = {
                 counts: {
                     total_tasks: tasks.length,
                     event_count: events.length,
-                    followup_count: followups.length
+                    followup_count: followups.length,
+                    booking_count: bookings.length,
+                    payment_schedule_count: paymentSchedules.length
                 },
                 tasks
             };

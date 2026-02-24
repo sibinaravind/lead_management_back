@@ -99,6 +99,7 @@ const leadSchema = Joi.object({
   source_campaign: Joi.string().optional().allow(null, ""), // 
   status: Joi.string().default('NEW'), // NEW, CONTACTED, IN_PROGRESS, CONVERTED, DEAD ,'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATION', 'WON', 'LOST')
   service_type: Joi.string().required(),  // master ticket , visa 
+  dead_lead_reason: Joi.string().optional().allow(null, ""),
 
   created_at: Joi.date().optional().allow(null, ""),
   updated_at: Joi.date().optional().allow(null),

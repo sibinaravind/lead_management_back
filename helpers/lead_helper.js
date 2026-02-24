@@ -313,14 +313,39 @@ editLead: async (leadId, updateData, officer_id) => {
 
   updateLeadStatus : async (leadId, updateData,officer_id) => {
         try {
-
             if (!updateData.client_status) {
               throw new Error("client_status is required");
             }
+
+            const setPayload = {
+              status: updateData.client_status,
+              dead_lead_reason: updateData.dead_lead_reason || "",
+              updated_at: new Date()
+            };
+
+            // Keep profile values in sync when status is changed from profile/call update UI.
+            if (Object.prototype.hasOwnProperty.call(updateData, "note")) {
+              setPayload.note = updateData.note ?? "";
+            }
+
+            const interestedInRaw = updateData.interested_in ?? updateData.interestedIn;
+            if (Object.prototype.hasOwnProperty.call(updateData, "interested_in") || Object.prototype.hasOwnProperty.call(updateData, "interestedIn")) {
+              if (Array.isArray(interestedInRaw)) {
+                setPayload.interested_in = interestedInRaw
+                  .map((item) => (item == null ? "" : String(item).trim()))
+                  .filter((item) => item.length > 0);
+              } else if (typeof interestedInRaw === "string") {
+                setPayload.interested_in = interestedInRaw.trim()
+                  ? interestedInRaw.split(",").map((item) => item.trim()).filter(Boolean)
+                  : [];
+              } else {
+                setPayload.interested_in = [];
+              }
+            }
+
             const updateResult = await db.get().collection(COLLECTION.LEADS).updateOne(
               { _id: ObjectId(leadId) },
-              { $set: { status: updateData.client_status,
-                        dead_lead_reason: updateData.dead_lead_reason || "", updated_at: new Date() } }
+              { $set: setPayload }
             );
             if (updateResult.matchedCount === 0) {
             throw new Error("Lead not found");
@@ -1168,6 +1193,7 @@ editLead: async (leadId, updateData, officer_id) => {
                       service_type: 1,
                       country_code: 1,
                       status: 1,
+                      note: 1,
                       lead_source: 1,
                       interested_in: 1,
                       lastcall: {
@@ -1525,6 +1551,7 @@ getCallHistoryWithFilters: async (query, decoded, ) => {
                   email: "$client.email",
                   phone: "$client.phone",
                   status: "$client.status",
+                  note: "$client.note",
                   branch: "$client.branch",
                   lead_source: "$client.lead_source",
                   service_type: "$client.service_type",
